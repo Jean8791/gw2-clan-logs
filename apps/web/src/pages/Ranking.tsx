@@ -33,6 +33,7 @@ export function RankingPage() {
     {
       id: "sel",
       header: "",
+      fixed: true,
       align: "center",
       cell: (r) => (
         <input
@@ -46,7 +47,7 @@ export function RankingPage() {
       ),
     },
     { id: "pos", header: "#", align: "right", cell: (_r, i) => <span className="text-faint">{i + 1}</span> },
-    { id: "player", header: "Jogador", sticky: true, sort: (r) => r.name ?? r.account, cell: (r) => <PlayerLink account={r.account} name={r.name} /> },
+    { id: "player", header: "Jogador", sticky: true, fixed: true, sort: (r) => r.name ?? r.account, cell: (r) => <PlayerLink account={r.account} name={r.name} /> },
     { id: "prof", header: "Classe", sort: (r) => r.profession ?? "", cell: (r) => <Profession profession={r.profession} /> },
     { id: "guild", header: "Guilda", cell: (r) => <GuildTag id={r.guildId} /> },
     { id: "fights", header: "Lutas", align: "right", sort: (r) => r.fights, cell: (r) => r.fights },
@@ -123,6 +124,7 @@ export function RankingPage() {
         {data && rows.length > 0 && (
           <DataTable
             key={group}
+            pickerKey={`ranking:${group}`}
             rows={rows}
             columns={columns}
             rowKey={(r) => r.account}

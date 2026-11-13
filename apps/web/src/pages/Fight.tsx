@@ -84,7 +84,7 @@ export function FightPage() {
   const durMin = (f.durationMs ?? 0) / 60000;
 
   const playerCols: Column<PlayerFight>[] = [
-    { id: "player", header: "Jogador", sticky: true, sort: (p) => p.name ?? p.account, cell: (p) => <PlayerLink account={p.account} name={p.name} /> },
+    { id: "player", header: "Jogador", sticky: true, fixed: true, sort: (p) => p.name ?? p.account, cell: (p) => <PlayerLink account={p.account} name={p.name} /> },
     { id: "prof", header: "Classe", sort: (p) => p.profession ?? "", cell: (p) => <Profession profession={p.profession} /> },
     { id: "guild", header: "Guilda", cell: (p) => <GuildTag id={p.guildId} /> },
     { id: "grp", header: "Gr.", align: "center", sort: (p) => p.group, cell: (p) => <span className="text-muted">{p.group ?? "—"}</span> },
@@ -98,14 +98,14 @@ export function FightPage() {
   ];
 
   const guildCols: Column<GuildRow>[] = [
-    { id: "guild", header: "Guilda", sticky: true, sort: (g) => g.players, cell: (g) => <GuildTag id={g.guildId} withName /> },
+    { id: "guild", header: "Guilda", sticky: true, fixed: true, sort: (g) => g.players, cell: (g) => <GuildTag id={g.guildId} withName /> },
     { id: "players", header: "Jogadores", align: "right", sort: (g) => g.players, cell: (g) => g.players },
     ...statColumns(group, mode, guildRows),
   ];
 
   // o destaque do melhor valor ignora a linha do squad todo, que sempre ganharia nos totais
   const groupCols: Column<GroupRow>[] = [
-    { id: "group", header: "Grupo", sticky: true, sort: (g) => g.id, cell: (g) => <span className={g.id === "squad" ? "font-semibold text-gold" : "font-medium"}>{g.label}</span> },
+    { id: "group", header: "Grupo", sticky: true, fixed: true, sort: (g) => g.id, cell: (g) => <span className={g.id === "squad" ? "font-semibold text-gold" : "font-medium"}>{g.label}</span> },
     { id: "players", header: "Jogadores", align: "right", sort: (g) => g.players, cell: (g) => g.players },
     ...statColumns(group, mode, groupRows.filter((g) => g.id !== "squad")),
   ];
@@ -188,6 +188,7 @@ export function FightPage() {
         {view === "players" ? (
           <DataTable
             key={`players-${group}`}
+            pickerKey={`fight-players:${group}`}
             rows={players}
             columns={playerCols}
             rowKey={(p) => p.account}
@@ -196,9 +197,9 @@ export function FightPage() {
             dense
           />
         ) : view === "guilds" ? (
-          <DataTable key={`guilds-${group}`} rows={guildRows} columns={guildCols} rowKey={(g) => g.id} initialSort={{ id: "players", desc: true }} dense />
+          <DataTable key={`guilds-${group}`} pickerKey={`fight-guilds:${group}`} rows={guildRows} columns={guildCols} rowKey={(g) => g.id} initialSort={{ id: "players", desc: true }} dense />
         ) : (
-          <DataTable key={`groups-${group}`} rows={groupRows} columns={groupCols} rowKey={(g) => g.id} initialSort={{ id: "group", desc: false }} dense />
+          <DataTable key={`groups-${group}`} pickerKey={`fight-groups:${group}`} rows={groupRows} columns={groupCols} rowKey={(g) => g.id} initialSort={{ id: "group", desc: false }} dense />
         )}
         {group === "uptime" && (
           <p className="border-t border-line px-5 py-2.5 text-xs text-faint">

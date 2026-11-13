@@ -121,7 +121,7 @@ export function PlayerPage() {
   ];
 
   const histCols: Column<PlayerHistoryRow>[] = [
-    { id: "when", header: "Quando", sort: (h) => h.timeStart, cell: (h) => <span className="text-muted">{dateTime(h.timeStart)}</span> },
+    { id: "when", header: "Quando", fixed: true, sort: (h) => h.timeStart, cell: (h) => <span className="text-muted">{dateTime(h.timeStart)}</span> },
     { id: "map", header: "Mapa", sort: (h) => h.mapName ?? "", cell: (h) => <Link className="hover:text-gold" to={`/lutas/${h.fightId}`}>{h.fightName ?? h.mapName}</Link> },
     { id: "prof", header: "Classe", sort: (h) => h.profession ?? "", cell: (h) => <Profession profession={h.profession} /> },
     { id: "role", header: "Função", sort: (h) => h.role, cell: (h) => (h.role === "support" ? <Badge tone="info">Suporte</Badge> : <Badge>DPS</Badge>) },
@@ -274,7 +274,7 @@ export function PlayerPage() {
           )}
 
           <Card className="mt-6" title="Histórico">
-            <DataTable rows={[...data.history].reverse()} columns={histCols} rowKey={(h) => h.fightId} dense />
+            <DataTable pickerKey="player-history" rows={[...data.history].reverse()} columns={histCols} rowKey={(h) => h.fightId} dense />
           </Card>
         </>
       )}
