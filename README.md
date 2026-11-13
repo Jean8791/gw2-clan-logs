@@ -51,13 +51,30 @@ npm test
 
 | Variável | Para quê | Padrão |
 |---|---|---|
-| `UPLOAD_KEY` | Senha para enviar logs. Vazio = qualquer um envia | vazio |
+| `UPLOAD_KEY` | Chave de API para enviar logs (`scripts/enviar-logs.sh`). Vazio = qualquer um envia, nunca deixe vazio na internet | vazio |
 | `ADMIN_KEY` | Senha para marcar as guildas da aliança | igual a `UPLOAD_KEY` |
 | `DATA_DIR` | Banco SQLite, logs enviados e relatórios | `./data` |
 | `EI_DIR` | Pasta do Elite Insights CLI | `./tools/GW2EICLI` |
 | `PORT` / `HOST` | Endereço do servidor | `5080` / `127.0.0.1` |
 | `RETENTION_DAYS` | Dias que as lutas ficam guardadas, contados pela data da luta e não pela do envio (0 = para sempre). No Docker Compose o padrão é 30 | `0` |
 | `GW2_API` | `off` desliga a busca de nomes de guildas e mapas | ligado |
+| `TRUST_PROXY` | `true` atrás do Caddy: conta o IP real do cliente nos bloqueios. O compose já liga | `false` |
+| `UPLOAD_MAX_FAILS` / `UPLOAD_BLOCK_MIN` | Erros de senha seguidos do mesmo IP até bloquear, e por quantos minutos | `5` / `15` |
+| `UPLOAD_MAX_QUEUE` | Logs esperando ou em processamento; acima disso o envio é recusado | `30` |
+| `UPLOAD_MAX_PER_HOUR` | Logs aceitos por hora | `100` |
+| `UPLOAD_MAX_DISK_MB` | Espaço máximo dos logs enviados | `4096` |
+| `APP_MEM_LIMIT` (compose) | Teto de memória do container; em VM de 1 GB use `800m` | `1500m` |
+
+### Enviar logs
+
+O site não tem tela de envio: os logs entram só pela API, com a chave (`UPLOAD_KEY`), usando o script:
+
+```bash
+export GW2LOGS_URL=https://seu-dominio GW2LOGS_KEY=a-chave   # ou ~/.config/gw2logs/env (chmod 600)
+scripts/enviar-logs.sh ~/Documentos/Guild\ Wars\ 2/addons/arcdps/arcdps.cbtlogs   # arquivos ou pastas
+```
+
+O script não manda de novo o que já enviou, espera quando a fila do servidor está cheia e para com aviso ao bater um limite. A chave só segue ao servidor por entrada padrão (não aparece em `ps`). Quem tem a chave envia: guarde-a como senha e troque `UPLOAD_KEY` se ela vazar.
 
 Faça backup da pasta `data`: é ali que fica todo o histórico.
 
