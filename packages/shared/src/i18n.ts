@@ -328,6 +328,10 @@ export const DICT: Record<Lang, Dict> = {
     "scope.squad": "Squad",
     "scope.group": "Grupo",
     "scope.self": "Próprio",
+    "api.tooManyAttempts": "Muitas senhas erradas. Tente de novo mais tarde.",
+    "api.queueFull": "A fila de processamento está cheia. Tente de novo em alguns minutos.",
+    "api.hourlyLimit": "Limite de envios por hora atingido. Tente mais tarde.",
+    "api.diskFull": "O servidor está sem espaço para novos logs.",
   },
   en: {
     loading: "Loading…",
@@ -636,6 +640,10 @@ export const DICT: Record<Lang, Dict> = {
     "scope.squad": "Squad",
     "scope.group": "Group",
     "scope.self": "Self",
+    "api.tooManyAttempts": "Too many wrong passwords. Try again later.",
+    "api.queueFull": "The processing queue is full. Try again in a few minutes.",
+    "api.hourlyLimit": "Hourly upload limit reached. Try again later.",
+    "api.diskFull": "The server is out of space for new logs.",
   },
 };
 
