@@ -38,7 +38,7 @@ export function FilterBar({ value, onChange, fields }: { value: Filters; onChang
           </Button>
         )}
       </div>
-      <div className={cx("grid-cols-2 gap-3 md:grid md:grid-cols-[repeat(auto-fit,minmax(150px,1fr))] md:items-end", open ? "mt-3 grid" : "hidden")}>
+      <div className={cx("grid-cols-2 gap-x-4 gap-y-3 md:grid md:grid-cols-[repeat(auto-fit,minmax(190px,1fr))] md:items-end", open ? "mt-3 grid" : "hidden")}>
         {has("period") && (
           <Select
             label="Período"
