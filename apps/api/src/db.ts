@@ -79,6 +79,16 @@ function migrate(db: DB) {
     );
 
     CREATE TABLE IF NOT EXISTS maps (id INTEGER PRIMARY KEY, name TEXT NOT NULL);
+
+    -- ícones baixados uma vez (chave ex.: "buff:1122"); não são apagados com as lutas antigas
+    CREATE TABLE IF NOT EXISTS media (
+      key          TEXT PRIMARY KEY,
+      source_url   TEXT NOT NULL,
+      content_type TEXT NOT NULL,
+      bytes        BLOB NOT NULL,
+      sha256       TEXT NOT NULL,
+      fetched_at   TEXT NOT NULL
+    );
   `);
 }
 

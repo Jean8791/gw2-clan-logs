@@ -1,6 +1,6 @@
 // Extrai do JSON do Elite Insights o que o site guarda: dados da luta e uma linha por jogador do squad.
 // Função pura (sem banco, sem rede) para poder ser testada com JSON de exemplo.
-import { emptyStats, type Mode, type Role, type Stats } from "@gw2logs/shared";
+import { emptyStats, STAT_KEYS, STAT_META, type Mode, type Role, type Stats } from "@gw2logs/shared";
 
 type J = Record<string, any>;
 
@@ -35,19 +35,10 @@ export interface ExtractedFight {
   players: ExtractedPlayer[];
 }
 
-/** Ids dos boons (ids de buff da API do GW2) cuja geração para o squad guardamos. */
-export const BOONS: Record<number, keyof Stats> = {
-  1122: "stabOut",
-  1187: "quickOut",
-  30328: "alacOut",
-  717: "protOut",
-  740: "mightOut",
-  743: "aegisOut",
-  26980: "resistOut",
-  873: "resolOut",
-  725: "furyOut",
-  5974: "superspeedOut",
-};
+/** Boons (id do buff na API do GW2) cuja geração para o squad guardamos; os ids ficam em STAT_META. */
+export const BOONS: Record<number, keyof Stats> = Object.fromEntries(
+  STAT_KEYS.flatMap((k) => (STAT_META[k].buffId ? [[STAT_META[k].buffId, k]] : [])),
+);
 
 const SUPPORT_BOONS: (keyof Stats)[] = ["stabOut", "protOut", "aegisOut", "resistOut", "resolOut", "quickOut", "alacOut"];
 

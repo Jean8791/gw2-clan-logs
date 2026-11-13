@@ -53,6 +53,8 @@ export interface StatMeta {
   /** "volume" = volume de boon gerado para o squad (unidade do Elite Insights). */
   format: "int" | "volume";
   hint?: string;
+  /** id do buff na API do GW2 (boons): liga a métrica ao ícone e ao buffMap do Elite Insights. */
+  buffId?: number;
 }
 
 export const STAT_META: Record<StatKey, StatMeta> = {
@@ -70,16 +72,16 @@ export const STAT_META: Record<StatKey, StatMeta> = {
   barrier: { label: "Barreira", short: "Barreira", group: "support", higherIsBetter: true, format: "int" },
   resurrects: { label: "Ressurreições", short: "Res", group: "support", higherIsBetter: true, format: "int" },
   stunBreaks: { label: "Quebra de atordoamento", short: "Stun br.", group: "support", higherIsBetter: true, format: "int" },
-  stabOut: { label: "Estabilidade", short: "Estab.", group: "boons", higherIsBetter: true, format: "volume" },
-  quickOut: { label: "Rapidez", short: "Rapidez", group: "boons", higherIsBetter: true, format: "volume" },
-  alacOut: { label: "Alacridade", short: "Alac.", group: "boons", higherIsBetter: true, format: "volume" },
-  protOut: { label: "Proteção", short: "Prot.", group: "boons", higherIsBetter: true, format: "volume" },
-  mightOut: { label: "Poder", short: "Poder", group: "boons", higherIsBetter: true, format: "volume" },
-  aegisOut: { label: "Égide", short: "Égide", group: "boons", higherIsBetter: true, format: "volume" },
-  resistOut: { label: "Resistência", short: "Resist.", group: "boons", higherIsBetter: true, format: "volume" },
-  resolOut: { label: "Resolução", short: "Resol.", group: "boons", higherIsBetter: true, format: "volume" },
-  furyOut: { label: "Fúria", short: "Fúria", group: "boons", higherIsBetter: true, format: "volume" },
-  superspeedOut: { label: "Supervelocidade", short: "Superv.", group: "boons", higherIsBetter: true, format: "volume" },
+  stabOut: { label: "Estabilidade", short: "Estab.", group: "boons", buffId: 1122, higherIsBetter: true, format: "volume" },
+  quickOut: { label: "Rapidez", short: "Rapidez", group: "boons", buffId: 1187, higherIsBetter: true, format: "volume" },
+  alacOut: { label: "Alacridade", short: "Alac.", group: "boons", buffId: 30328, higherIsBetter: true, format: "volume" },
+  protOut: { label: "Proteção", short: "Prot.", group: "boons", buffId: 717, higherIsBetter: true, format: "volume" },
+  mightOut: { label: "Poder", short: "Poder", group: "boons", buffId: 740, higherIsBetter: true, format: "volume" },
+  aegisOut: { label: "Égide", short: "Égide", group: "boons", buffId: 743, higherIsBetter: true, format: "volume" },
+  resistOut: { label: "Resistência", short: "Resist.", group: "boons", buffId: 26980, higherIsBetter: true, format: "volume" },
+  resolOut: { label: "Resolução", short: "Resol.", group: "boons", buffId: 873, higherIsBetter: true, format: "volume" },
+  furyOut: { label: "Fúria", short: "Fúria", group: "boons", buffId: 725, higherIsBetter: true, format: "volume" },
+  superspeedOut: { label: "Supervelocidade", short: "Superv.", group: "boons", buffId: 5974, higherIsBetter: true, format: "volume" },
   damageTaken: { label: "Dano recebido", short: "Recebido", group: "defense", higherIsBetter: false, format: "int" },
   barrierAbsorbed: { label: "Dano absorvido por barreira", short: "Absorvido", group: "defense", higherIsBetter: true, format: "int" },
   deaths: { label: "Mortes", short: "Mortes", group: "defense", higherIsBetter: false, format: "int" },

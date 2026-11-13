@@ -6,6 +6,7 @@ import Database from "better-sqlite3";
 import { loadConfig, paths } from "../src/config.js";
 import { openDb } from "../src/db.js";
 import { Gw2Api } from "../src/gw2api.js";
+import { MediaStore } from "../src/media.js";
 import { ingestJson, readEiJsonGz } from "../src/worker.js";
 
 const cfg = loadConfig();
@@ -19,6 +20,7 @@ if (!existsSync(legacyFile)) {
 const legacy = new Database(legacyFile, { readonly: true });
 const db = openDb(p.db);
 const api = new Gw2Api(db, cfg.gw2Api);
+const media = new MediaStore(db);
 
 const rows = legacy.prepare("SELECT id, sha256, uploaded_at, uploader, file_name FROM fights WHERE status = 'done'").all() as any[];
 let imported = 0;
@@ -32,7 +34,7 @@ for (const r of rows) {
   db.prepare("INSERT INTO fights (id, sha256, status, uploaded_at, uploader, file_name) VALUES (?, ?, 'parsing', ?, ?, ?)").run(
     r.id, r.sha256, r.uploaded_at, r.uploader, r.file_name,
   );
-  await ingestJson(db, api, r.id, await readEiJsonGz(gz), existsSync(path.join(p.fightDir(r.id), "report.html")));
+  await ingestJson(db, api, media, r.id, await readEiJsonGz(gz), existsSync(path.join(p.fightDir(r.id), "report.html")));
   imported++;
 }
 const named = await api.resolvePendingGuilds(500);
