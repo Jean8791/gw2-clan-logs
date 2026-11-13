@@ -1,11 +1,12 @@
 // Nomes de mapas e de guildas pela API oficial do Guild Wars 2 (pública, sem chave), com cache no banco.
 import type { DB } from "./db.js";
+import { isAllowedIconUrl } from "./media.js";
 
 const API = "https://api.guildwars2.com";
 
-async function getJson(url: string): Promise<any | null> {
+async function getJson(fetchFn: typeof fetch, url: string): Promise<any | null> {
   try {
-    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+    const res = await fetchFn(url, { signal: AbortSignal.timeout(8000) });
     return res.ok ? await res.json() : null;
   } catch {
     return null;
@@ -16,14 +17,28 @@ export class Gw2Api {
   constructor(
     private db: DB,
     private enabled = true,
+    private fetchFn: typeof fetch = fetch,
   ) {}
+
+  /** Nome da classe ou especialização elite → link do ícone (API oficial). Vazio se a API falhar. */
+  async professionIcons(): Promise<Record<string, string>> {
+    if (!this.enabled) return {};
+    const out: Record<string, string> = {};
+    for (const path of ["professions", "specializations"]) {
+      const list = await getJson(this.fetchFn, `${API}/v2/${path}?ids=all`);
+      for (const x of Array.isArray(list) ? list : []) {
+        if (typeof x?.name === "string" && typeof x.icon === "string" && isAllowedIconUrl(x.icon)) out[x.name] = x.icon;
+      }
+    }
+    return out;
+  }
 
   async mapName(id: number | null): Promise<string | null> {
     if (!id) return null;
     const row = this.db.prepare("SELECT name FROM maps WHERE id = ?").get(id) as { name: string } | undefined;
     if (row) return row.name;
     if (!this.enabled) return null;
-    const j = await getJson(`${API}/v2/maps/${id}`);
+    const j = await getJson(this.fetchFn, `${API}/v2/maps/${id}`);
     const name = typeof j?.name === "string" && j.name.trim() ? (j.name as string).trim() : null;
     if (name) this.db.prepare("INSERT OR REPLACE INTO maps (id, name) VALUES (?, ?)").run(id, name);
     return name;
@@ -39,7 +54,7 @@ export class Gw2Api {
     const upd = this.db.prepare("UPDATE guilds SET name = ?, tag = ?, fetched_at = ? WHERE id = ?");
     let ok = 0;
     for (const { id } of pending) {
-      const j = await getJson(`${API}/v2/guild/${encodeURIComponent(id)}`);
+      const j = await getJson(this.fetchFn, `${API}/v2/guild/${encodeURIComponent(id)}`);
       upd.run(j?.name ?? null, j?.tag ?? null, new Date().toISOString(), id);
       if (j?.name) ok++;
     }

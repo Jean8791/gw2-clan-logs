@@ -28,6 +28,15 @@ export async function ingestJson(db: DB, api: Gw2Api, media: MediaStore, id: str
   saveFight(db, id, f, mapName, hasReport);
   // ícones novos; falha aqui não invalida a luta (ensure nunca lança)
   for (const { key, url } of collectBuffIcons(json)) await media.ensure(key, url);
+  await ensureProfessionIcons(api, media, f.players.map((p) => p.profession));
+}
+
+/** Guarda o ícone de cada classe que ainda não temos; só consulta a API se faltar alguma. */
+async function ensureProfessionIcons(api: Gw2Api, media: MediaStore, professions: (string | null)[]) {
+  const missing = [...new Set(professions)].filter((n): n is string => !!n && /^\w+$/.test(n) && !media.get(`prof:${n}`));
+  if (!missing.length) return;
+  const icons = await api.professionIcons();
+  for (const name of missing) if (icons[name]) await media.ensure(`prof:${name}`, icons[name]);
 }
 
 export class LogWorker {
