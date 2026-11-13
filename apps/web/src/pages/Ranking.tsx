@@ -135,7 +135,7 @@ export function RankingPage() {
       </Card>
       <p className="mt-3 text-xs text-faint">
         “Total” soma todas as lutas do filtro. “Por minuto” divide pelo tempo ativo de cada jogador (0,74 em Kills = 0,74 abate por minuto) e serve
-        para comparar quem jogou mais ou menos lutas. Suporte é a parcela das lutas em que a pessoa jogou de suporte. Boons mostram o volume gerado
+        para comparar quem jogou mais ou menos lutas. “Por segundo” é a mesma conta por segundo (o DPS). Suporte é a parcela das lutas em que a pessoa jogou de suporte. Boons mostram o volume gerado
         para o squad (unidade do Elite Insights). Uptime é a % do tempo ativo do jogador com o boon (em Estab. e Poder, o tempo com pelo menos uma
         pilha; “Poder (pilhas)” é a média de pilhas). A função (DPS/suporte) é estimada por luta, pela cura, barreira e boons gerados.
       </p>

@@ -1,10 +1,10 @@
-import { isUptimeStat, perMinute, STAT_GROUPS, STAT_META, statsOfGroup, uptimeValue, type StatGroup, type StatKey, type Stats } from "@gw2logs/shared";
+import { isUptimeStat, perMinute, perSecond, STAT_GROUPS, STAT_META, statsOfGroup, uptimeValue, type StatGroup, type StatKey, type Stats } from "@gw2logs/shared";
 import { BuffIcon } from "./MediaIcon";
 import type { Column } from "./DataTable";
 import { Segmented, cx } from "./ui";
 import { stat } from "../lib/format";
 
-export type ValueMode = "total" | "perMin";
+export type ValueMode = "total" | "perMin" | "perSec";
 
 /** Colunas de métricas de um grupo (Dano, Suporte…), em total ou por minuto, com destaque do melhor valor. */
 export function statColumns<T extends Stats & { activeMs: number }>(group: StatGroup, mode: ValueMode, rows: T[]): Column<T>[] {
@@ -12,8 +12,9 @@ export function statColumns<T extends Stats & { activeMs: number }>(group: StatG
     const meta = STAT_META[k];
     // uptime é % do tempo ativo (ou média de pilhas) nos dois modos: o "por minuto" não se aplica
     const uptime = isUptimeStat(k);
-    const isRate = mode === "perMin" && meta.format !== "volume" && !uptime;
-    const value = (r: T) => (uptime ? uptimeValue(k, r[k], r.activeMs) : isRate ? perMinute(r[k], r.activeMs) : r[k]);
+    const isRate = mode !== "total" && meta.format !== "volume" && !uptime;
+    const perSec = mode === "perSec";
+    const value = (r: T) => (uptime ? uptimeValue(k, r[k], r.activeMs) : isRate ? (perSec ? perSecond(r[k], r.activeMs) : perMinute(r[k], r.activeMs)) : r[k]);
     const values = rows.map(value);
     const best = values.length ? (meta.higherIsBetter ? Math.max(...values) : Math.min(...values)) : 0;
     const label = meta.buffId ? (
@@ -29,17 +30,17 @@ export function statColumns<T extends Stats & { activeMs: number }>(group: StatG
       header: isRate ? (
         <span className="inline-flex flex-col items-end leading-tight">
           {label}
-          <span className="text-[9px] font-normal normal-case tracking-normal text-faint">por min</span>
+          <span className="text-[9px] font-normal normal-case tracking-normal text-faint">{perSec ? "por seg" : "por min"}</span>
         </span>
       ) : (
         label
       ),
-      title: [meta.hint ? `${meta.label} — ${meta.hint}` : meta.label, isRate && "por minuto de luta"].filter(Boolean).join(" · "),
+      title: [meta.hint ? `${meta.label} — ${meta.hint}` : meta.label, isRate && (perSec ? "por segundo de luta" : "por minuto de luta")].filter(Boolean).join(" · "),
       align: "right",
       sort: value,
       cell: (r: T) => {
         const v = value(r);
-        return <span className={cx(v === best && v !== 0 && rows.length > 1 ? "font-semibold text-gold" : v === 0 ? "text-faint" : "text-text")}>{stat(k, v, mode === "perMin")}</span>;
+        return <span className={cx(v === best && v !== 0 && rows.length > 1 ? "font-semibold text-gold" : v === 0 ? "text-faint" : "text-text")}>{stat(k, v, mode !== "total", perSec)}</span>;
       },
     } satisfies Column<T>;
   });
@@ -58,6 +59,7 @@ export function ModeToggle({ value, onChange }: { value: ValueMode; onChange: (m
       options={[
         { value: "total", label: "Total" },
         { value: "perMin", label: "Por minuto" },
+        { value: "perSec", label: "Por segundo" },
       ]}
     />
   );
