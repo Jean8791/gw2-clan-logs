@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { DICT, STAT_EN, STAT_GROUPS, STAT_KEYS, STAT_META, parseLang, statText, translate, type Lang } from "@gw2logs/shared";
 
@@ -94,5 +96,26 @@ describe("métricas e grupos em inglês", () => {
   it("statText devolve o português original ou o inglês", () => {
     expect(statText("damageTaken", "pt")).toEqual({ label: "Dano recebido", short: "Recebido", hint: undefined });
     expect(statText("damageTaken", "en").label).toBe("Damage taken");
+  });
+});
+
+describe("site: nenhum texto em português escrito direto no código", () => {
+  const dir = new URL("../../web/src/", import.meta.url);
+  const sources = (d: URL): URL[] =>
+    fs.readdirSync(d, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? sources(new URL(`${e.name}/`, d)) : /\.tsx?$/.test(e.name) ? [new URL(e.name, d)] : []));
+  const semComentarios = (code: string) => code.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "").replace(/\s\/\/ .*$/gm, "");
+
+  it("letras acentuadas só aparecem em comentários (o texto da tela vem do dicionário)", () => {
+    const achados = sources(dir).flatMap((f) =>
+      semComentarios(fs.readFileSync(f, "utf8"))
+        .split("\n")
+        .filter((l) => /[áàâãéêíóôõúç]/i.test(l))
+        .map((l) => `${path.basename(f.pathname)}: ${l.trim()}`),
+    );
+    expect(achados).toEqual([]);
+  });
+
+  it("o teste enxerga os arquivos do site", () => {
+    expect(sources(dir).length).toBeGreaterThan(15);
   });
 });

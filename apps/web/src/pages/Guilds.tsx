@@ -2,7 +2,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { KeyRound, Star } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import type { GuildSummary } from "@gw2logs/shared";
+import { ROUTES, type GuildSummary } from "@gw2logs/shared";
 import { DataTable, type Column } from "../components/DataTable";
 import { Badge, Card, ErrorBox, Input, Loading, PageHeader, cx } from "../components/ui";
 import { setGuildAlliance, useConfig, useGuilds } from "../lib/api";
@@ -34,34 +34,34 @@ export function GuildsPage() {
   const columns: Column<GuildSummary>[] = [
     {
       id: "ally",
-      header: "Aliança",
+      header: t("guilds.col.alliance"),
       align: "center",
       sort: (g) => (g.inAlliance ? 1 : 0),
       cell: (g) => (
         <button
           disabled={busy === g.id}
           onClick={() => toggle(g)}
-          aria-label={g.inAlliance ? "Tirar da aliança" : "Marcar como da aliança"}
+          aria-label={g.inAlliance ? t("guilds.removeAlliance") : t("guilds.addAlliance")}
           className={cx("rounded-md p-1.5 transition", g.inAlliance ? "text-gold hover:bg-gold-soft" : "text-faint hover:bg-surface-3 hover:text-text")}
         >
           <Star className={cx("size-4", g.inAlliance && "fill-gold")} />
         </button>
       ),
     },
-    { id: "tag", header: "Tag", sort: (g) => g.tag ?? "", cell: (g) => <Badge tone={g.inAlliance ? "gold" : "neutral"}>[{g.tag ?? "?"}]</Badge> },
+    { id: "tag", header: t("guilds.col.tag"), sort: (g) => g.tag ?? "", cell: (g) => <Badge tone={g.inAlliance ? "gold" : "neutral"}>[{g.tag ?? "?"}]</Badge> },
     {
       id: "name",
-      header: "Guilda",
+      header: t("table.guild"),
       sort: (g) => g.name ?? "",
       cell: (g) => (
-        <Link to={`/ranking?guild=${encodeURIComponent(g.id)}`} className="font-medium hover:text-gold">
-          {g.name ?? <span className="text-faint">Nome ainda não carregado</span>}
+        <Link to={`${ROUTES.ranking}?guild=${encodeURIComponent(g.id)}`} className="font-medium hover:text-gold">
+          {g.name ?? <span className="text-faint">{t("guilds.noName")}</span>}
         </Link>
       ),
     },
-    { id: "players", header: "Jogadores", align: "right", sort: (g) => g.players, cell: (g) => g.players },
-    { id: "fights", header: "Lutas", align: "right", sort: (g) => g.fights, cell: (g) => g.fights },
-    { id: "last", header: "Visto por último", align: "right", sort: (g) => g.lastSeen, cell: (g) => <span className="text-muted">{date(g.lastSeen)}</span> },
+    { id: "players", header: t("fight.col.players"), align: "right", sort: (g) => g.players, cell: (g) => g.players },
+    { id: "fights", header: t("table.fights"), align: "right", sort: (g) => g.fights, cell: (g) => g.fights },
+    { id: "last", header: t("guilds.col.last"), align: "right", sort: (g) => g.lastSeen, cell: (g) => <span className="text-muted">{date(g.lastSeen)}</span> },
   ];
 
   return (
@@ -74,7 +74,7 @@ export function GuildsPage() {
         <Card className="mb-4 max-w-md p-4">
           <div className="flex items-end gap-2">
             <KeyRound className="mb-2.5 size-4 text-faint" />
-            <Input className="flex-1" label="Senha de administrador" type="password" value={key} onChange={(e) => setKey(e.target.value)} placeholder="Para marcar guildas da aliança" />
+            <Input className="flex-1" label={t("guilds.adminKey")} type="password" value={key} onChange={(e) => setKey(e.target.value)} placeholder={t("guilds.adminKeyHint")} />
           </div>
         </Card>
       )}
@@ -90,7 +90,7 @@ export function GuildsPage() {
           <DataTable rows={data} columns={columns} rowKey={(g) => g.id} initialSort={{ id: "players", desc: true }} />
         </Card>
       )}
-      <p className="mt-3 text-xs text-faint">A guilda de cada jogador é a que ele estava representando na luta. Nomes e tags vêm da API oficial do Guild Wars 2.</p>
+      <p className="mt-3 text-xs text-faint">{t("guilds.note")}</p>
     </>
   );
 }

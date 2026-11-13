@@ -13,10 +13,10 @@ import { t } from "../lib/i18n";
 import { accountShort, compact, dateTime, dec, duration, int, stat } from "../lib/format";
 
 const BOARDS: { key: StatKey; title: string }[] = [
-  { key: "damage", title: "Dano por minuto" },
-  { key: "strips", title: "Strips por minuto" },
-  { key: "cleanses", title: "Cleanses por minuto" },
-  { key: "healing", title: "Cura por minuto" },
+  { key: "damage", title: "overview.board.damage" },
+  { key: "strips", title: "overview.board.strips" },
+  { key: "cleanses", title: "overview.board.cleanses" },
+  { key: "healing", title: "overview.board.healing" },
 ];
 
 /** Precisa de pelo menos 2 min de luta para entrar nos destaques (evita quem apareceu 10 s). */
@@ -35,12 +35,12 @@ function Leaderboard({ rows, k, title, open, onDetail }: { rows: RankingRow[]; k
           aria-expanded={open}
           className={cx("rounded-md px-2 py-1 text-xs font-medium transition hover:bg-surface-2", open ? "bg-surface-3 text-gold" : "text-gold/80 hover:text-gold")}
         >
-          {open ? "Fechar detalhe" : "Detalhar"}
+          {open ? t("overview.detail.close") : t("overview.detail")}
         </button>
       }
     >
       {top.length === 0 ? (
-        <p className="px-5 py-6 text-sm text-faint">Sem dados no período.</p>
+        <p className="px-5 py-6 text-sm text-faint">{t("overview.noData")}</p>
       ) : (
         <ol className="flex flex-col gap-1 p-3">
           {top.map(({ r, v }, i) => (
@@ -65,28 +65,28 @@ function BoardDetail({ rows, k, title, onClose }: { rows: RankingRow[]; k: StatK
   const top = topByRate(rows, k, 10, MIN_ACTIVE_MS);
   const columns: Column<(typeof top)[number]>[] = [
     { id: "pos", header: "#", align: "right", cell: (_x, i) => <span className="text-faint">{i + 1}</span> },
-    { id: "player", header: "Jogador", sticky: true, cell: (x) => <PlayerLink account={x.row.account} name={x.row.name} /> },
-    { id: "prof", header: "Classe", sort: (x) => x.row.profession ?? "", cell: (x) => <Profession profession={x.row.profession} /> },
-    { id: "guild", header: "Guilda", cell: (x) => <GuildTag id={x.row.guildId} /> },
-    { id: "fights", header: "Lutas", align: "right", sort: (x) => x.row.fights, cell: (x) => x.row.fights },
-    { id: "time", header: "Tempo ativo", align: "right", sort: (x) => x.row.activeMs, cell: (x) => <span className="text-muted">{duration(x.row.activeMs)}</span> },
-    { id: "total", header: "Total", align: "right", sort: (x) => x.row[k], cell: (x) => compact(x.row[k]) },
-    { id: "perMin", header: "Por minuto", align: "right", sort: (x) => x.perMin, cell: (x) => <span className="font-semibold">{stat(k, x.perMin, true)}</span> },
-    { id: "perSec", header: "Por segundo", align: "right", sort: (x) => x.perMin, cell: (x) => stat(k, perSecond(x.row[k], x.row.activeMs), false, true) },
+    { id: "player", header: t("table.player"), sticky: true, cell: (x) => <PlayerLink account={x.row.account} name={x.row.name} /> },
+    { id: "prof", header: t("table.class"), sort: (x) => x.row.profession ?? "", cell: (x) => <Profession profession={x.row.profession} /> },
+    { id: "guild", header: t("table.guild"), cell: (x) => <GuildTag id={x.row.guildId} /> },
+    { id: "fights", header: t("table.fights"), align: "right", sort: (x) => x.row.fights, cell: (x) => x.row.fights },
+    { id: "time", header: t("common.activeTime"), align: "right", sort: (x) => x.row.activeMs, cell: (x) => <span className="text-muted">{duration(x.row.activeMs)}</span> },
+    { id: "total", header: t("common.total"), align: "right", sort: (x) => x.row[k], cell: (x) => compact(x.row[k]) },
+    { id: "perMin", header: t("common.perMinute"), align: "right", sort: (x) => x.perMin, cell: (x) => <span className="font-semibold">{stat(k, x.perMin, true)}</span> },
+    { id: "perSec", header: t("common.perSecond"), align: "right", sort: (x) => x.perMin, cell: (x) => stat(k, perSecond(x.row[k], x.row.activeMs), false, true) },
   ];
   return (
     <Card
       className="mt-4"
-      title={`${title}: os 10 melhores`}
+      title={t("overview.detail.title", { title })}
       action={
-        <button type="button" onClick={onClose} aria-label="Fechar o detalhe" className="rounded-md p-1 text-faint hover:bg-surface-2 hover:text-text">
+        <button type="button" onClick={onClose} aria-label={t("overview.detail.closeAria")} className="rounded-md p-1 text-faint hover:bg-surface-2 hover:text-text">
           <X className="size-4" />
         </button>
       }
     >
       <DataTable rows={top} columns={columns} rowKey={(x) => x.row.account} initialSort={{ id: "perMin", desc: true }} dense />
       <p className="border-t border-line px-5 py-2.5 text-xs text-faint">
-        Só entra quem teve pelo menos 2 min de luta nos filtros escolhidos. “Por minuto” e “por segundo” dividem o total pelo tempo ativo do jogador.
+        {t("overview.detail.note")}
       </p>
     </Card>
   );
@@ -107,7 +107,7 @@ export function OverviewPage() {
         actions={
           <Link to={ROUTES.upload}>
             <Button variant="primary">
-              <Upload className="size-4" /> Enviar logs
+              <Upload className="size-4" /> {t("nav.upload")}
             </Button>
           </Link>
         }
@@ -118,34 +118,38 @@ export function OverviewPage() {
       {ov.isLoading && <Loading />}
       {ov.data && ov.data.fights === 0 && (
         <Card>
-          <Empty title="Nenhuma luta no período">
-            Envie os logs do ArcDPS (<code>.zevtc</code>) em <Link className="text-gold" to={ROUTES.upload}>Enviar logs</Link> ou escolha outro período.
+          <Empty title={t("overview.empty.title")}>
+            {t("overview.empty.before")}
+            <Link className="text-gold" to={ROUTES.upload}>
+              {t("nav.upload")}
+            </Link>
+            {t("overview.empty.after")}
           </Empty>
         </Card>
       )}
       {ov.data && ov.data.fights > 0 && (
         <>
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-            <Kpi label="Lutas" value={int(ov.data.fights)} hint={`${dateTime(ov.data.first)} → ${dateTime(ov.data.last)}`} />
-            <Kpi label="Tempo de luta" value={duration(ov.data.durationMs)} />
-            <Kpi label="Abates" value={int(ov.data.kills)} accent />
-            <Kpi label="Mortes" value={int(ov.data.deaths)} hint={`K/D ${dec(ov.data.deaths ? ov.data.kills / ov.data.deaths : ov.data.kills, 2)}`} />
-            <Kpi label="Jogadores" value={int(ov.data.players)} />
+            <Kpi label={t("overview.kpi.fights")} value={int(ov.data.fights)} hint={`${dateTime(ov.data.first)} → ${dateTime(ov.data.last)}`} />
+            <Kpi label={t("overview.kpi.time")} value={duration(ov.data.durationMs)} />
+            <Kpi label={t("overview.kpi.kills")} value={int(ov.data.kills)} accent />
+            <Kpi label={t("overview.kpi.deaths")} value={int(ov.data.deaths)} hint={`K/D ${dec(ov.data.deaths ? ov.data.kills / ov.data.deaths : ov.data.kills, 2)}`} />
+            <Kpi label={t("overview.kpi.players")} value={int(ov.data.players)} />
           </div>
 
           <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             {BOARDS.map((b) => (
-              <Leaderboard key={b.key} rows={rk.data?.rows ?? []} k={b.key} title={b.title} open={detail === b.key} onDetail={() => setDetail(detail === b.key ? null : b.key)} />
+              <Leaderboard key={b.key} rows={rk.data?.rows ?? []} k={b.key} title={t(b.title)} open={detail === b.key} onDetail={() => setDetail(detail === b.key ? null : b.key)} />
             ))}
           </div>
-          {detail && <BoardDetail key={detail} rows={rk.data?.rows ?? []} k={detail} title={BOARDS.find((b) => b.key === detail)!.title} onClose={() => setDetail(null)} />}
+          {detail && <BoardDetail key={detail} rows={rk.data?.rows ?? []} k={detail} title={t(BOARDS.find((b) => b.key === detail)!.title)} onClose={() => setDetail(null)} />}
 
           <Card
             className="mt-6"
-            title="Lutas recentes"
+            title={t("overview.recent")}
             action={
               <Link to={ROUTES.fights} className="inline-flex items-center gap-1 text-xs font-medium text-gold hover:underline">
-                Ver todas <ArrowRight className="size-3" />
+                {t("overview.seeAll")} <ArrowRight className="size-3" />
               </Link>
             }
           >
@@ -161,7 +165,7 @@ export function OverviewPage() {
                     <div className="hidden sm:block">
                       <SquadVsEnemy fight={f} />
                     </div>
-                    <div className="hidden text-sm text-muted sm:block">{compact(f.squadDamage)} dano</div>
+                    <div className="hidden text-sm text-muted sm:block">{t("overview.damage", { value: compact(f.squadDamage) })}</div>
                     <div className="flex items-center gap-2">
                       <FightStatus fight={f} />
                       <KillDeath kills={f.squadKills} deaths={f.squadDeaths} />
@@ -173,7 +177,7 @@ export function OverviewPage() {
           </Card>
 
           {rk.data && rk.data.rows.length > 0 && (
-            <Card className="mt-6" title="Quem mais lutou no período">
+            <Card className="mt-6" title={t("overview.mostActive")}>
               <div className="flex flex-wrap gap-2 p-4">
                 {[...rk.data.rows]
                   .sort((a, b) => b.fights - a.fights)
@@ -183,7 +187,7 @@ export function OverviewPage() {
                       <Profession profession={r.profession} />
                       <span className="font-medium">{r.name ?? accountShort(r.account)}</span>
                       <GuildTag id={r.guildId} />
-                      <span className="text-xs text-faint">{r.fights} lutas</span>
+                      <span className="text-xs text-faint">{t("overview.fightsN", { n: r.fights })}</span>
                     </Link>
                   ))}
               </div>
