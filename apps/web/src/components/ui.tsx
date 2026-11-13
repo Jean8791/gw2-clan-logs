@@ -132,25 +132,6 @@ export function Loading({ label = t("loading") }: { label?: string }) {
   );
 }
 
-/** Texto traduzido com **negrito** e _itálico_ (só o que as frases de ajuda precisam). */
-export function Rich({ text }: { text: string }) {
-  return (
-    <>
-      {text.split(/(\*\*.+?\*\*|_.+?_)/).map((part, i) =>
-        part.startsWith("**") ? (
-          <b key={i} className="text-text">
-            {part.slice(2, -2)}
-          </b>
-        ) : part.startsWith("_") && part.length > 1 ? (
-          <i key={i}>{part.slice(1, -1)}</i>
-        ) : (
-          part
-        ),
-      )}
-    </>
-  );
-}
-
 export function ErrorBox({ error }: { error: unknown }) {
   return (
     <div className="flex items-center gap-2 rounded-xl border border-bad/30 bg-bad/10 px-4 py-3 text-sm text-bad">

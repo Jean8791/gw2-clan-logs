@@ -11,10 +11,9 @@ import {
   type PlayerProfile,
   type PlayerSkill,
   type RankingRow,
-  type UploadResult,
 } from "@gw2logs/shared";
 
-import { ApiError, apiErrorFrom } from "./errors";
+import { apiErrorFrom } from "./errors";
 
 async function get<T>(url: string): Promise<T> {
   const res = await fetch(url);
@@ -78,31 +77,6 @@ export const useCompare = (accounts: string[], f: Filters) =>
     enabled: accounts.length > 0,
     queryFn: () => get<{ players: PlayerProfile[]; baseline: Aggregate }>(withFilters("/api/compare", f, { accounts: accounts.join(",") })),
   });
-
-export async function uploadLogs(files: File[], uploader: string, key: string, onProgress?: (pct: number) => void): Promise<UploadResult[]> {
-  const form = new FormData();
-  if (uploader) form.append("uploader", uploader);
-  for (const f of files) form.append("file", f, f.name);
-  // XHR para ter progresso do envio (logs de WvW são grandes)
-  return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    xhr.open("POST", "/api/upload");
-    if (key) xhr.setRequestHeader("X-Upload-Key", key);
-    xhr.upload.onprogress = (e) => e.lengthComputable && onProgress?.(Math.round((e.loaded / e.total) * 100));
-    xhr.onload = () => {
-      let body: any = null;
-      try {
-        body = JSON.parse(xhr.responseText);
-      } catch {
-        /* resposta vazia */
-      }
-      if (xhr.status >= 200 && xhr.status < 300) resolve(body as UploadResult[]);
-      else reject(apiErrorFrom(xhr.status, body));
-    };
-    xhr.onerror = () => reject(new ApiError(0, "Network error", "network"));
-    xhr.send(form);
-  });
-}
 
 export async function setGuildAlliance(id: string, inAlliance: boolean, key: string) {
   const res = await fetch(`/api/guilds/${encodeURIComponent(id)}`, {

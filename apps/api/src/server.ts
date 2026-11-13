@@ -4,7 +4,7 @@ import { createWriteStream, existsSync } from "node:fs";
 import path from "node:path";
 import { pipeline } from "node:stream/promises";
 import { Transform } from "node:stream";
-import Fastify, { type FastifyInstance, type FastifyRequest } from "fastify";
+import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
 import multipart from "@fastify/multipart";
 import fastifyStatic from "@fastify/static";
 import { parseFilters, type UploadResult } from "@gw2logs/shared";
@@ -12,11 +12,17 @@ import { paths, type Config } from "./config.js";
 import { openDb, type DB } from "./db.js";
 import { eiAvailable } from "./elite-insights.js";
 import { Gw2Api } from "./gw2api.js";
+import { AttemptLimiter, folderBytes } from "./guards.js";
 import { MEDIA_KEY, MediaStore } from "./media.js";
 import * as q from "./queries.js";
 import { LogWorker } from "./worker.js";
 
 const MAX_UPLOAD = 80 * 1024 * 1024; // logs grandes de WvW passam fácil de 20 MB
+const LIMIT_MESSAGES = {
+  queueFull: "The processing queue is full. Try again in a few minutes.",
+  hourlyLimit: "Hourly upload limit reached. Try again later.",
+  diskFull: "The server is out of space for new logs.",
+};
 const ALLOWED_EXT = [".zevtc", ".evtc", ".zip", ".json"];
 
 export interface App {
@@ -43,16 +49,42 @@ export async function buildApp(cfg: Config, opts: { logger?: boolean } = {}): Pr
     throw new Error("rede desligada (GW2_API=off)");
   }) as unknown as typeof fetch;
   const media = new MediaStore(db, cfg.gw2Api ? fetch : offline);
-  const server = Fastify({ logger: opts.logger ?? false, bodyLimit: 1024 * 1024 });
+  const server = Fastify({ logger: opts.logger ?? false, bodyLimit: 1024 * 1024, trustProxy: cfg.trustProxy });
   const worker = new LogWorker(db, api, media, cfg, server.log);
 
   await server.register(multipart, { limits: { fileSize: MAX_UPLOAD, files: 50 } });
 
-  const keyOk = (req: FastifyRequest, key: string) => key === "" || safeEqual(String(req.headers["x-upload-key"] ?? ""), key);
+  const attempts = new AttemptLimiter(cfg.limits.maxFailedKeys, cfg.limits.blockMinutes * 60_000);
+
+  /** Confere a chave; erros seguidos do mesmo IP o bloqueiam (responde 429 e devolve false). Sem chave configurada, libera. */
+  const checkKey = (req: FastifyRequest, reply: FastifyReply, key: string, code: "uploadKey" | "adminKey"): boolean => {
+    const wait = attempts.blockedFor(req.ip);
+    if (wait > 0) {
+      reply.header("retry-after", Math.ceil(wait / 1000)).code(429).send({ error: "Too many wrong passwords. Try again later.", code: "tooManyAttempts" });
+      return false;
+    }
+    if (key === "" || safeEqual(String(req.headers["x-upload-key"] ?? ""), key)) {
+      attempts.reset(req.ip);
+      return true;
+    }
+    attempts.fail(req.ip);
+    reply.code(401).send(code === "uploadKey" ? { error: "Wrong upload password.", code } : { error: "Wrong admin password.", code });
+    return false;
+  };
+
+  /** Por que um novo log não pode entrar agora (fila cheia, limite por hora ou disco cheio), ou null se pode. */
+  const uploadBlocker = async (): Promise<"queueFull" | "hourlyLimit" | "diskFull" | null> => {
+    const count = (sql: string, ...args: unknown[]) => (db.prepare(sql).get(...args) as { n: number }).n;
+    if (count("SELECT COUNT(*) AS n FROM fights WHERE status IN ('queued','parsing')") >= cfg.limits.maxQueue) return "queueFull";
+    const hourAgo = new Date(Date.now() - 3600_000).toISOString();
+    if (count("SELECT COUNT(*) AS n FROM fights WHERE uploaded_at > ?", hourAgo) >= cfg.limits.maxPerHour) return "hourlyLimit";
+    if ((await folderBytes(p.uploads)) >= cfg.limits.maxUploadsMb * 1024 * 1024) return "diskFull";
+    return null;
+  };
 
   // ---------- Envio de logs ----------
   server.post("/api/upload", async (req, reply) => {
-    if (!keyOk(req, cfg.uploadKey)) return reply.code(401).send({ error: "Wrong upload password.", code: "uploadKey" });
+    if (!checkKey(req, reply, cfg.uploadKey, "uploadKey")) return reply;
 
     const results: UploadResult[] = [];
     let uploader: string | null = null;
@@ -85,6 +117,13 @@ export async function buildApp(cfg: Config, opts: { logger?: boolean } = {}): Pr
       if (existing) {
         await fs.rm(tmp, { force: true });
         results.push({ file: part.filename, id: existing.id, status: existing.status, duplicate: true });
+        continue;
+      }
+      // os limites valem só para log novo: um duplicado é ignorado de qualquer jeito e não custa nada
+      const blocked = await uploadBlocker();
+      if (blocked) {
+        await fs.rm(tmp, { force: true });
+        results.push({ file: part.filename, error: LIMIT_MESSAGES[blocked], code: blocked });
         continue;
       }
       const id = `${new Date().toISOString().replace(/\D/g, "").slice(0, 14)}-${sha.slice(0, 8)}`;
@@ -166,7 +205,7 @@ export async function buildApp(cfg: Config, opts: { logger?: boolean } = {}): Pr
   server.get("/api/guilds", async () => q.guildSummaries(db));
 
   server.put<{ Params: { id: string }; Body: { inAlliance?: boolean } }>("/api/guilds/:id", async (req, reply) => {
-    if (!keyOk(req, cfg.adminKey)) return reply.code(401).send({ error: "Wrong admin password.", code: "adminKey" });
+    if (!checkKey(req, reply, cfg.adminKey, "adminKey")) return reply;
     if (typeof req.body?.inAlliance !== "boolean") return reply.code(400).send({ error: "Pass inAlliance (true/false).", code: "needInAlliance" });
     return q.setGuildAlliance(db, req.params.id, req.body.inAlliance) ? { ok: true } : reply.code(404).send({ error: "Guild not found.", code: "guildNotFound" });
   });

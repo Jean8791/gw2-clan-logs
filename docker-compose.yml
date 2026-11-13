@@ -8,6 +8,11 @@ services:
       UPLOAD_KEY: ${UPLOAD_KEY:?defina UPLOAD_KEY no .env}
       ADMIN_KEY: ${ADMIN_KEY:?defina ADMIN_KEY no .env}
       RETENTION_DAYS: ${RETENTION_DAYS:-30}
+      # só o Caddy chega no app (a porta não é publicada), então o IP do X-Forwarded-For é confiável
+      TRUST_PROXY: "true"
+    # o Elite Insights usa até ~1,5 GB num log grande: sem teto, um envio ruim derruba a VM inteira.
+    # Em VM de 1 GB, defina APP_MEM_LIMIT=800m no .env (logs grandes então falham com erro, sem derrubar o site).
+    mem_limit: ${APP_MEM_LIMIT:-1500m}
     volumes:
       - dados:/data
 

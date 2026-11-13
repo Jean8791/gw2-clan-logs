@@ -9,7 +9,6 @@ describe("legacyRoute: links antigos em português levam às rotas em inglês", 
     ["/jogadores/Nome.1234", "/players/Nome.1234"],
     ["/comparar", "/compare"],
     ["/guildas", "/guilds"],
-    ["/enviar", "/upload"],
     ["/eu", "/me"],
   ])("%s vira %s", (antigo, novo) => {
     expect(legacyRoute(antigo)).toBe(novo);
@@ -19,7 +18,7 @@ describe("legacyRoute: links antigos em português levam às rotas em inglês", 
     expect(legacyRoute("/jogadores/Conta%20Com%20Espa%C3%A7o.1234")).toBe("/players/Conta%20Com%20Espa%C3%A7o.1234");
   });
 
-  it.each(["/", "/ranking", "/days", "/fights", "/players/Nome.1234", "/qualquer-coisa", "/lutasx", "/lutas/a/b", ""])("%j não é rota antiga", (caminho) => {
+  it.each(["/", "/ranking", "/days", "/fights", "/players/Nome.1234", "/qualquer-coisa", "/lutasx", "/lutas/a/b", "/enviar", "/upload", ""])("%j não é rota antiga", (caminho) => {
     expect(legacyRoute(caminho)).toBeNull();
   });
 });
@@ -34,7 +33,6 @@ describe("ROUTES: as rotas do site, todas em inglês", () => {
     expect(ROUTES.player("Nome.1234")).toBe("/players/Nome.1234");
     expect(ROUTES.compare).toBe("/compare");
     expect(ROUTES.guilds).toBe("/guilds");
-    expect(ROUTES.upload).toBe("/upload");
     expect(ROUTES.me).toBe("/me");
   });
 
@@ -44,7 +42,7 @@ describe("ROUTES: as rotas do site, todas em inglês", () => {
   });
 
   it("nenhuma rota nova tem palavra em português", () => {
-    const todas = [ROUTES.days, ROUTES.fights, ROUTES.ranking, ROUTES.compare, ROUTES.guilds, ROUTES.upload, ROUTES.me, ROUTES.fight("x"), ROUTES.player("x")];
+    const todas = [ROUTES.days, ROUTES.fights, ROUTES.ranking, ROUTES.compare, ROUTES.guilds, ROUTES.me, ROUTES.fight("x"), ROUTES.player("x")];
     expect(todas.filter((r) => /dias|lutas|jogadores|comparar|guildas|enviar|\/eu\b/.test(r))).toEqual([]);
   });
 });

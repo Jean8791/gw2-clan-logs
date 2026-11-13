@@ -22,7 +22,25 @@ export interface Config {
   retentionDays: number;
   /** Buscar nomes de mapas e guildas na API oficial do GW2. */
   gw2Api: boolean;
+  /** Atrás de proxy (Caddy): vale o IP do X-Forwarded-For. Ligado sem proxy, qualquer um forjaria o IP. */
+  trustProxy: boolean;
+  limits: UploadLimits;
 }
+
+/** Travas contra abuso: tentativas de senha, fila de processamento, envios por hora e espaço em disco. */
+export interface UploadLimits {
+  maxFailedKeys: number;
+  blockMinutes: number;
+  maxQueue: number;
+  maxPerHour: number;
+  maxUploadsMb: number;
+}
+
+/** Número positivo da variável de ambiente; vazio ou inválido usa o padrão. */
+const positive = (raw: string | undefined, fallback: number) => {
+  const n = Number(raw);
+  return raw !== undefined && raw !== "" && Number.isFinite(n) && n > 0 ? n : fallback;
+};
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const uploadKey = env.UPLOAD_KEY ?? "";
@@ -37,6 +55,14 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     webDir: path.resolve(env.WEB_DIR ?? path.join(repoRoot, "apps", "web", "dist")),
     retentionDays: Number(env.RETENTION_DAYS ?? 0),
     gw2Api: env.GW2_API !== "off",
+    trustProxy: env.TRUST_PROXY === "true",
+    limits: {
+      maxFailedKeys: positive(env.UPLOAD_MAX_FAILS, 5),
+      blockMinutes: positive(env.UPLOAD_BLOCK_MIN, 15),
+      maxQueue: positive(env.UPLOAD_MAX_QUEUE, 30),
+      maxPerHour: positive(env.UPLOAD_MAX_PER_HOUR, 500),
+      maxUploadsMb: positive(env.UPLOAD_MAX_DISK_MB, 4096),
+    },
   };
 }
 

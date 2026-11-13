@@ -11,7 +11,6 @@ import { RankingPage } from "./pages/Ranking";
 import { PlayerPage, MePage } from "./pages/Player";
 import { ComparePage } from "./pages/Compare";
 import { GuildsPage } from "./pages/Guilds";
-import { UploadPage } from "./pages/Upload";
 import { DaysPage } from "./pages/Days";
 import { Empty } from "./components/ui";
 import { t } from "./lib/i18n";
@@ -39,7 +38,6 @@ const router = createBrowserRouter([
       { path: ROUTES.me, element: <MePage /> },
       { path: ROUTES.compare, element: <ComparePage /> },
       { path: ROUTES.guilds, element: <GuildsPage /> },
-      { path: ROUTES.upload, element: <UploadPage /> },
       { path: "*", element: <NotFound /> },
     ],
   },
