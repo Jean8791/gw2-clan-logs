@@ -8,6 +8,7 @@ import {
   type GuildSummary,
   type Overview,
   type PlayerProfile,
+  type PlayerSkill,
   type RankingRow,
   type UploadResult,
 } from "@gw2logs/shared";
@@ -70,6 +71,9 @@ export const useRanking = (f: Filters) =>
 
 export const usePlayer = (account: string, f: Filters) =>
   useQuery({ queryKey: ["player", account, f], queryFn: () => get<PlayerProfile>(withFilters(`/api/players/${encodeURIComponent(account)}`, f)), retry: false });
+
+export const usePlayerSkills = (account: string, f: Filters) =>
+  useQuery({ queryKey: ["player-skills", account, f], queryFn: () => get<PlayerSkill[]>(withFilters(`/api/players/${encodeURIComponent(account)}/skills`, f)) });
 
 export const useCompare = (accounts: string[], f: Filters) =>
   useQuery({

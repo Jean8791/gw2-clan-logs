@@ -6,13 +6,30 @@ import { useMe } from "../lib/hooks";
 import { accountShort } from "../lib/format";
 import { cx } from "./ui";
 
-/** Ícone da classe (guardado no nosso servidor); se ainda não existe, cai no ponto colorido. */
+/**
+ * Emblema da classe (guardado no nosso servidor). A API do jogo entrega o emblema branco, então ele serve de máscara
+ * e é pintado com a cor da classe. Enquanto carrega, ou se a imagem não existir, aparece o ponto colorido.
+ */
 export function ProfessionDot({ profession, className }: { profession: string | null; className?: string }) {
-  const [failed, setFailed] = useState(false);
-  if (profession && /^\w+$/.test(profession) && !failed) {
-    return <img src={`/api/media/prof:${profession}`} width={16} height={16} alt="" title={profession} loading="lazy" onError={() => setFailed(true)} className={cx("size-4 shrink-0", className)} />;
-  }
-  return <span className={cx("inline-block size-2.5 shrink-0 rounded-full", className)} style={{ background: professionColor(profession) }} title={profession ?? undefined} />;
+  const [state, setState] = useState<"loading" | "ok" | "failed">("loading");
+  const color = professionColor(profession);
+  const url = profession && /^\w+$/.test(profession) ? `/api/media/prof:${profession}` : null;
+  return (
+    <>
+      {url && state === "loading" && <img src={url} alt="" className="hidden" onLoad={() => setState("ok")} onError={() => setState("failed")} />}
+      {url && state === "ok" ? (
+        <span
+          role="img"
+          aria-label={profession ?? undefined}
+          title={profession ?? undefined}
+          className={cx("inline-block size-4 shrink-0", className)}
+          style={{ backgroundColor: color, WebkitMaskImage: `url(${url})`, maskImage: `url(${url})`, WebkitMaskSize: "contain", maskSize: "contain", WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskPosition: "center", maskPosition: "center" }}
+        />
+      ) : (
+        <span className={cx("inline-block size-2.5 shrink-0 rounded-full", className)} style={{ background: color }} title={profession ?? undefined} />
+      )}
+    </>
+  );
 }
 
 export function Profession({ profession }: { profession: string | null }) {

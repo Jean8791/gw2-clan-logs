@@ -20,9 +20,12 @@ export function isAllowedIconUrl(raw: string): boolean {
   return u.protocol === "https:" && u.hostname === ALLOWED_HOST && u.port === "" && u.username === "" && u.password === "" && u.pathname.startsWith("/file/");
 }
 
+const CONCURRENCY = 8;
+
 export interface Media {
   contentType: string;
   bytes: Buffer;
+  sha256: string;
 }
 
 export class MediaStore {
@@ -32,13 +35,17 @@ export class MediaStore {
   ) {}
 
   get(key: string): Media | null {
-    const row = this.db.prepare("SELECT content_type AS contentType, bytes FROM media WHERE key = ?").get(key) as Media | undefined;
+    const row = this.db.prepare("SELECT content_type AS contentType, bytes, sha256 FROM media WHERE key = ?").get(key) as Media | undefined;
     return row ?? null;
   }
 
-  /** Garante que a mídia está guardada. Nunca lança erro: um ícone que falha não pode derrubar o processamento da luta. */
+  /**
+   * Garante que a mídia guardada é a do `url`: baixa se não existe e baixa de novo se o link mudou (o ícone foi trocado).
+   * Se o download falhar, o ícone antigo continua. Nunca lança erro: um ícone que falha não pode derrubar o processamento da luta.
+   */
   async ensure(key: string, url: string): Promise<boolean> {
-    if (this.get(key)) return true;
+    const stored = this.db.prepare("SELECT source_url AS url FROM media WHERE key = ?").get(key) as { url: string } | undefined;
+    if (stored?.url === url) return true;
     if (!isAllowedIconUrl(url)) return false;
     try {
       // redirect: "error" — um redirecionamento poderia levar o servidor a outro endereço
@@ -55,6 +62,25 @@ export class MediaStore {
       return false;
     }
   }
+}
+
+/** Garante vários ícones, alguns por vez: o primeiro log traz centenas. Nunca lança erro. */
+export async function ensureMany(store: MediaStore, items: { key: string; url: string }[]): Promise<void> {
+  for (let i = 0; i < items.length; i += CONCURRENCY) {
+    await Promise.all(items.slice(i, i + CONCURRENCY).map((it) => store.ensure(it.key, it.url)));
+  }
+}
+
+/** Ícones das habilidades usadas (skillMap do Elite Insights; auras e efeitos vêm do buffMap), só de URLs permitidas. */
+export function collectSkillIcons(json: any, ids: Iterable<number>): { key: string; url: string }[] {
+  const out: { key: string; url: string }[] = [];
+  const skills = json?.skillMap;
+  const buffs = json?.buffMap;
+  for (const id of ids) {
+    const icon = skills?.[`s${id}`]?.icon ?? buffs?.[`b${id}`]?.icon;
+    if (typeof icon === "string" && isAllowedIconUrl(icon)) out.push({ key: `skill:${id}`, url: icon });
+  }
+  return out;
 }
 
 /** Ícones dos boons que aparecem no JSON do Elite Insights (buffMap), só de URLs permitidas. */

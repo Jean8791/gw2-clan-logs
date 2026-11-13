@@ -11,6 +11,7 @@ import {
   statsOfGroup,
   type Aggregate,
   type PlayerHistoryRow,
+  type PlayerSkill,
   type StatKey,
 } from "@gw2logs/shared";
 import { DataTable, type Column } from "../components/DataTable";
@@ -18,8 +19,9 @@ import { FilterBar } from "../components/FilterBar";
 import { GuildTag, Profession } from "../components/badges";
 import { AXIS, GRID, TOOLTIP } from "../components/charts";
 import { PlayerPicker } from "../components/PlayerPicker";
+import { SkillIcon } from "../components/MediaIcon";
 import { Badge, Button, Card, Delta, Empty, ErrorBox, Kpi, Loading, PageHeader, Select, cx } from "../components/ui";
-import { usePlayer, useRanking } from "../lib/api";
+import { usePlayer, usePlayerSkills, useRanking } from "../lib/api";
 import { mainRole, setMe, useFilters, useMe } from "../lib/hooks";
 import { BaselinePicker, type BaselineRole } from "../components/BaselinePicker";
 import { accountShort, axis, compact, date, dateTime, diffPct, duration, int, stat } from "../lib/format";
@@ -53,6 +55,7 @@ export function PlayerPage() {
   const { account = "" } = useParams();
   const [filters, setFilters] = useFilters({ mode: "wvw" });
   const { data, error, isLoading } = usePlayer(account, filters);
+  const skills = usePlayerSkills(account, filters).data ?? [];
   // por padrão compara com a média de quem joga na mesma função (suporte com suporte, DPS com DPS)
   const [baseRole, setBaseRole] = useState<BaselineRole | null>(null);
   const effRole: BaselineRole = baseRole ?? (data ? mainRole(data.history) : "dps");
@@ -78,6 +81,37 @@ export function PlayerPage() {
   if (!data) return null;
   const t = data.totals;
   const isMe = me === account;
+
+  const skillCols: Column<PlayerSkill>[] = [
+    {
+      id: "skill",
+      header: "Habilidade",
+      sort: (k) => k.name ?? "",
+      cell: (k) => (
+        <span className="inline-flex items-center gap-2">
+          <SkillIcon id={k.skillId} />
+          {k.name ?? `#${k.skillId}`}
+        </span>
+      ),
+    },
+    { id: "damage", header: "Dano", align: "right", sort: (k) => k.damage, cell: (k) => compact(k.damage) },
+    {
+      id: "pct",
+      header: "% do dano",
+      align: "right",
+      sort: (k) => k.pct,
+      cell: (k) => (
+        <span className="inline-flex items-center justify-end gap-2">
+          <span className="h-1.5 w-16 rounded-full bg-surface-3">
+            <span className="block h-1.5 rounded-full bg-gold/70" style={{ width: `${Math.min(100, k.pct)}%` }} />
+          </span>
+          <span className="w-12 text-right">{k.pct.toFixed(1).replace(".", ",")}%</span>
+        </span>
+      ),
+    },
+    { id: "hits", header: "Acertos", align: "right", sort: (k) => k.connectedHits, cell: (k) => int(k.connectedHits), title: "Acertos que conectaram" },
+    { id: "avg", header: "Dano por acerto", align: "right", sort: (k) => k.avgHit, cell: (k) => compact(k.avgHit) },
+  ];
 
   const histCols: Column<PlayerHistoryRow>[] = [
     { id: "when", header: "Quando", sort: (h) => h.timeStart, cell: (h) => <span className="text-muted">{dateTime(h.timeStart)}</span> },
@@ -219,6 +253,15 @@ export function PlayerPage() {
               </div>
               <p className="border-t border-line px-5 py-2.5 text-xs text-faint">
                 Valores por minuto de luta (boons: média por luta). O traço branco é a média dos jogadores na função escolhida, com os mesmos filtros.
+              </p>
+            </Card>
+          )}
+
+          {skills.length > 0 && (
+            <Card className="mt-6" title="Habilidades">
+              <DataTable rows={skills.slice(0, 25)} columns={skillCols} rowKey={(k) => String(k.skillId)} dense />
+              <p className="border-t border-line px-5 py-2.5 text-xs text-faint">
+                Dano em jogadores inimigos, nas lutas filtradas, incluindo o de pets, clones e engenhocas. As 25 habilidades que mais causam dano. Condições, como Burning, aparecem como habilidades.
               </p>
             </Card>
           )}

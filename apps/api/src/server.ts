@@ -131,7 +131,11 @@ export async function buildApp(cfg: Config, opts: { logger?: boolean } = {}): Pr
     if (!MEDIA_KEY.test(req.params.key)) return reply.code(400).send();
     const m = media.get(req.params.key);
     if (!m) return reply.code(404).send();
-    return reply.header("x-content-type-options", "nosniff").header("cache-control", "public, max-age=86400").type(m.contentType).send(m.bytes);
+    // sempre revalida (ETag): um ícone trocado aparece na hora, e sem trocar a resposta é um 304 sem corpo
+    const etag = `"${m.sha256}"`;
+    reply.header("x-content-type-options", "nosniff").header("cache-control", "public, no-cache").header("etag", etag);
+    if (req.headers["if-none-match"] === etag) return reply.code(304).send();
+    return reply.type(m.contentType).send(m.bytes);
   });
 
   // ---------- Jogadores, ranking, comparação ----------
@@ -144,6 +148,10 @@ export async function buildApp(cfg: Config, opts: { logger?: boolean } = {}): Pr
     const prof = q.playerProfile(db, req.params.account, parseFilters(req.query as Record<string, string>));
     return prof ?? reply.code(404).send({ error: "Jogador não encontrado." });
   });
+
+  server.get<{ Params: { account: string } }>("/api/players/:account/skills", async (req) =>
+    q.playerSkills(db, req.params.account, parseFilters(req.query as Record<string, string>)),
+  );
 
   server.get("/api/compare", async (req, reply) => {
     const qs = req.query as Record<string, string>;

@@ -65,6 +65,27 @@ describe("MediaStore", () => {
     expect(store.get("buff:1122")?.bytes.equals(PNG)).toBe(true);
   });
 
+  it("baixa de novo e troca o ícone quando o link mudou", async () => {
+    const f = fakeFetch();
+    const store = new MediaStore(db, f.fn);
+    const NOVO = "https://render.guildwars2.com/file/BBBB2222/102835.png";
+    await store.ensure("buff:1122", ICON);
+
+    expect(await store.ensure("buff:1122", NOVO)).toBe(true);
+
+    expect(f.calls).toEqual([ICON, NOVO]);
+    expect((db.prepare("SELECT source_url AS u FROM media WHERE key = 'buff:1122'").get() as { u: string }).u).toBe(NOVO);
+  });
+
+  it("se o link novo falhar, mantém o ícone antigo", async () => {
+    await new MediaStore(db, fakeFetch().fn).ensure("buff:1122", ICON);
+
+    const ok = await new MediaStore(db, fakeFetch({ ok: false }).fn).ensure("buff:1122", "https://render.guildwars2.com/file/BBBB2222/1.png");
+
+    expect(ok).toBe(false);
+    expect(new MediaStore(db).get("buff:1122")?.bytes.equals(PNG)).toBe(true);
+  });
+
   it("não baixa URL fora da lista permitida e não lança erro", async () => {
     const f = fakeFetch();
     const store = new MediaStore(db, f.fn);
@@ -127,6 +148,21 @@ describe("GET /api/media/:key", () => {
     expect(res.headers["content-type"]).toBe("image/png");
     expect(res.headers["x-content-type-options"]).toBe("nosniff");
     expect(res.rawPayload.equals(PNG)).toBe(true);
+    await app.server.close();
+  });
+
+  it("manda ETag, sempre revalida, e responde 304 se a imagem não mudou", async () => {
+    const app = await buildApp(loadConfig({ DATA_DIR: dir, GW2_API: "off", WEB_DIR: path.join(dir, "sem-site") }));
+    await new MediaStore(app.db, fakeFetch().fn).ensure("buff:1122", ICON);
+
+    const first = await app.server.inject({ url: "/api/media/buff:1122" });
+    const etag = String(first.headers.etag);
+    const again = await app.server.inject({ url: "/api/media/buff:1122", headers: { "if-none-match": etag } });
+
+    expect(etag).toMatch(/^"[0-9a-f]{64}"$/);
+    expect(String(first.headers["cache-control"])).toContain("no-cache");
+    expect(again.statusCode).toBe(304);
+    expect(again.rawPayload.length).toBe(0);
     await app.server.close();
   });
 
