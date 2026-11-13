@@ -21,7 +21,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certifi
  && mkdir -p /ei && unzip -q /tmp/ei.zip -d /ei
 
 # Runtime .NET (para o EI) + Node (para a API)
-FROM mcr.microsoft.com/dotnet/runtime:8.0-bookworm-slim
+FROM mcr.microsoft.com/dotnet/runtime:10.0
 COPY --from=build /usr/local/bin/node /usr/local/bin/node
 WORKDIR /app
 COPY --from=build /app/node_modules ./node_modules
@@ -29,6 +29,9 @@ COPY --from=build /app/apps/api/dist ./apps/api/dist
 COPY --from=build /app/apps/api/package.json ./apps/api/
 COPY --from=build /app/apps/web/dist ./apps/web/dist
 COPY --from=ei /ei /ei
+# O EI (.NET) cai com "Value cannot be null (path)" se não houver pasta de configuração do usuário.
+RUN mkdir -p /root/.config /root/.local/share
+ENV XDG_CONFIG_HOME=/root/.config XDG_DATA_HOME=/root/.local/share
 ENV NODE_ENV=production HOST=0.0.0.0 PORT=8080 DATA_DIR=/data EI_DIR=/ei WEB_DIR=/app/apps/web/dist
 VOLUME /data
 EXPOSE 8080
