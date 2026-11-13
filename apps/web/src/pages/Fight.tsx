@@ -2,9 +2,9 @@ import { ArrowLeft, ExternalLink } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { emptyStats, professionColor, ROUTES, STAT_KEYS, type PlayerFight, type StatGroup, type Stats } from "@gw2logs/shared";
+import { emptyStats, professionColor, ROUTES, STAT_KEYS, type BoonScope, type PlayerFight, type StatGroup, type Stats } from "@gw2logs/shared";
 import { DataTable, type Column } from "../components/DataTable";
-import { GroupTabs, ModeToggle, statColumns, type ValueMode } from "../components/statColumns";
+import { firstStat, GroupTabs, ModeToggle, statColumns, type ValueMode } from "../components/statColumns";
 import { GuildTag, PlayerLink, Profession } from "../components/badges";
 import { AXIS, GRID, TOOLTIP } from "../components/charts";
 import { KillDeath } from "../components/FightBits";
@@ -32,6 +32,7 @@ export function FightPage() {
   const { id = "" } = useParams();
   const { data, error, isLoading } = useFight(id);
   const [group, setGroup] = useState<StatGroup>("offense");
+  const [scope, setScope] = useState<BoonScope>("squad");
   const [mode, setMode] = useState<ValueMode>("total");
   const [view, setView] = useState<"players" | "guilds" | "groups">("players");
   const [guild, setGuild] = useState("");
@@ -95,20 +96,20 @@ export function FightPage() {
       sort: (p) => p.role,
       cell: (p) => (p.role === "support" ? <Badge tone="info">{t("fight.role.support")}</Badge> : <Badge>{t("fight.role.dps")}</Badge>),
     },
-    ...statColumns(group, mode, players),
+    ...statColumns(group, mode, players, scope),
   ];
 
   const guildCols: Column<GuildRow>[] = [
     { id: "guild", header: t("table.guild"), sticky: true, fixed: true, sort: (g) => g.players, cell: (g) => <GuildTag id={g.guildId} withName /> },
     { id: "players", header: t("fight.col.players"), align: "right", sort: (g) => g.players, cell: (g) => g.players },
-    ...statColumns(group, mode, guildRows),
+    ...statColumns(group, mode, guildRows, scope),
   ];
 
   // o destaque do melhor valor ignora a linha do squad todo, que sempre ganharia nos totais
   const groupCols: Column<GroupRow>[] = [
     { id: "group", header: t("fight.col.groupName"), sticky: true, fixed: true, sort: (g) => g.id, cell: (g) => <span className={g.id === "squad" ? "font-semibold text-gold" : "font-medium"}>{g.label}</span> },
     { id: "players", header: t("fight.col.players"), align: "right", sort: (g) => g.players, cell: (g) => g.players },
-    ...statColumns(group, mode, groupRows.filter((g) => g.id !== "squad")),
+    ...statColumns(group, mode, groupRows.filter((g) => g.id !== "squad"), scope),
   ];
 
   const chart = [...players]
@@ -172,7 +173,7 @@ export function FightPage() {
               { value: "groups", label: t("fight.view.groups") },
             ]}
           />
-          <GroupTabs value={group} onChange={setGroup} />
+          <GroupTabs value={group} onChange={setGroup} scope={scope} onScopeChange={setScope} />
           <ModeToggle value={mode} onChange={setMode} />
           {view === "players" && (
             <Select className="ml-auto w-56" value={guild} onChange={(e) => setGuild(e.target.value)} aria-label={t("fight.filter.aria")}>
@@ -188,19 +189,19 @@ export function FightPage() {
         </div>
         {view === "players" ? (
           <DataTable
-            key={`players-${group}`}
+            key={`players-${group}-${scope}`}
             pickerKey={`fight-players:${group}`}
             rows={players}
             columns={playerCols}
             rowKey={(p) => p.account}
-            initialSort={{ id: group === "offense" ? "damage" : group === "support" ? "strips" : group === "boons" ? "stabOut" : group === "uptime" ? "stabUp" : "damageTaken", desc: true }}
+            initialSort={{ id: group === "offense" ? "damage" : group === "support" ? "strips" : group === "boons" ? firstStat(group, scope) : group === "uptime" ? "stabUp" : "damageTaken", desc: true }}
             rowClassName={(p) => (p.account === me ? "bg-gold/5" : undefined)}
             dense
           />
         ) : view === "guilds" ? (
-          <DataTable key={`guilds-${group}`} pickerKey={`fight-guilds:${group}`} rows={guildRows} columns={guildCols} rowKey={(g) => g.id} initialSort={{ id: "players", desc: true }} dense />
+          <DataTable key={`guilds-${group}-${scope}`} pickerKey={`fight-guilds:${group}`} rows={guildRows} columns={guildCols} rowKey={(g) => g.id} initialSort={{ id: "players", desc: true }} dense />
         ) : (
-          <DataTable key={`groups-${group}`} pickerKey={`fight-groups:${group}`} rows={groupRows} columns={groupCols} rowKey={(g) => g.id} initialSort={{ id: "group", desc: false }} dense />
+          <DataTable key={`groups-${group}-${scope}`} pickerKey={`fight-groups:${group}`} rows={groupRows} columns={groupCols} rowKey={(g) => g.id} initialSort={{ id: "group", desc: false }} dense />
         )}
         {group === "uptime" && (
           <p className="border-t border-line px-5 py-2.5 text-xs text-faint">

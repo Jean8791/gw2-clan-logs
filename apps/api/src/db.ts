@@ -12,7 +12,7 @@ export const STAT_COL: Record<StatKey, string> = Object.fromEntries(STAT_KEYS.ma
  * Versão do esquema. Ao mudar a extração (ingest.ts) ou as colunas, suba o número:
  * as lutas são reprocessadas a partir do JSON guardado (npm run reingest), sem reenviar logs.
  */
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 export function openDb(file: string): DB {
   const db = new Database(file);

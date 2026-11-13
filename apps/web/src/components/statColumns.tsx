@@ -1,4 +1,4 @@
-import { isUptimeStat, perMinute, perSecond, STAT_GROUPS, STAT_META, statsOfGroup, statText, uptimeValue, type StatGroup, type StatKey, type Stats } from "@gw2logs/shared";
+import { BOON_SCOPES, isUptimeStat, perMinute, perSecond, STAT_GROUPS, STAT_META, statsOfGroup, statText, uptimeValue, type BoonScope, type StatGroup, type StatKey, type Stats } from "@gw2logs/shared";
 import { BuffIcon } from "./MediaIcon";
 import type { Column } from "./DataTable";
 import { Segmented, cx } from "./ui";
@@ -8,8 +8,8 @@ import { getLang, t } from "../lib/i18n";
 export type ValueMode = "total" | "perMin" | "perSec";
 
 /** Colunas de métricas de um grupo (Dano, Suporte…), em total ou por minuto, com destaque do melhor valor. */
-export function statColumns<T extends Stats & { activeMs: number }>(group: StatGroup, mode: ValueMode, rows: T[]): Column<T>[] {
-  return statsOfGroup(group).map((k: StatKey) => {
+export function statColumns<T extends Stats & { activeMs: number }>(group: StatGroup, mode: ValueMode, rows: T[], scope: BoonScope = "squad"): Column<T>[] {
+  return statsOfGroup(group, scope).map((k: StatKey) => {
     const meta = STAT_META[k];
     const text = statText(k, getLang());
     // uptime é % do tempo ativo (ou média de pilhas) nos dois modos: o "por minuto" não se aplica
@@ -49,8 +49,26 @@ export function statColumns<T extends Stats & { activeMs: number }>(group: StatG
   });
 }
 
-export function GroupTabs({ value, onChange }: { value: StatGroup; onChange: (g: StatGroup) => void }) {
-  return <Segmented value={value} onChange={onChange} options={STAT_GROUPS.map((g) => ({ value: g.id, label: t(`group.${g.id}`) }))} />;
+/** Coluna pela qual a tabela do grupo começa ordenada (a primeira métrica do alcance escolhido). */
+export const firstStat = (group: StatGroup, scope: BoonScope): StatKey => statsOfGroup(group, scope)[0]!;
+
+/** Abas dos grupos de métricas; na aba Boons aparece também a escolha do alcance (squad, grupo ou próprio). */
+export function GroupTabs({ value, onChange, scope, onScopeChange }: { value: StatGroup; onChange: (g: StatGroup) => void; scope: BoonScope; onScopeChange: (s: BoonScope) => void }) {
+  return (
+    <>
+      <Segmented value={value} onChange={onChange} options={STAT_GROUPS.map((g) => ({ value: g.id, label: t(`group.${g.id}`) }))} />
+      {value === "boons" && <ScopeToggle value={scope} onChange={onScopeChange} />}
+    </>
+  );
+}
+
+export function ScopeToggle({ value, onChange }: { value: BoonScope; onChange: (s: BoonScope) => void }) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-xs text-faint">{t("scope.label")}</span>
+      <Segmented size="sm" value={value} onChange={onChange} options={BOON_SCOPES.map((s) => ({ value: s, label: t(`scope.${s}`) }))} />
+    </div>
+  );
 }
 
 export function ModeToggle({ value, onChange }: { value: ValueMode; onChange: (m: ValueMode) => void }) {
