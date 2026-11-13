@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { professionColor, PROFESSIONS } from "@gw2logs/shared";
 import { useGuilds } from "../lib/api";
@@ -5,7 +6,12 @@ import { useMe } from "../lib/hooks";
 import { accountShort } from "../lib/format";
 import { cx } from "./ui";
 
+/** Ícone da classe (guardado no nosso servidor); se ainda não existe, cai no ponto colorido. */
 export function ProfessionDot({ profession, className }: { profession: string | null; className?: string }) {
+  const [failed, setFailed] = useState(false);
+  if (profession && /^\w+$/.test(profession) && !failed) {
+    return <img src={`/api/media/prof:${profession}`} width={16} height={16} alt="" title={profession} loading="lazy" onError={() => setFailed(true)} className={cx("size-4 shrink-0", className)} />;
+  }
   return <span className={cx("inline-block size-2.5 shrink-0 rounded-full", className)} style={{ background: professionColor(profession) }} title={profession ?? undefined} />;
 }
 
