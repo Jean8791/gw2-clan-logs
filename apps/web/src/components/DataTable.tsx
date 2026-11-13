@@ -51,7 +51,9 @@ export function DataTable<T>({
   }, [rows, columns, sort]);
 
   return (
-    <div className="overflow-x-auto">
+    // Área de rolagem com altura limitada: assim o cabeçalho (sticky) fica preso no topo dela ao rolar, como na bel.st.
+    // Com overflow só no eixo x o cabeçalho colava num contêiner que não rola na vertical e sumia.
+    <div className="max-h-[calc(100vh-5rem)] overflow-auto">
       <table className="w-full border-separate border-spacing-0 text-sm">
         <thead>
           <tr>
