@@ -53,7 +53,7 @@ export function Select({ label, className, children, ...p }: SelectHTMLAttribute
       {label && <span className="text-[11px] font-medium uppercase tracking-wider text-faint">{label}</span>}
       <select
         {...p}
-        className="h-9 w-full rounded-lg border border-line bg-surface-2 px-2.5 text-sm text-text outline-none transition hover:border-faint focus:border-gold"
+        className="h-9 w-full truncate rounded-lg border border-line bg-surface-2 px-2.5 text-sm text-text outline-none transition hover:border-faint focus:border-gold"
       >
         {children}
       </select>
