@@ -1,4 +1,4 @@
-import { perMinute, STAT_GROUPS, STAT_META, statsOfGroup, type StatGroup, type StatKey, type Stats } from "@gw2logs/shared";
+import { isUptimeStat, perMinute, STAT_GROUPS, STAT_META, statsOfGroup, uptimeValue, type StatGroup, type StatKey, type Stats } from "@gw2logs/shared";
 import { BuffIcon } from "./MediaIcon";
 import type { Column } from "./DataTable";
 import { Segmented, cx } from "./ui";
@@ -10,8 +10,10 @@ export type ValueMode = "total" | "perMin";
 export function statColumns<T extends Stats & { activeMs: number }>(group: StatGroup, mode: ValueMode, rows: T[]): Column<T>[] {
   return statsOfGroup(group).map((k: StatKey) => {
     const meta = STAT_META[k];
-    const isRate = mode === "perMin" && meta.format !== "volume";
-    const value = (r: T) => (isRate ? perMinute(r[k], r.activeMs) : r[k]);
+    // uptime é % do tempo ativo (ou média de pilhas) nos dois modos: o "por minuto" não se aplica
+    const uptime = isUptimeStat(k);
+    const isRate = mode === "perMin" && meta.format !== "volume" && !uptime;
+    const value = (r: T) => (uptime ? uptimeValue(k, r[k], r.activeMs) : isRate ? perMinute(r[k], r.activeMs) : r[k]);
     const values = rows.map(value);
     const best = values.length ? (meta.higherIsBetter ? Math.max(...values) : Math.min(...values)) : 0;
     const label = meta.buffId ? (

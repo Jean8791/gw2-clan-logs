@@ -17,7 +17,10 @@ export function compact(n: number | null | undefined): string {
 }
 
 export function stat(key: StatKey, v: number, perMin = false): string {
-  if (STAT_META[key].format === "volume") return dec(v, 2);
+  const format = STAT_META[key].format;
+  if (format === "pct") return `${dec(v, 1)}%`;
+  if (format === "avg") return dec(v, 1);
+  if (format === "volume") return dec(v, 2);
   if (perMin) return v >= 1e4 ? compact(v) : v >= 100 ? int(v) : v < 10 ? dec(v, 2) : dec(v, 1);
   return compact(v);
 }

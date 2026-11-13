@@ -2,7 +2,7 @@ import { X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { PolarAngleAxis, PolarGrid, Radar, RadarChart, ResponsiveContainer, Tooltip, Legend } from "recharts";
-import { perMinute, STAT_META, statsOfGroup, type Aggregate, type StatGroup, type StatKey } from "@gw2logs/shared";
+import { isUptimeStat, perMinute, STAT_META, statsOfGroup, uptimeValue, type Aggregate, type StatGroup, type StatKey } from "@gw2logs/shared";
 import { FilterBar } from "../components/FilterBar";
 import { GroupTabs } from "../components/statColumns";
 import { PlayerPicker } from "../components/PlayerPicker";
@@ -14,7 +14,7 @@ import { mainRole, useFilters, useMe } from "../lib/hooks";
 import { BaselinePicker, type BaselineRole } from "../components/BaselinePicker";
 import { accountShort, duration, stat } from "../lib/format";
 
-const value = (a: Aggregate, k: StatKey) => (STAT_META[k].format === "volume" ? (a.fights ? a[k] / a.fights : 0) : perMinute(a[k], a.activeMs));
+const value = (a: Aggregate, k: StatKey) => (isUptimeStat(k) ? uptimeValue(k, a[k], a.activeMs) : STAT_META[k].format === "volume" ? (a.fights ? a[k] / a.fights : 0) : perMinute(a[k], a.activeMs));
 
 export function ComparePage() {
   const [params, setParams] = useSearchParams();
