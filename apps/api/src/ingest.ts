@@ -1,6 +1,6 @@
 // Extrai do JSON do Elite Insights o que o site guarda: dados da luta e uma linha por jogador do squad.
 // Função pura (sem banco, sem rede) para poder ser testada com JSON de exemplo.
-import { emptyStats, STAT_KEYS, STAT_META, type Mode, type Role, type Stats } from "@gw2logs/shared";
+import { emptyStats, STAT_KEYS, STAT_META, type BoonScope, type Mode, type Role, type Stats } from "@gw2logs/shared";
 
 type J = Record<string, any>;
 
@@ -44,10 +44,15 @@ export interface ExtractedFight {
   players: ExtractedPlayer[];
 }
 
-/** Boons (id do buff na API do GW2) cuja geração para o squad guardamos; os ids ficam em STAT_META. */
-export const BOONS: Record<number, keyof Stats> = Object.fromEntries(
-  STAT_KEYS.flatMap((k) => (STAT_META[k].group === "boons" && STAT_META[k].buffId ? [[STAT_META[k].buffId, k]] : [])),
-);
+/** Boons (id do buff na API do GW2) cuja geração guardamos, por alcance; os ids ficam em STAT_META. */
+const boonsOf = (scope: BoonScope): Record<number, keyof Stats> =>
+  Object.fromEntries(STAT_KEYS.flatMap((k) => (STAT_META[k].group === "boons" && STAT_META[k].buffId && (STAT_META[k].scope ?? "squad") === scope ? [[STAT_META[k].buffId, k]] : [])));
+export const BOONS = boonsOf("squad");
+const BOON_VOLUMES: [string, Record<number, keyof Stats>][] = [
+  ["selfBuffVolumes", boonsOf("self")],
+  ["groupBuffVolumes", boonsOf("group")],
+  ["squadBuffVolumes", BOONS],
+];
 
 /** Boons cujo uptime recebido guardamos (a média de pilhas do might, mightStacks, sai do mesmo buff). */
 const UPTIME_BOONS: Record<number, keyof Stats> = Object.fromEntries(
@@ -164,9 +169,11 @@ export function extractFight(r: J): ExtractedFight {
     }
 
     // Volume de boon gerado para o squad (EI ≥ 3.x). Versões antigas usavam squadBuffs/generation.
-    for (const b of arr(p, "squadBuffVolumes")) {
-      const key = BOONS[num(b, "id")];
-      if (key) s[key] = num(arr(b, "buffVolumeData")[0], "outgoing");
+    for (const [field, keys] of BOON_VOLUMES) {
+      for (const b of arr(p, field)) {
+        const key = keys[num(b, "id")];
+        if (key) s[key] = num(arr(b, "buffVolumeData")[0], "outgoing");
+      }
     }
     if (!arr(p, "squadBuffVolumes").length) {
       for (const b of arr(p, "squadBuffs")) {

@@ -2,6 +2,8 @@
 
 export * from "./i18n.js";
 export * from "./routes.js";
+export * from "./boons.js";
+import { BOON_BASES, type ScopedKey } from "./boons.js";
 
 export type Mode = "wvw" | "pve";
 export type Role = "dps" | "support";
@@ -40,6 +42,27 @@ export const STAT_KEYS = [
   "resolOut",
   "furyOut",
   "superspeedOut",
+  // o mesmo volume gerado só para o grupo (inclui o próprio jogador) e só para si
+  "stabGroup",
+  "quickGroup",
+  "alacGroup",
+  "protGroup",
+  "mightGroup",
+  "aegisGroup",
+  "resistGroup",
+  "resolGroup",
+  "furyGroup",
+  "superspeedGroup",
+  "stabSelf",
+  "quickSelf",
+  "alacSelf",
+  "protSelf",
+  "mightSelf",
+  "aegisSelf",
+  "resistSelf",
+  "resolSelf",
+  "furySelf",
+  "superspeedSelf",
   // uptime recebido: milissegundos com o boon (% × tempo ativo), para somar entre lutas; o % é uptimeValue
   "stabUp",
   "quickUp",
@@ -59,6 +82,10 @@ export const STAT_KEYS = [
 export type StatKey = (typeof STAT_KEYS)[number];
 export type Stats = Record<StatKey, number>;
 
+/** Para quem o boon é gerado: o squad todo (padrão, as métricas "Out"), só o grupo ou só o próprio jogador. */
+export type BoonScope = "squad" | "group" | "self";
+export const BOON_SCOPES: BoonScope[] = ["squad", "group", "self"];
+
 export type StatGroup = "offense" | "support" | "boons" | "uptime" | "defense";
 
 export interface StatMeta {
@@ -75,9 +102,11 @@ export interface StatMeta {
   hint?: string;
   /** id do buff na API do GW2 (boons): liga a métrica ao ícone e ao buffMap do Elite Insights. */
   buffId?: number;
+  /** Só nos boons: para quem o volume é gerado. Sem isso vale "squad". */
+  scope?: BoonScope;
 }
 
-export const STAT_META: Record<StatKey, StatMeta> = {
+const BASE_META: Record<Exclude<StatKey, ScopedKey>, StatMeta> = {
   damage: { label: "Dano", short: "Dano", group: "offense", higherIsBetter: true, format: "int", hint: "Dano em jogadores inimigos (WvW) ou no alvo (PvE)" },
   powerDamage: { label: "Dano físico", short: "Físico", group: "offense", higherIsBetter: true, format: "int" },
   condiDamage: { label: "Dano de condição", short: "Condi", group: "offense", higherIsBetter: true, format: "int" },
@@ -124,6 +153,24 @@ export const STAT_META: Record<StatKey, StatMeta> = {
   evaded: { label: "Ataques evitados", short: "Evit.", group: "defense", higherIsBetter: true, format: "int" },
 };
 
+const SCOPE_HINT: Record<"group" | "self", string> = {
+  group: "Volume gerado para o seu grupo (inclui você)",
+  self: "Volume gerado só para você",
+};
+
+/** Cada boon "Out" (squad) ganha as versões Group e Self, com o mesmo nome e buff e a dica do alcance. */
+const scopedMeta = (): Record<ScopedKey, StatMeta> =>
+  Object.fromEntries(
+    (["Group", "Self"] as const).flatMap((suffix) =>
+      BOON_BASES.map((b) => {
+        const scope = suffix === "Group" ? "group" : "self";
+        return [`${b}${suffix}`, { ...BASE_META[`${b}Out`], scope, hint: SCOPE_HINT[scope] }];
+      }),
+    ),
+  ) as Record<ScopedKey, StatMeta>;
+
+export const STAT_META: Record<StatKey, StatMeta> = { ...BASE_META, ...scopedMeta() };
+
 export const STAT_GROUPS: { id: StatGroup; label: string }[] = [
   { id: "offense", label: "Dano" },
   { id: "support", label: "Suporte" },
@@ -142,7 +189,9 @@ export function uptimeValue(k: StatKey, ms: number, activeMs: number): number {
   return STAT_META[k].format === "pct" ? r * 100 : r;
 }
 
-export const statsOfGroup = (g: StatGroup): StatKey[] => STAT_KEYS.filter((k) => STAT_META[k].group === g);
+/** Métricas de um grupo; na aba Boons, só as do alcance pedido (squad por padrão). */
+export const statsOfGroup = (g: StatGroup, scope: BoonScope = "squad"): StatKey[] =>
+  STAT_KEYS.filter((k) => STAT_META[k].group === g && (g !== "boons" || (STAT_META[k].scope ?? "squad") === scope));
 
 export const emptyStats = (): Stats => Object.fromEntries(STAT_KEYS.map((k) => [k, 0])) as Stats;
 

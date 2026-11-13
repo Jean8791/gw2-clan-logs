@@ -1,10 +1,10 @@
 import { GitCompareArrows, Link2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { filtersToQuery, ROUTES, type RankingRow, type StatGroup } from "@gw2logs/shared";
+import { filtersToQuery, ROUTES, type BoonScope, type RankingRow, type StatGroup } from "@gw2logs/shared";
 import { DataTable, type Column } from "../components/DataTable";
 import { FilterBar } from "../components/FilterBar";
-import { GroupTabs, ModeToggle, statColumns, type ValueMode } from "../components/statColumns";
+import { defaultSort, GroupTabs, pickerView, ModeToggle, statColumns, type ValueMode } from "../components/statColumns";
 import { GuildTag, PlayerLink, Profession } from "../components/badges";
 import { Button, Card, Empty, ErrorBox, Loading, PageHeader, Select, cx } from "../components/ui";
 import { useRanking } from "../lib/api";
@@ -12,12 +12,11 @@ import { useFilters, useMe } from "../lib/hooks";
 import { duration } from "../lib/format";
 import { t } from "../lib/i18n";
 
-const SORT_BY_GROUP: Record<StatGroup, string> = { offense: "damage", support: "strips", boons: "stabOut", uptime: "stabUp", defense: "damageTaken" };
-
 export function RankingPage() {
   const [filters, setFilters] = useFilters({ mode: "wvw" });
   const { data, error, isLoading } = useRanking(filters);
   const [group, setGroup] = useState<StatGroup>("offense");
+  const [scope, setScope] = useState<BoonScope>("squad");
   const [mode, setMode] = useState<ValueMode>("total");
   const [minMinutes, setMinMinutes] = useState(2);
   const [selected, setSelected] = useState<string[]>([]);
@@ -61,7 +60,7 @@ export function RankingPage() {
       sort: (r) => r.supportFights / r.fights,
       cell: (r) => <span className="text-muted">{Math.round((r.supportFights / r.fights) * 100)}%</span>,
     },
-    ...statColumns(group, mode, rows),
+    ...statColumns(group, mode, rows, scope),
   ];
 
   const copyLink = async () => {
@@ -89,7 +88,7 @@ export function RankingPage() {
 
       <Card>
         <div className="flex flex-wrap items-center gap-3 border-b border-line px-4 py-3">
-          <GroupTabs value={group} onChange={setGroup} />
+          <GroupTabs value={group} onChange={setGroup} scope={scope} onScopeChange={setScope} />
           <ModeToggle value={mode} onChange={setMode} />
           <Select className="w-56" value={String(minMinutes)} onChange={(e) => setMinMinutes(Number(e.target.value))} aria-label={t("ranking.minTime")}>
             <option value="0">{t("ranking.minTime.any")}</option>
@@ -124,12 +123,12 @@ export function RankingPage() {
         {data && rows.length === 0 && <Empty title={t("ranking.empty.title")}>{t("ranking.empty.text")}</Empty>}
         {data && rows.length > 0 && (
           <DataTable
-            key={group}
-            pickerKey={`ranking:${group}`}
+            key={`${group}-${scope}`}
+            pickerKey={`ranking:${pickerView(group, scope)}`}
             rows={rows}
             columns={columns}
             rowKey={(r) => r.account}
-            initialSort={{ id: SORT_BY_GROUP[group], desc: group !== "defense" }}
+            initialSort={defaultSort(group, scope)}
             rowClassName={(r) => (r.account === me ? "bg-gold/5" : selected.includes(r.account) ? "bg-info/5" : undefined)}
             onRowClick={(r) => toggle(r.account)}
             dense

@@ -2,7 +2,7 @@ import { X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { PolarAngleAxis, PolarGrid, Radar, RadarChart, ResponsiveContainer, Tooltip, Legend } from "recharts";
-import { isUptimeStat, perMinute, ROUTES, STAT_META, statsOfGroup, statText, uptimeValue, type Aggregate, type StatGroup, type StatKey } from "@gw2logs/shared";
+import { isUptimeStat, perMinute, ROUTES, STAT_META, statsOfGroup, statText, uptimeValue, type Aggregate, type BoonScope, type StatGroup, type StatKey } from "@gw2logs/shared";
 import { FilterBar } from "../components/FilterBar";
 import { GroupTabs } from "../components/statColumns";
 import { PlayerPicker } from "../components/PlayerPicker";
@@ -21,6 +21,7 @@ export function ComparePage() {
   const [params, setParams] = useSearchParams();
   const [filters, setFilters] = useFilters({ mode: "wvw" });
   const [group, setGroup] = useState<StatGroup>("offense");
+  const [scope, setScope] = useState<BoonScope>("squad");
   const me = useMe();
   const accounts = useMemo(() => (params.get("accounts") ?? "").split(",").map((s) => s.trim()).filter(Boolean).slice(0, 4), [params]);
   const { data, error, isLoading } = useCompare(accounts, filters);
@@ -37,7 +38,7 @@ export function ComparePage() {
     });
 
   const players = data?.players ?? [];
-  const keys = statsOfGroup(group);
+  const keys = statsOfGroup(group, scope);
   const label = (a: string) => players.find((p) => p.account === a)?.name ?? accountShort(a);
 
   // radar: cada métrica normalizada pelo maior valor entre os comparados e a média (0–100)
@@ -95,7 +96,7 @@ export function ComparePage() {
       {data && players.length > 0 && (
         <>
           <div className="mb-4 flex flex-wrap items-center gap-4">
-            <GroupTabs value={group} onChange={setGroup} />
+            <GroupTabs value={group} onChange={setGroup} scope={scope} onScopeChange={setScope} />
             <BaselinePicker value={effRole} onChange={setBaseRole} />
           </div>
           <div className="grid gap-4 xl:grid-cols-[minmax(0,460px)_1fr]">

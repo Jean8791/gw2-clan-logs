@@ -3,17 +3,18 @@ import { useMemo, useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { CartesianGrid, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import {
+  BOON_SCOPES,
   filtersToQuery,
   isUptimeStat,
   perMinute,
   ROUTES,
   STAT_GROUPS,
-  STAT_KEYS,
   STAT_META,
   statsOfGroup,
   statText,
   uptimeValue,
   type Aggregate,
+  type BoonScope,
   type PlayerHistoryRow,
   type PlayerSkill,
   type StatKey,
@@ -28,6 +29,7 @@ import { Badge, Button, Card, Delta, Empty, ErrorBox, Kpi, Loading, PageHeader, 
 import { usePlayer, usePlayerSkills, useRanking } from "../lib/api";
 import { mainRole, setMe, useFilters, useMe } from "../lib/hooks";
 import { getLang, t as tr } from "../lib/i18n"; // "t" já é o total do jogador nesta página
+import { ScopeToggle } from "../components/statColumns";
 import { BaselinePicker, type BaselineRole } from "../components/BaselinePicker";
 import { accountShort, axis, compact, date, dateTime, diffPct, duration, int, stat } from "../lib/format";
 
@@ -74,6 +76,7 @@ export function PlayerPage() {
   const nav = useNavigate();
   const [metric, setMetric] = useState<StatKey>("damage");
   const [group, setGroup] = useState(STAT_GROUPS[0]!.id);
+  const [scope, setScope] = useState<BoonScope>("squad");
 
   const series = useMemo(
     () =>
@@ -197,9 +200,10 @@ export function PlayerPage() {
                 <Select className="w-52" value={metric} onChange={(e) => setMetric(e.target.value as StatKey)} aria-label={tr("player.metric")}>
                   {STAT_GROUPS.map((g) => (
                     <optgroup key={g.id} label={tr(`group.${g.id}`)}>
-                      {statsOfGroup(g.id).map((k) => (
+                      {(g.id === "boons" ? BOON_SCOPES.flatMap((s) => statsOfGroup(g.id, s)) : statsOfGroup(g.id)).map((k) => (
                         <option key={k} value={k}>
                           {statText(k, getLang()).label}
+                          {STAT_META[k].scope ? ` (${tr(`scope.${STAT_META[k].scope}`)})` : ""}
                           {STAT_META[k].format === "volume" || isUptimeStat(k) ? "" : " / min"}
                         </option>
                       ))}
@@ -253,11 +257,12 @@ export function PlayerPage() {
                     </button>
                   ))}
                 </div>
+                {group === "boons" && <ScopeToggle value={scope} onChange={setScope} />}
                 </div>
               }
             >
               <div className="grid gap-x-10 px-5 py-3 lg:grid-cols-2">
-                {STAT_KEYS.filter((k) => STAT_META[k].group === group).map((k) => (
+                {statsOfGroup(group, scope).map((k) => (
                   <VsAverage key={k} k={k} player={t} avg={avg} />
                 ))}
               </div>
