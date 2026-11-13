@@ -13,10 +13,13 @@ export interface EiOutput {
   html: string | null;
 }
 
+/** Erro de uma luta guardado em fights.error como "código" ou "código|detalhe"; o site traduz pelo código. */
+export const fightError = (code: string, detail?: string) => new Error(detail ? `${code}|${detail}` : code);
+
 export async function runEliteInsights(opts: { eiDir: string; dotnet: string; logFile: string; outDir: string; timeoutMs?: number }): Promise<EiOutput> {
   const { eiDir, dotnet, logFile, outDir } = opts;
   if (!eiAvailable(eiDir)) {
-    throw new Error(`Elite Insights não encontrado em ${eiDir}. Rode scripts/baixar-elite-insights.sh ou envie o .json gerado pelo EI.`);
+    throw fightError("eiMissing", eiDir);
   }
   await fs.mkdir(outDir, { recursive: true });
   const conf = path.join(outDir, "ei.conf");
@@ -40,11 +43,11 @@ export async function runEliteInsights(opts: { eiDir: string; dotnet: string; lo
     p.stderr.on("data", (d) => (err += d));
     const timer = setTimeout(() => {
       p.kill("SIGKILL");
-      reject(new Error("O Elite Insights demorou mais de 5 minutos."));
+      reject(fightError("eiTimeout"));
     }, opts.timeoutMs ?? 5 * 60_000);
     p.on("error", (e) => {
       clearTimeout(timer);
-      reject(new Error(`Não foi possível iniciar o Elite Insights (${dotnet}): ${e.message}`));
+      reject(fightError("eiStart", `${dotnet}: ${e.message}`));
     });
     p.on("close", () => {
       clearTimeout(timer);
@@ -65,7 +68,7 @@ export async function runEliteInsights(opts: { eiDir: string; dotnet: string; lo
     } catch {
       /* sem motivo legível */
     }
-    throw new Error("O Elite Insights não conseguiu ler este log" + (reason ? `: ${reason}` : " (muito curto, corrompido ou versão não suportada)."));
+    throw reason ? fightError("eiUnreadableWhy", reason) : fightError("eiUnreadable");
   }
   return { json: path.join(outDir, json), html: html ? path.join(outDir, html) : null };
 }

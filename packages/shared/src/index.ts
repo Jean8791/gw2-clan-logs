@@ -1,5 +1,8 @@
 // Tipos e metadados compartilhados entre a API e o site.
 
+export * from "./i18n.js";
+export * from "./routes.js";
+
 export type Mode = "wvw" | "pve";
 export type Role = "dps" | "support";
 export type FightStatus = "queued" | "parsing" | "done" | "error";
@@ -262,6 +265,9 @@ export interface UploadResult {
   status?: FightStatus;
   duplicate?: boolean;
   error?: string;
+  /** Código estável do erro (o site traduz); `max` é o limite em MB quando o arquivo é grande demais. */
+  code?: string;
+  max?: number;
 }
 
 // ---------- Filtros (iguais na URL do site e na query da API) ----------

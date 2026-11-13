@@ -1,19 +1,30 @@
 import { STAT_META, type StatKey } from "@gw2logs/shared";
+import { getLang } from "./i18n";
 
-const nf0 = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 });
-const nf1 = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 1 });
-const nf2 = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 2 });
-const nf3 = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 3 });
+/** "pt-BR" (26,5 mil; 12/11) ou "en-US" (26.5k; 11/12), conforme o idioma escolhido. */
+const locale = () => (getLang() === "en" ? "en-US" : "pt-BR");
+const nfCache = new Map<string, Intl.NumberFormat>();
+const numberFormat = (max: number, n: number) => {
+  const k = `${locale()}:${max}`;
+  let f = nfCache.get(k);
+  if (!f) nfCache.set(k, (f = new Intl.NumberFormat(locale(), { maximumFractionDigits: max })));
+  return f.format(n);
+};
+const nf0 = { format: (n: number) => numberFormat(0, n) };
+const nf1 = { format: (n: number) => numberFormat(1, n) };
+const nf2 = { format: (n: number) => numberFormat(2, n) };
+const nf3 = { format: (n: number) => numberFormat(3, n) };
 
 export const int = (n: number | null | undefined) => (n == null ? "—" : nf0.format(n));
 export const dec = (n: number | null | undefined, d = 1) => (n == null ? "—" : (d === 2 ? nf2 : nf1).format(n));
 
-/** 1.234.567 → 1,23 mi; 12.345 → 12,3 mil */
+/** 1.234.567 → 1,23 mi; 12.345 → 12,3 mil (em inglês: 1.23M; 12.3k) */
 export function compact(n: number | null | undefined): string {
   if (n == null) return "—";
   const a = Math.abs(n);
-  if (a >= 1e6) return `${nf2.format(n / 1e6)} mi`;
-  if (a >= 1e4) return `${nf1.format(n / 1e3)} mil`;
+  const en = getLang() === "en";
+  if (a >= 1e6) return `${nf2.format(n / 1e6)}${en ? "M" : " mi"}`;
+  if (a >= 1e4) return `${nf1.format(n / 1e3)}${en ? "k" : " mil"}`;
   return a < 10 && n % 1 !== 0 ? nf2.format(n) : nf0.format(n);
 }
 
@@ -48,10 +59,10 @@ export function duration(ms: number | null | undefined): string {
   return `${m}m ${String(ss).padStart(2, "0")}s`;
 }
 
-const dtf = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
-const df = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "short", year: "numeric" });
-export const dateTime = (iso: string | null | undefined) => (iso ? dtf.format(new Date(iso)) : "—");
-export const date = (iso: string | null | undefined) => (iso ? df.format(new Date(iso)) : "—");
+export const dateTime = (iso: string | null | undefined) =>
+  iso ? new Intl.DateTimeFormat(locale(), { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }).format(new Date(iso)) : "—";
+export const date = (iso: string | null | undefined) =>
+  iso ? new Intl.DateTimeFormat(locale(), { day: "2-digit", month: "short", year: "numeric" }).format(new Date(iso)) : "—";
 
 /** Diferença percentual de a sobre b (“+12%”). */
 export function diffPct(a: number, b: number): number | null {
@@ -63,4 +74,4 @@ export const accountShort = (account: string) => account.replace(/\.\d{4}$/, "")
 
 /** "2026-11-12" → "qui, 12/11" (o dia de batalha, ver battleDay em shared). */
 export const dayLabel = (day: string) =>
-  new Date(`${day}T12:00:00Z`).toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit", month: "2-digit", timeZone: "UTC" }).replace(".", "");
+  new Date(`${day}T12:00:00Z`).toLocaleDateString(locale(), { weekday: "short", day: "2-digit", month: "2-digit", timeZone: "UTC" }).replace(".", "");

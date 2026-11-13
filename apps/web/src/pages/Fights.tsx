@@ -1,25 +1,26 @@
 import { useNavigate } from "react-router-dom";
-import type { Fight } from "@gw2logs/shared";
+import { ROUTES, type Fight } from "@gw2logs/shared";
 import { DataTable, type Column } from "../components/DataTable";
 import { FilterBar } from "../components/FilterBar";
 import { FightStatus, KillDeath, SquadVsEnemy, Won } from "../components/FightBits";
 import { Card, Empty, ErrorBox, Loading, PageHeader } from "../components/ui";
 import { useFights } from "../lib/api";
 import { useFilters } from "../lib/hooks";
+import { t } from "../lib/i18n";
 import { compact, dateTime, duration } from "../lib/format";
 
-const columns: Column<Fight>[] = [
+const columns = (): Column<Fight>[] => [
   { id: "result", header: "", cell: (f) => <Won fight={f} />, align: "center" },
   {
     id: "time",
-    header: "Quando",
+    header: t("fights.col.when"),
     fixed: true,
     sort: (f) => f.timeStart ?? f.uploadedAt,
     cell: (f) => <span className="text-muted">{dateTime(f.timeStart ?? f.uploadedAt)}</span>,
   },
   {
     id: "name",
-    header: "Luta",
+    header: t("fights.col.name"),
     sort: (f) => f.fightName ?? f.fileName ?? "",
     cell: (f) => (
       <div className="flex items-center gap-2">
@@ -28,11 +29,11 @@ const columns: Column<Fight>[] = [
       </div>
     ),
   },
-  { id: "dur", header: "Duração", align: "right", sort: (f) => f.durationMs, cell: (f) => duration(f.durationMs) },
-  { id: "size", header: "Squad vs inimigos", align: "right", sort: (f) => f.squadCount, cell: (f) => <SquadVsEnemy fight={f} /> },
-  { id: "kd", header: "Kills / mortes", align: "right", sort: (f) => (f.squadKills ?? 0) - (f.squadDeaths ?? 0), cell: (f) => <KillDeath kills={f.squadKills} deaths={f.squadDeaths} /> },
-  { id: "dmg", header: "Dano do squad", align: "right", sort: (f) => f.squadDamage, cell: (f) => compact(f.squadDamage) },
-  { id: "up", header: "Enviado por", sort: (f) => f.uploader ?? "", cell: (f) => <span className="text-muted">{f.uploader ?? f.recordedBy ?? "—"}</span> },
+  { id: "dur", header: t("fights.col.duration"), align: "right", sort: (f) => f.durationMs, cell: (f) => duration(f.durationMs) },
+  { id: "size", header: t("fights.col.size"), align: "right", sort: (f) => f.squadCount, cell: (f) => <SquadVsEnemy fight={f} /> },
+  { id: "kd", header: t("fights.col.kd"), align: "right", sort: (f) => (f.squadKills ?? 0) - (f.squadDeaths ?? 0), cell: (f) => <KillDeath kills={f.squadKills} deaths={f.squadDeaths} /> },
+  { id: "dmg", header: t("fights.col.damage"), align: "right", sort: (f) => f.squadDamage, cell: (f) => compact(f.squadDamage) },
+  { id: "up", header: t("fights.col.uploader"), sort: (f) => f.uploader ?? "", cell: (f) => <span className="text-muted">{f.uploader ?? f.recordedBy ?? "—"}</span> },
 ];
 
 export function FightsPage() {
@@ -42,16 +43,16 @@ export function FightsPage() {
 
   return (
     <>
-      <PageHeader title="Lutas" subtitle="Cada log enviado vira uma luta. Clique para ver os detalhes." />
+      <PageHeader title={t("page.fights.title")} subtitle={t("page.fights.subtitle")} />
       <FilterBar value={filters} onChange={setFilters} fields={["period", "day", "map", "size", "duration", "guild"]} />
       {error && <ErrorBox error={error} />}
       {isLoading && <Loading />}
       {data && (
         <Card>
           {data.length === 0 ? (
-            <Empty title="Nenhuma luta encontrada">Mude os filtros ou envie novos logs.</Empty>
+            <Empty title={t("fights.empty.title")}>{t("empty.changeFilters")}</Empty>
           ) : (
-            <DataTable pickerKey="fights" rows={data} columns={columns} rowKey={(f) => f.id} onRowClick={(f) => f.status === "done" && nav(`/lutas/${f.id}`)} />
+            <DataTable pickerKey="fights" rows={data} columns={columns()} rowKey={(f) => f.id} onRowClick={(f) => f.status === "done" && nav(ROUTES.fight(f.id))} />
           )}
         </Card>
       )}

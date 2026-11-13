@@ -7,7 +7,7 @@ import zlib from "node:zlib";
 import type { Config } from "./config.js";
 import { paths } from "./config.js";
 import type { DB } from "./db.js";
-import { runEliteInsights } from "./elite-insights.js";
+import { fightError, runEliteInsights } from "./elite-insights.js";
 import type { Gw2Api } from "./gw2api.js";
 import { extractFight } from "./ingest.js";
 import { collectBuffIcons, collectSkillIcons, ensureMany, type MediaStore } from "./media.js";
@@ -99,7 +99,7 @@ export class LogWorker {
   private async process(id: string) {
     const files = await fs.readdir(this.p.uploads);
     const name = files.find((f) => f.startsWith(id + "."));
-    if (!name) throw new Error("Arquivo do log não encontrado.");
+    if (!name) throw fightError("logMissing");
     const src = path.join(this.p.uploads, name);
     const outDir = this.p.fightDir(id);
     const work = path.join(outDir, "work");

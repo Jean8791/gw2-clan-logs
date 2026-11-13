@@ -1,32 +1,33 @@
 import { Link, useNavigate } from "react-router-dom";
-import { filtersToQuery, type DaySummary } from "@gw2logs/shared";
+import { filtersToQuery, ROUTES, type DaySummary } from "@gw2logs/shared";
 import { DataTable, type Column } from "../components/DataTable";
 import { FilterBar } from "../components/FilterBar";
 import { KillDeath } from "../components/FightBits";
 import { Card, Empty, ErrorBox, Loading, PageHeader } from "../components/ui";
 import { useDays } from "../lib/api";
 import { useFilters } from "../lib/hooks";
+import { t } from "../lib/i18n";
 import { dayLabel, duration, int } from "../lib/format";
 
-const link = (page: string, day: string) => `/${page}?${filtersToQuery({ mode: "wvw", day: [day] })}`;
+const link = (path: string, day: string) => `${path}?${filtersToQuery({ mode: "wvw", day: [day] })}`;
 
-const columns: Column<DaySummary>[] = [
-  { id: "day", header: "Dia", sort: (d) => d.day, cell: (d) => <span className="font-medium capitalize">{dayLabel(d.day)}</span> },
-  { id: "fights", header: "Lutas", align: "right", sort: (d) => d.fights, cell: (d) => int(d.fights) },
-  { id: "time", header: "Tempo de luta", align: "right", sort: (d) => d.durationMs, cell: (d) => duration(d.durationMs) },
-  { id: "players", header: "Jogadores", align: "right", sort: (d) => d.players, cell: (d) => int(d.players) },
-  { id: "kd", header: "Kills / mortes", align: "right", sort: (d) => d.kills - d.deaths, cell: (d) => <KillDeath kills={d.kills} deaths={d.deaths} /> },
+const columns = (): Column<DaySummary>[] => [
+  { id: "day", header: t("days.col.day"), sort: (d) => d.day, cell: (d) => <span className="font-medium capitalize">{dayLabel(d.day)}</span> },
+  { id: "fights", header: t("days.col.fights"), align: "right", sort: (d) => d.fights, cell: (d) => int(d.fights) },
+  { id: "time", header: t("days.col.time"), align: "right", sort: (d) => d.durationMs, cell: (d) => duration(d.durationMs) },
+  { id: "players", header: t("days.col.players"), align: "right", sort: (d) => d.players, cell: (d) => int(d.players) },
+  { id: "kd", header: t("days.col.kd"), align: "right", sort: (d) => d.kills - d.deaths, cell: (d) => <KillDeath kills={d.kills} deaths={d.deaths} /> },
   {
     id: "go",
-    header: "Ver",
+    header: t("days.col.go"),
     align: "right",
     cell: (d) => (
       <span className="inline-flex gap-3 text-gold">
-        <Link to={link("lutas", d.day)} onClick={(e) => e.stopPropagation()} className="hover:underline">
-          Lutas
+        <Link to={link(ROUTES.fights, d.day)} onClick={(e) => e.stopPropagation()} className="hover:underline">
+          {t("days.link.fights")}
         </Link>
-        <Link to={link("ranking", d.day)} onClick={(e) => e.stopPropagation()} className="hover:underline">
-          Ranking
+        <Link to={link(ROUTES.ranking, d.day)} onClick={(e) => e.stopPropagation()} className="hover:underline">
+          {t("days.link.ranking")}
         </Link>
       </span>
     ),
@@ -40,16 +41,16 @@ export function DaysPage() {
 
   return (
     <>
-      <PageHeader title="Dias de batalha" subtitle="Cada dia vai das 06:00 às 06:00 (Brasília): a noite que passa da meia-noite continua no mesmo dia." />
+      <PageHeader title={t("page.days.title")} subtitle={t("page.days.subtitle")} />
       <FilterBar value={filters} onChange={setFilters} fields={["period", "guild", "size", "map"]} />
       {error && <ErrorBox error={error} />}
       {isLoading && <Loading />}
       {data && (
         <Card>
           {data.length === 0 ? (
-            <Empty title="Nenhum dia encontrado">Mude os filtros ou envie novos logs.</Empty>
+            <Empty title={t("days.empty.title")}>{t("empty.changeFilters")}</Empty>
           ) : (
-            <DataTable rows={data} columns={columns} rowKey={(d) => d.day} initialSort={{ id: "day", desc: true }} onRowClick={(d) => nav(link("lutas", d.day))} />
+            <DataTable rows={data} columns={columns()} rowKey={(d) => d.day} initialSort={{ id: "day", desc: true }} onRowClick={(d) => nav(link(ROUTES.fights, d.day))} />
           )}
         </Card>
       )}
