@@ -20,16 +20,26 @@ export class Gw2Api {
     private fetchFn: typeof fetch = fetch,
   ) {}
 
-  /** Nome da classe ou especialização elite → link do ícone (API oficial). Vazio se a API falhar. */
+  private professionIconCache: Record<string, string> | null = null;
+
+  /**
+   * Nome da classe → link do emblema (API oficial). Classe sem elite usa o ícone da profissão; elite usa o
+   * `profession_icon` (emblema da classe com a elite), e não o `icon`, que é a imagem da linha de talentos.
+   * Vazio se a API falhar. Só falha de rede não é guardada: o resultado bom vale até o processo reiniciar.
+   */
   async professionIcons(): Promise<Record<string, string>> {
     if (!this.enabled) return {};
+    if (this.professionIconCache) return this.professionIconCache;
     const out: Record<string, string> = {};
-    for (const path of ["professions", "specializations"]) {
+    for (const [path, onlyElite] of [["professions", false], ["specializations", true]] as const) {
       const list = await getJson(this.fetchFn, `${API}/v2/${path}?ids=all`);
       for (const x of Array.isArray(list) ? list : []) {
-        if (typeof x?.name === "string" && typeof x.icon === "string" && isAllowedIconUrl(x.icon)) out[x.name] = x.icon;
+        if (onlyElite && !x?.elite) continue;
+        const icon = onlyElite ? x.profession_icon : x?.icon;
+        if (typeof x?.name === "string" && typeof icon === "string" && isAllowedIconUrl(icon)) out[x.name] = icon;
       }
     }
+    if (Object.keys(out).length) this.professionIconCache = out;
     return out;
   }
 

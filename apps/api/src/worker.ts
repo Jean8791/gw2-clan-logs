@@ -32,12 +32,12 @@ export async function ingestJson(db: DB, api: Gw2Api, media: MediaStore, id: str
   await ensureProfessionIcons(api, media, f.players.map((p) => p.profession));
 }
 
-/** Guarda o ícone de cada classe que ainda não temos; só consulta a API se faltar alguma. */
+/** Guarda (e atualiza, se mudou) o ícone de cada classe da luta. A lista da API é consultada uma vez por processo. */
 async function ensureProfessionIcons(api: Gw2Api, media: MediaStore, professions: (string | null)[]) {
-  const missing = [...new Set(professions)].filter((n): n is string => !!n && /^\w+$/.test(n) && !media.get(`prof:${n}`));
-  if (!missing.length) return;
+  const names = [...new Set(professions)].filter((n): n is string => !!n && /^\w+$/.test(n));
+  if (!names.length) return;
   const icons = await api.professionIcons();
-  for (const name of missing) if (icons[name]) await media.ensure(`prof:${name}`, icons[name]);
+  for (const name of names) if (icons[name]) await media.ensure(`prof:${name}`, icons[name]);
 }
 
 export class LogWorker {

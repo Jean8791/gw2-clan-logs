@@ -25,6 +25,7 @@ const CONCURRENCY = 8;
 export interface Media {
   contentType: string;
   bytes: Buffer;
+  sha256: string;
 }
 
 export class MediaStore {
@@ -34,13 +35,17 @@ export class MediaStore {
   ) {}
 
   get(key: string): Media | null {
-    const row = this.db.prepare("SELECT content_type AS contentType, bytes FROM media WHERE key = ?").get(key) as Media | undefined;
+    const row = this.db.prepare("SELECT content_type AS contentType, bytes, sha256 FROM media WHERE key = ?").get(key) as Media | undefined;
     return row ?? null;
   }
 
-  /** Garante que a mídia está guardada. Nunca lança erro: um ícone que falha não pode derrubar o processamento da luta. */
+  /**
+   * Garante que a mídia guardada é a do `url`: baixa se não existe e baixa de novo se o link mudou (o ícone foi trocado).
+   * Se o download falhar, o ícone antigo continua. Nunca lança erro: um ícone que falha não pode derrubar o processamento da luta.
+   */
   async ensure(key: string, url: string): Promise<boolean> {
-    if (this.get(key)) return true;
+    const stored = this.db.prepare("SELECT source_url AS url FROM media WHERE key = ?").get(key) as { url: string } | undefined;
+    if (stored?.url === url) return true;
     if (!isAllowedIconUrl(url)) return false;
     try {
       // redirect: "error" — um redirecionamento poderia levar o servidor a outro endereço

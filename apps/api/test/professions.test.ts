@@ -13,7 +13,7 @@ const icon = (n: string) => `https://render.guildwars2.com/file/${n}/1.png`;
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 1]);
 
 /** fetch de mentira: a API devolve profissões/especializações; qualquer outra URL devolve um PNG. */
-function fakeFetch(opts: { apiDown?: boolean; extra?: { name: string; icon: string }[] } = {}) {
+function fakeFetch(opts: { apiDown?: boolean; extra?: any[] } = {}) {
   const calls: string[] = [];
   const fn = (async (url: string) => {
     calls.push(String(url));
@@ -22,9 +22,11 @@ function fakeFetch(opts: { apiDown?: boolean; extra?: { name: string; icon: stri
       return Response.json([{ name: "Guardian", icon: icon("GUARD") }, { name: "Necromancer", icon: icon("NECRO") }]);
     if (String(url).includes("/v2/specializations"))
       return Response.json([
-        { name: "Firebrand", icon: icon("FIRE") },
-        { name: "Reaper", icon: icon("REAPER") },
-        { name: "Tempest", icon: icon("TEMPEST") },
+        // elite: o emblema da classe é profession_icon; icon é a imagem da linha de talentos
+        { name: "Firebrand", elite: true, icon: icon("FIRE-LINHA"), profession_icon: icon("FIRE") },
+        { name: "Reaper", elite: true, icon: icon("REAPER-LINHA"), profession_icon: icon("REAPER") },
+        { name: "Tempest", elite: true, icon: icon("TEMPEST-LINHA"), profession_icon: icon("TEMPEST") },
+        { name: "Zeal", elite: false, icon: icon("ZEAL") },
         ...(opts.extra ?? []),
       ]);
     return new Response(PNG, { headers: { "content-type": "image/png" } });
@@ -54,8 +56,15 @@ describe("Gw2Api.professionIcons", () => {
     expect(icons).toMatchObject({ Guardian: icon("GUARD"), Necromancer: icon("NECRO"), Firebrand: icon("FIRE"), Tempest: icon("TEMPEST") });
   });
 
+  it("usa o emblema da classe (profession_icon) das elites e ignora especializações sem elite", async () => {
+    const icons = await new Gw2Api(db, true, fakeFetch().fn).professionIcons();
+
+    expect(icons.Firebrand).toBe(icon("FIRE"));
+    expect(icons).not.toHaveProperty("Zeal");
+  });
+
   it("ignora ícone de fora da lista permitida", async () => {
-    const api = new Gw2Api(db, true, fakeFetch({ extra: [{ name: "Malicioso", icon: "http://169.254.169.254/x.png" }] }).fn);
+    const api = new Gw2Api(db, true, fakeFetch({ extra: [{ name: "Malicioso", elite: true, profession_icon: "http://169.254.169.254/x.png" }] }).fn);
 
     expect(await api.professionIcons()).not.toHaveProperty("Malicioso");
   });
@@ -78,6 +87,17 @@ describe("ingestJson guarda os ícones das classes da luta", () => {
     expect(media.get("prof:Reaper")).not.toBeNull();
     expect(media.get("prof:Tempest")).not.toBeNull();
     expect(media.get("prof:Scrapper")).toBeNull();
+  });
+
+  it("troca o ícone antigo guardado quando a API aponta outro", async () => {
+    const f = fakeFetch();
+    const media = new MediaStore(db, f.fn);
+    await media.ensure("prof:Firebrand", icon("FIRE-LINHA")); // ícone errado, de uma versão anterior
+    newFight("luta1");
+
+    await ingestJson(db, new Gw2Api(db, true, f.fn), media, "luta1", wvwFixture(), false);
+
+    expect((db.prepare("SELECT source_url AS u FROM media WHERE key = 'prof:Firebrand'").get() as { u: string }).u).toBe(icon("FIRE"));
   });
 
   it("não consulta a API de novo quando os ícones já estão guardados", async () => {
