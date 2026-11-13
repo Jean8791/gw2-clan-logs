@@ -46,8 +46,14 @@ export interface ExtractedFight {
 
 /** Boons (id do buff na API do GW2) cuja geração para o squad guardamos; os ids ficam em STAT_META. */
 export const BOONS: Record<number, keyof Stats> = Object.fromEntries(
-  STAT_KEYS.flatMap((k) => (STAT_META[k].buffId ? [[STAT_META[k].buffId, k]] : [])),
+  STAT_KEYS.flatMap((k) => (STAT_META[k].group === "boons" && STAT_META[k].buffId ? [[STAT_META[k].buffId, k]] : [])),
 );
+
+/** Boons cujo uptime recebido guardamos (a média de pilhas do might, mightStacks, sai do mesmo buff). */
+const UPTIME_BOONS: Record<number, keyof Stats> = Object.fromEntries(
+  STAT_KEYS.flatMap((k) => (STAT_META[k].group === "uptime" && STAT_META[k].format === "pct" && STAT_META[k].buffId ? [[STAT_META[k].buffId, k]] : [])),
+);
+const MIGHT_ID = STAT_META.mightStacks.buffId!;
 
 const SUPPORT_BOONS: (keyof Stats)[] = ["stabOut", "protOut", "aegisOut", "resistOut", "resolOut", "quickOut", "alacOut"];
 
@@ -101,6 +107,9 @@ export function extractFight(r: J): ExtractedFight {
     const def = phase0(p, "defenses");
     const sup = phase0(p, "support");
 
+    const at = arr(p, "activeTimes")[0] as unknown;
+    const activeMs = typeof at === "number" ? at : durationMs;
+
     const s = emptyStats();
     if (targetIdx.length && arr(p, "dpsTargets").length) {
       for (const i of targetIdx) {
@@ -140,6 +149,20 @@ export function extractFight(r: J): ExtractedFight {
     s.blocked = num(def, "blockedCount");
     s.evaded = num(def, "evadedCount");
 
+    // Uptime recebido, sobre o tempo ativo do jogador (versão Active; sem ela, a da luta toda). Guardado em ms com o boon.
+    const uptimes = arr(p, "buffUptimesActive").length ? arr(p, "buffUptimesActive") : arr(p, "buffUptimes");
+    for (const b of uptimes) {
+      const id = num(b, "id");
+      const key = UPTIME_BOONS[id];
+      if (!key) continue;
+      const d = arr(b, "buffData")[0];
+      // boon em pilha: o % é o tempo com pelo menos uma pilha (presence), e o uptime é a média de pilhas
+      const presence = num(d, "presence");
+      const stacking = typeof buffMap[`b${id}`]?.stacking === "boolean" ? buffMap[`b${id}`].stacking : presence > 0;
+      s[key] = ((stacking ? presence : num(d, "uptime")) / 100) * activeMs;
+      if (id === MIGHT_ID) s.mightStacks = num(d, "uptime") * activeMs;
+    }
+
     // Volume de boon gerado para o squad (EI ≥ 3.x). Versões antigas usavam squadBuffs/generation.
     for (const b of arr(p, "squadBuffVolumes")) {
       const key = BOONS[num(b, "id")];
@@ -152,7 +175,6 @@ export function extractFight(r: J): ExtractedFight {
       }
     }
 
-    const at = arr(p, "activeTimes")[0] as unknown;
     return {
       ...s,
       account: str(p, "account") ?? str(p, "name") ?? "?",
@@ -162,7 +184,7 @@ export function extractFight(r: J): ExtractedFight {
       group: typeof p.group === "number" ? p.group : null,
       commander: p.hasCommanderTag === true,
       role: "dps",
-      activeMs: typeof at === "number" ? at : durationMs,
+      activeMs,
       distToCom: typeof statsAll.distToCom === "number" ? statsAll.distToCom : null,
       skills: skillDamage(p, targetIdx, skillMap, buffMap),
     };

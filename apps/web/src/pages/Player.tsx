@@ -4,11 +4,13 @@ import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { CartesianGrid, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import {
   filtersToQuery,
+  isUptimeStat,
   perMinute,
   STAT_GROUPS,
   STAT_KEYS,
   STAT_META,
   statsOfGroup,
+  uptimeValue,
   type Aggregate,
   type PlayerHistoryRow,
   type PlayerSkill,
@@ -26,7 +28,7 @@ import { mainRole, setMe, useFilters, useMe } from "../lib/hooks";
 import { BaselinePicker, type BaselineRole } from "../components/BaselinePicker";
 import { accountShort, axis, compact, date, dateTime, diffPct, duration, int, stat } from "../lib/format";
 
-const pm = (a: Aggregate, k: StatKey) => (STAT_META[k].format === "volume" ? (a.fights ? a[k] / a.fights : 0) : perMinute(a[k], a.activeMs));
+const pm = (a: Aggregate, k: StatKey) => (isUptimeStat(k) ? uptimeValue(k, a[k], a.activeMs) : STAT_META[k].format === "volume" ? (a.fights ? a[k] / a.fights : 0) : perMinute(a[k], a.activeMs));
 
 /** Barra comparando o jogador com a média do squad (mesmos filtros). */
 function VsAverage({ k, player, avg }: { k: StatKey; player: Aggregate; avg: Aggregate }) {
@@ -70,7 +72,7 @@ export function PlayerPage() {
       (data?.history ?? []).map((h, i) => ({
         i: i + 1,
         label: dateTime(h.timeStart),
-        value: STAT_META[metric].format === "volume" ? h[metric] : perMinute(h[metric], h.activeMs),
+        value: isUptimeStat(metric) ? uptimeValue(metric, h[metric], h.activeMs) : STAT_META[metric].format === "volume" ? h[metric] : perMinute(h[metric], h.activeMs),
       })),
     [data, metric],
   );
@@ -190,7 +192,7 @@ export function PlayerPage() {
                       {statsOfGroup(g.id).map((k) => (
                         <option key={k} value={k}>
                           {STAT_META[k].label}
-                          {STAT_META[k].format === "volume" ? "" : " / min"}
+                          {STAT_META[k].format === "volume" || isUptimeStat(k) ? "" : " / min"}
                         </option>
                       ))}
                     </optgroup>
@@ -252,7 +254,7 @@ export function PlayerPage() {
                 ))}
               </div>
               <p className="border-t border-line px-5 py-2.5 text-xs text-faint">
-                Valores por minuto de luta (boons: média por luta). O traço branco é a média dos jogadores na função escolhida, com os mesmos filtros.
+                Valores por minuto de luta (boons: média por luta; uptime: % do tempo ativo, e “Pilhas de Poder” é a média de pilhas). O traço branco é a média dos jogadores na função escolhida, com os mesmos filtros.
               </p>
             </Card>
           )}

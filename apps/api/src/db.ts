@@ -12,7 +12,7 @@ export const STAT_COL: Record<StatKey, string> = Object.fromEntries(STAT_KEYS.ma
  * Versão do esquema. Ao mudar a extração (ingest.ts) ou as colunas, suba o número:
  * as lutas são reprocessadas a partir do JSON guardado (npm run reingest), sem reenviar logs.
  */
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 export function openDb(file: string): DB {
   const db = new Database(file);
@@ -103,6 +103,13 @@ function migrate(db: DB) {
       fetched_at   TEXT NOT NULL
     );
   `);
+
+  // CREATE TABLE IF NOT EXISTS não mexe numa tabela que já existe: métricas novas precisam de ALTER TABLE.
+  // Os nomes das colunas vêm de STAT_KEYS (código), nunca de entrada do usuário.
+  const have = new Set((db.pragma("table_info(player_stats)") as { name: string }[]).map((c) => c.name));
+  for (const k of STAT_KEYS) {
+    if (!have.has(STAT_COL[k])) db.exec(`ALTER TABLE player_stats ADD COLUMN ${STAT_COL[k]} REAL NOT NULL DEFAULT 0`);
+  }
 }
 
 export const schemaVersion = (db: DB): number => db.pragma("user_version", { simple: true }) as number;

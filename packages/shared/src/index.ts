@@ -37,12 +37,26 @@ export const STAT_KEYS = [
   "resolOut",
   "furyOut",
   "superspeedOut",
+  // uptime recebido: milissegundos com o boon (% × tempo ativo), para somar entre lutas; o % é uptimeValue
+  "stabUp",
+  "quickUp",
+  "alacUp",
+  "protUp",
+  "mightUp",
+  "aegisUp",
+  "resistUp",
+  "resolUp",
+  "furyUp",
+  "swiftUp",
+  "vigorUp",
+  "regenUp",
+  "mightStacks",
 ] as const;
 
 export type StatKey = (typeof STAT_KEYS)[number];
 export type Stats = Record<StatKey, number>;
 
-export type StatGroup = "offense" | "support" | "boons" | "defense";
+export type StatGroup = "offense" | "support" | "boons" | "uptime" | "defense";
 
 export interface StatMeta {
   label: string;
@@ -50,8 +64,11 @@ export interface StatMeta {
   group: StatGroup;
   /** false quando um número menor é melhor (mortes, dano recebido…). */
   higherIsBetter: boolean;
-  /** "volume" = volume de boon gerado para o squad (unidade do Elite Insights). */
-  format: "int" | "volume";
+  /**
+   * "volume" = volume de boon gerado para o squad (unidade do Elite Insights).
+   * "pct" = uptime: guardado em ms com o boon, mostrado como % do tempo ativo. "avg" = média de pilhas (mesma base).
+   */
+  format: "int" | "volume" | "pct" | "avg";
   hint?: string;
   /** id do buff na API do GW2 (boons): liga a métrica ao ícone e ao buffMap do Elite Insights. */
   buffId?: number;
@@ -82,6 +99,19 @@ export const STAT_META: Record<StatKey, StatMeta> = {
   resolOut: { label: "Resolução", short: "Resol.", group: "boons", buffId: 873, higherIsBetter: true, format: "volume" },
   furyOut: { label: "Fúria", short: "Fúria", group: "boons", buffId: 725, higherIsBetter: true, format: "volume" },
   superspeedOut: { label: "Supervelocidade", short: "Superv.", group: "boons", buffId: 5974, higherIsBetter: true, format: "volume" },
+  stabUp: { label: "% Estabilidade", short: "Estab.", group: "uptime", buffId: 1122, higherIsBetter: true, format: "pct" },
+  quickUp: { label: "% Rapidez", short: "Rapidez", group: "uptime", buffId: 1187, higherIsBetter: true, format: "pct" },
+  alacUp: { label: "% Alacridade", short: "Alac.", group: "uptime", buffId: 30328, higherIsBetter: true, format: "pct" },
+  protUp: { label: "% Proteção", short: "Prot.", group: "uptime", buffId: 717, higherIsBetter: true, format: "pct" },
+  mightUp: { label: "% Poder", short: "Poder", group: "uptime", buffId: 740, higherIsBetter: true, format: "pct" },
+  aegisUp: { label: "% Égide", short: "Égide", group: "uptime", buffId: 743, higherIsBetter: true, format: "pct" },
+  resistUp: { label: "% Resistência", short: "Resist.", group: "uptime", buffId: 26980, higherIsBetter: true, format: "pct" },
+  resolUp: { label: "% Resolução", short: "Resol.", group: "uptime", buffId: 873, higherIsBetter: true, format: "pct" },
+  furyUp: { label: "% Fúria", short: "Fúria", group: "uptime", buffId: 725, higherIsBetter: true, format: "pct" },
+  swiftUp: { label: "% Swiftness", short: "Swift.", group: "uptime", buffId: 719, higherIsBetter: true, format: "pct" },
+  vigorUp: { label: "% Vigor", short: "Vigor", group: "uptime", buffId: 726, higherIsBetter: true, format: "pct" },
+  regenUp: { label: "% Regeneração", short: "Regen.", group: "uptime", buffId: 718, higherIsBetter: true, format: "pct" },
+  mightStacks: { label: "Pilhas de Poder", short: "Poder (pilhas)", group: "uptime", buffId: 740, higherIsBetter: true, format: "avg", hint: "Média de pilhas de Poder sobre o tempo ativo" },
   damageTaken: { label: "Dano recebido", short: "Recebido", group: "defense", higherIsBetter: false, format: "int" },
   barrierAbsorbed: { label: "Dano absorvido por barreira", short: "Absorvido", group: "defense", higherIsBetter: true, format: "int" },
   deaths: { label: "Mortes", short: "Mortes", group: "defense", higherIsBetter: false, format: "int" },
@@ -95,8 +125,19 @@ export const STAT_GROUPS: { id: StatGroup; label: string }[] = [
   { id: "offense", label: "Dano" },
   { id: "support", label: "Suporte" },
   { id: "boons", label: "Boons" },
+  { id: "uptime", label: "Uptime" },
   { id: "defense", label: "Defesa" },
 ];
+
+/** Métricas de uptime (pct ou avg): o valor guardado é tempo com o boon, e o mostrado depende do tempo ativo. */
+export const isUptimeStat = (k: StatKey): boolean => STAT_META[k].format === "pct" || STAT_META[k].format === "avg";
+
+/** Valor mostrado de uma métrica de uptime: % do tempo ativo (pct) ou média de pilhas (avg). */
+export function uptimeValue(k: StatKey, ms: number, activeMs: number): number {
+  if (activeMs <= 0) return 0;
+  const r = ms / activeMs;
+  return STAT_META[k].format === "pct" ? r * 100 : r;
+}
 
 export const statsOfGroup = (g: StatGroup): StatKey[] => STAT_KEYS.filter((k) => STAT_META[k].group === g);
 

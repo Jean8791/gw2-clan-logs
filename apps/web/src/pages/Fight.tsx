@@ -13,6 +13,13 @@ import { useFight } from "../lib/api";
 import { useMe } from "../lib/hooks";
 import { accountShort, axis, compact, dateTime, duration, int } from "../lib/format";
 
+interface GroupRow extends Stats {
+  id: string;
+  label: string;
+  players: number;
+  activeMs: number;
+}
+
 interface GuildRow extends Stats {
   id: string;
   guildId: string | null;
@@ -25,7 +32,7 @@ export function FightPage() {
   const { data, error, isLoading } = useFight(id);
   const [group, setGroup] = useState<StatGroup>("offense");
   const [mode, setMode] = useState<ValueMode>("total");
-  const [view, setView] = useState<"players" | "guilds">("players");
+  const [view, setView] = useState<"players" | "guilds" | "groups">("players");
   const [guild, setGuild] = useState("");
   const me = useMe();
   const nav = useNavigate();
@@ -52,6 +59,25 @@ export function FightPage() {
     return [...m.values()];
   }, [data]);
 
+  // uma linha por grupo do squad e, no fim, o squad todo (a média do uptime sai ponderada pelo tempo ativo)
+  const groupRows = useMemo<GroupRow[]>(() => {
+    const m = new Map<string, GroupRow>();
+    const add = (id: string, label: string, p: PlayerFight) => {
+      const g = m.get(id) ?? { ...emptyStats(), id, label, players: 0, activeMs: 0 };
+      g.players++;
+      g.activeMs += p.activeMs;
+      for (const k of STAT_KEYS) g[k] += p[k];
+      m.set(id, g);
+    };
+    for (const p of data?.players ?? []) {
+      add(p.group != null ? `g${p.group}` : "g-", p.group != null ? `Grupo ${p.group}` : "Sem grupo", p);
+      add("squad", "Squad todo", p);
+    }
+    const squad = m.get("squad");
+    m.delete("squad");
+    return [...[...m.values()].sort((a, b) => a.id.localeCompare(b.id, "pt-BR", { numeric: true })), ...(squad ? [squad] : [])];
+  }, [data]);
+
   if (isLoading) return <Loading />;
   if (error || !data) return <ErrorBox error={error} />;
   const f = data.fight;
@@ -75,6 +101,13 @@ export function FightPage() {
     { id: "guild", header: "Guilda", sticky: true, sort: (g) => g.players, cell: (g) => <GuildTag id={g.guildId} withName /> },
     { id: "players", header: "Jogadores", align: "right", sort: (g) => g.players, cell: (g) => g.players },
     ...statColumns(group, mode, guildRows),
+  ];
+
+  // o destaque do melhor valor ignora a linha do squad todo, que sempre ganharia nos totais
+  const groupCols: Column<GroupRow>[] = [
+    { id: "group", header: "Grupo", sticky: true, sort: (g) => g.id, cell: (g) => <span className={g.id === "squad" ? "font-semibold text-gold" : "font-medium"}>{g.label}</span> },
+    { id: "players", header: "Jogadores", align: "right", sort: (g) => g.players, cell: (g) => g.players },
+    ...statColumns(group, mode, groupRows.filter((g) => g.id !== "squad")),
   ];
 
   const chart = [...players]
@@ -135,6 +168,7 @@ export function FightPage() {
             options={[
               { value: "players", label: "Jogadores" },
               { value: "guilds", label: "Por guilda" },
+              { value: "groups", label: "Por grupo" },
             ]}
           />
           <GroupTabs value={group} onChange={setGroup} />
@@ -153,16 +187,23 @@ export function FightPage() {
         </div>
         {view === "players" ? (
           <DataTable
-            key={group}
+            key={`players-${group}`}
             rows={players}
             columns={playerCols}
             rowKey={(p) => p.account}
-            initialSort={{ id: group === "offense" ? "damage" : group === "support" ? "strips" : group === "boons" ? "stabOut" : "damageTaken", desc: true }}
+            initialSort={{ id: group === "offense" ? "damage" : group === "support" ? "strips" : group === "boons" ? "stabOut" : group === "uptime" ? "stabUp" : "damageTaken", desc: true }}
             rowClassName={(p) => (p.account === me ? "bg-gold/5" : undefined)}
             dense
           />
+        ) : view === "guilds" ? (
+          <DataTable key={`guilds-${group}`} rows={guildRows} columns={guildCols} rowKey={(g) => g.id} initialSort={{ id: "players", desc: true }} dense />
         ) : (
-          <DataTable rows={guildRows} columns={guildCols} rowKey={(g) => g.id} initialSort={{ id: "players", desc: true }} dense />
+          <DataTable key={`groups-${group}`} rows={groupRows} columns={groupCols} rowKey={(g) => g.id} initialSort={{ id: "group", desc: false }} dense />
+        )}
+        {group === "uptime" && (
+          <p className="border-t border-line px-5 py-2.5 text-xs text-faint">
+            Uptime sobre o tempo ativo de cada jogador. Em Estab. e Poder, é o tempo com pelo menos uma pilha; “Poder (pilhas)” é a média de pilhas. Na visão por grupo, “Squad todo” é a média do squad, ponderada pelo tempo ativo.
+          </p>
         )}
       </Card>
     </>
