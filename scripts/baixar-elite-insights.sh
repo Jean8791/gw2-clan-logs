@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Baixa o Elite Insights CLI (parser oficial da comunidade) para tools/GW2EICLI.
-# Ele precisa do runtime .NET instalado (https://learn.microsoft.com/dotnet/core/install/linux).
+# Ele precisa do runtime .NET 10 (https://learn.microsoft.com/dotnet/core/install/linux).
+# Fora do Docker, se o EI cair com "Value cannot be null (path)", crie ~/.config e ~/.local/share e exporte XDG_CONFIG_HOME e XDG_DATA_HOME.
 # Uso: scripts/baixar-elite-insights.sh [versão]   (padrão: v3.32.0.0)
 set -euo pipefail
 
