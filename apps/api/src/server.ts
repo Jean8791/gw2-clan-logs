@@ -12,6 +12,7 @@ import { paths, type Config } from "./config.js";
 import { openDb, type DB } from "./db.js";
 import { eiAvailable } from "./elite-insights.js";
 import { Gw2Api } from "./gw2api.js";
+import { MEDIA_KEY, MediaStore } from "./media.js";
 import * as q from "./queries.js";
 import { LogWorker } from "./worker.js";
 
@@ -37,8 +38,13 @@ export async function buildApp(cfg: Config, opts: { logger?: boolean } = {}): Pr
 
   const db = openDb(p.db);
   const api = new Gw2Api(db, cfg.gw2Api);
+  // GW2_API=off também desliga o download de ícones (testes e uso sem internet)
+  const offline = (async () => {
+    throw new Error("rede desligada (GW2_API=off)");
+  }) as unknown as typeof fetch;
+  const media = new MediaStore(db, cfg.gw2Api ? fetch : offline);
   const server = Fastify({ logger: opts.logger ?? false, bodyLimit: 1024 * 1024 });
-  const worker = new LogWorker(db, api, cfg, server.log);
+  const worker = new LogWorker(db, api, media, cfg, server.log);
 
   await server.register(multipart, { limits: { fileSize: MAX_UPLOAD, files: 50 } });
 
@@ -118,6 +124,14 @@ export async function buildApp(cfg: Config, opts: { logger?: boolean } = {}): Pr
     const file = path.join(p.fightDir(id), "report.html");
     if (!existsSync(file)) return reply.code(404).send({ error: "Relatório não disponível para esta luta." });
     return reply.type("text/html; charset=utf-8").send(await fs.readFile(file));
+  });
+
+  // ícones guardados no banco: o navegador nunca fala direto com a ArenaNet
+  server.get<{ Params: { key: string } }>("/api/media/:key", async (req, reply) => {
+    if (!MEDIA_KEY.test(req.params.key)) return reply.code(400).send();
+    const m = media.get(req.params.key);
+    if (!m) return reply.code(404).send();
+    return reply.header("x-content-type-options", "nosniff").header("cache-control", "public, max-age=86400").type(m.contentType).send(m.bytes);
   });
 
   // ---------- Jogadores, ranking, comparação ----------

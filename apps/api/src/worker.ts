@@ -10,6 +10,7 @@ import type { DB } from "./db.js";
 import { runEliteInsights } from "./elite-insights.js";
 import type { Gw2Api } from "./gw2api.js";
 import { extractFight } from "./ingest.js";
+import { collectBuffIcons, type MediaStore } from "./media.js";
 import { saveFight, setStatus } from "./store.js";
 
 export function parseJsonBuffer(buf: Buffer): any {
@@ -21,10 +22,12 @@ export function parseJsonBuffer(buf: Buffer): any {
 export const readEiJsonGz = async (file: string) => parseJsonBuffer(zlib.gunzipSync(await fs.readFile(file)));
 
 /** Extrai e grava uma luta a partir do JSON do EI já carregado. */
-export async function ingestJson(db: DB, api: Gw2Api, id: string, json: any, hasReport: boolean) {
+export async function ingestJson(db: DB, api: Gw2Api, media: MediaStore, id: string, json: any, hasReport: boolean) {
   const f = extractFight(json);
   const mapName = await api.mapName(f.mapId);
   saveFight(db, id, f, mapName, hasReport);
+  // ícones novos; falha aqui não invalida a luta (ensure nunca lança)
+  for (const { key, url } of collectBuffIcons(json)) await media.ensure(key, url);
 }
 
 export class LogWorker {
@@ -37,6 +40,7 @@ export class LogWorker {
   constructor(
     private db: DB,
     private api: Gw2Api,
+    private media: MediaStore,
     private cfg: Config,
     private log: { info: (...a: any[]) => void; error: (...a: any[]) => void } = console,
   ) {
@@ -105,7 +109,7 @@ export class LogWorker {
 
       const json = parseJsonBuffer(await fs.readFile(jsonFile));
       if (html) await fs.rename(html, path.join(outDir, "report.html"));
-      await ingestJson(this.db, this.api, id, json, existsSync(path.join(outDir, "report.html")));
+      await ingestJson(this.db, this.api, this.media, id, json, existsSync(path.join(outDir, "report.html")));
 
       // guarda o JSON completo: dá para criar estatísticas novas depois sem reenviar os logs
       await pipeline(createReadStream(jsonFile), zlib.createGzip({ level: 9 }), createWriteStream(path.join(outDir, "ei.json.gz")));

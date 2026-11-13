@@ -1,4 +1,5 @@
 import { perMinute, STAT_GROUPS, STAT_META, statsOfGroup, type StatGroup, type StatKey, type Stats } from "@gw2logs/shared";
+import { BuffIcon } from "./BuffIcon";
 import type { Column } from "./DataTable";
 import { Segmented, cx } from "./ui";
 import { stat } from "../lib/format";
@@ -13,15 +14,23 @@ export function statColumns<T extends Stats & { activeMs: number }>(group: StatG
     const value = (r: T) => (isRate ? perMinute(r[k], r.activeMs) : r[k]);
     const values = rows.map(value);
     const best = values.length ? (meta.higherIsBetter ? Math.max(...values) : Math.min(...values)) : 0;
+    const label = meta.buffId ? (
+      <span className="inline-flex items-center gap-1">
+        <BuffIcon id={meta.buffId} />
+        {meta.short}
+      </span>
+    ) : (
+      meta.short
+    );
     return {
       id: k,
       header: isRate ? (
         <span className="inline-flex flex-col items-end leading-tight">
-          {meta.short}
+          {label}
           <span className="text-[9px] font-normal normal-case tracking-normal text-faint">por min</span>
         </span>
       ) : (
-        meta.short
+        label
       ),
       title: [meta.hint ? `${meta.label} — ${meta.hint}` : meta.label, isRate && "por minuto de luta"].filter(Boolean).join(" · "),
       align: "right",
