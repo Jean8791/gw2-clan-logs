@@ -1,6 +1,8 @@
-**/bin/
-**/obj/
-**/data/
-tools/
-.claude/
-.git/
+**/node_modules
+**/dist
+data
+logs-arcdps
+tools
+.git
+*.zevtc
+*.evtc

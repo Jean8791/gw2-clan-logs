@@ -1,90 +1,84 @@
-# Logs do Clã: site de logs do ArcDPS para Guild Wars 2
+# Logs do Clã: histórico de WvW para Guild Wars 2
 
-Os membros do clã enviam os logs do ArcDPS (`.zevtc`). O site processa cada um com o **Elite Insights** (o parser oficial da comunidade) e mostra:
+Site para clãs e alianças de **Guild Wars 2** guardarem e analisarem as lutas de WvW. Os membros enviam os logs do ArcDPS (`.zevtc`), o site processa cada um com o **Elite Insights** e monta um histórico contínuo, com filtros que relatórios por sessão não têm:
 
-- **Lutas:** lista de lutas de WvW e PvE, com squad, inimigos, kills, mortes e DPS.
-- **Detalhe da luta:** gráfico de dano por jogador e tabelas de Dano, Suporte (strips, cleanses, cura, barreira), Boons gerados para o squad (estabilidade, rapidez, alacridade…) e Defesa. Tem um link para o **relatório completo do Elite Insights** (rotação, linha do tempo, replay da luta).
-- **Ranking do clã:** por período (7/30/90 dias ou tudo), em total ou **por minuto** de luta. A tabela pode ser ordenada por qualquer coluna.
-- **Histórico do jogador:** evolução do DPS, strips e cleanses luta a luta, e as classes que ele jogou.
+- **Ranking** por período, **guilda**, **só a aliança**, função (DPS × suporte), classe, tamanho do squad, duração e mapa. Mostra totais ou valores **por minuto** de luta e ordena por qualquer coluna. Os filtros ficam no link, então dá para mandar no Discord.
+- **Guildas**: a guilda que cada jogador representava na luta vem do log, e o nome e a tag vêm da API oficial do GW2. É só marcar com ★ as guildas da aliança.
+- **Meu perfil**: o histórico do próprio jogador, a evolução luta a luta e a comparação com a média de quem joga na mesma função.
+- **Comparar** até 4 jogadores lado a lado, com radar e tabela por minuto.
+- **Detalhe da luta**: squad × inimigos, gráfico de dano, tabelas de Dano, Suporte, Boons e Defesa, visão **por guilda** e link para o relatório completo do Elite Insights (rotação, linha do tempo, replay).
+- O mesmo log enviado duas vezes é ignorado. O site também aceita o `.json` do Elite Insights ou do dps.report.
 
-O mesmo log enviado duas vezes é detectado e ignorado. Também é possível enviar o `.json` gerado pelo Elite Insights ou baixado do dps.report.
+## Stack
 
-## Onde ficam os logs do ArcDPS
+| Parte | Tecnologia |
+|---|---|
+| API | Node 20 + TypeScript, Fastify, SQLite (better-sqlite3) |
+| Site | React 19 + Vite, Tailwind CSS 4, TanStack Query, Recharts |
+| Parser | [Elite Insights](https://github.com/baaron4/GW2-Elite-Insights-Parser) CLI (.NET), chamado pela API |
+| Testes / CI | Vitest, GitHub Actions |
 
-`Documentos\Guild Wars 2\addons\arcdps\arcdps.cbtlogs\`
+Monorepo com npm workspaces:
 
-Para gravar lutas de **WvW**: no jogo, abra Alt+Shift+T → *Logging* e ative a gravação de WvW. Por padrão o ArcDPS só grava bosses de PvE.
-
-## Rodar no seu PC
-
-Precisa do **.NET 10 SDK** (`winget install Microsoft.DotNet.SDK.10`). Na primeira execução, o `iniciar.ps1` baixa sozinho o **Elite Insights CLI** para `tools\GW2EICLI`.
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\iniciar.ps1
-# com senha para enviar logs:
-powershell -ExecutionPolicy Bypass -File .\iniciar.ps1 -SenhaDoCla "minhasenha"
+```
+apps/api/         API REST, fila de processamento, extração das estatísticas
+  src/ingest.ts   JSON do Elite Insights → estatísticas por jogador (função pura, testada)
+  src/queries.ts  ranking, perfil, comparação e filtros em SQL
+apps/web/         site em React
+packages/shared/  tipos, métricas e filtros usados pelos dois lados
 ```
 
-Depois abra http://localhost:5080.
+O JSON completo de cada luta fica guardado em `data/fights/<id>/ei.json.gz`. Uma métrica nova pode ser calculada depois com `npm run reingest`, sem reenviar os logs.
 
-## Rodar no Linux / Ubuntu
+## Rodar localmente
 
-Precisa do **.NET 10 SDK** (`sudo apt install dotnet-sdk-10.0`; se o pacote não aparecer, veja https://learn.microsoft.com/dotnet/core/install/linux-ubuntu) e do `unzip`.
+Precisa do **Node 20+**. Para processar `.zevtc` também precisa do **runtime .NET** e do Elite Insights. Sem eles, o site aceita só o `.json` do EI.
 
 ```bash
-chmod +x iniciar.sh
-./iniciar.sh                                  # http://localhost:5080
-UPLOAD_KEY=senhadocla ./iniciar.sh            # exige senha para enviar logs
-URLS=http://0.0.0.0:5080 ./iniciar.sh         # aceita acesso de outras máquinas
+npm install
+scripts/baixar-elite-insights.sh     # opcional: baixa o EI para tools/GW2EICLI
+npm run build && npm start           # http://localhost:5080
 ```
 
-Na primeira execução, o script baixa o Elite Insights sozinho.
+Desenvolvimento, com o site em http://localhost:5173 e a API em :5080:
 
-## Configuração
+```bash
+npm run dev
+npm test
+```
+
+### Configuração (variáveis de ambiente)
 
 | Variável | Para quê | Padrão |
 |---|---|---|
-| `UPLOAD_KEY` | Senha que o pessoal digita para enviar logs. Vazio = qualquer um envia. | vazio |
-| `DATA_DIR` | Onde ficam o banco (SQLite), os logs enviados e os relatórios | `./data` |
-| `EI_DIR` | Pasta do Elite Insights CLI | `../../tools/GW2EICLI` |
+| `UPLOAD_KEY` | Senha para enviar logs. Vazio = qualquer um envia | vazio |
+| `ADMIN_KEY` | Senha para marcar as guildas da aliança | igual a `UPLOAD_KEY` |
+| `DATA_DIR` | Banco SQLite, logs enviados e relatórios | `./data` |
+| `EI_DIR` | Pasta do Elite Insights CLI | `./tools/GW2EICLI` |
+| `PORT` / `HOST` | Endereço do servidor | `5080` / `127.0.0.1` |
+| `GW2_API` | `off` desliga a busca de nomes de guildas e mapas | ligado |
 
-**Faça backup da pasta `data`**: é ali que fica todo o histórico do clã.
+Faça backup da pasta `data`: é ali que fica todo o histórico.
 
-## Colocar no ar de graça
+## Colocar no ar
 
-Opção 1 é a mais fácil. Opção 2 deixa o site no ar 24 h sem depender do seu PC.
+A imagem Docker já traz o Elite Insights e o runtime .NET:
 
-### Opção 1: no seu PC + Cloudflare Tunnel (grátis)
-O site roda no seu PC e o Cloudflare cria um endereço público (`https://algo.trycloudflare.com`) sem abrir porta no roteador.
-1. Rode `iniciar.ps1 -SenhaDoCla "..."`.
-2. Instale o `cloudflared` (`winget install Cloudflare.cloudflared`).
-3. Rode `cloudflared tunnel --url http://localhost:5080` e mande o link para o clã.
-
-Limitação: o site só fica no ar enquanto o seu PC estiver ligado, e o link muda a cada vez. Com uma conta grátis da Cloudflare e um domínio dá para ter um link fixo.
-
-### Opção 2: Oracle Cloud "Always Free" (servidor grátis 24 h)
-A Oracle dá uma VM ARM gratuita para sempre, que sobra para este site.
-1. Crie a conta em cloud.oracle.com. Ela pede cartão só para verificação.
-2. Crie uma instância **Ampere A1** (ARM) com Ubuntu e libere a porta 8080 (ou 80/443) na *Security List*.
-3. Na VM: instale o Docker, copie esta pasta e rode:
-   ```bash
-   docker build -t gw2logs .
-   docker run -d --name gw2logs -p 8080:8080 -v gw2logs-data:/data -e UPLOAD_KEY=senhadocla --restart unless-stopped gw2logs
-   ```
-4. Para HTTPS e domínio próprio, use o Cloudflare Tunnel na VM ou um proxy como o Caddy.
-
-Por que não Render, Vercel ou Netlify grátis? O site precisa rodar o Elite Insights e guardar o banco em disco. Os planos grátis desses serviços desligam o servidor ou apagam o disco.
-
-## Estrutura
-
-```
-src/Gw2Logs/
-  Program.cs        rotas da API e upload
-  LogProcessor.cs   fila em segundo plano: roda o Elite Insights e extrai as estatísticas
-  Db.cs             banco SQLite (tabelas fights e player_stats)
-  wwwroot/          páginas (HTML/CSS/JS, gráficos com Chart.js)
-Dockerfile          imagem pronta para servidor (já baixa o Elite Insights)
-iniciar.ps1         roda localmente no Windows
+```bash
+docker build -t gw2-clan-logs .
+docker run -d --name gw2logs -p 8080:8080 -v gw2logs-data:/data \
+  -e UPLOAD_KEY=senhadocla --restart unless-stopped gw2-clan-logs
 ```
 
-O JSON completo do Elite Insights de cada luta fica guardado (`data/fights/<id>/ei.json.gz`). Dá para criar estatísticas novas depois sem reenviar os logs.
+Opções gratuitas: uma VM *Always Free* da Oracle Cloud (Ampere A1), ou o próprio PC com **Cloudflare Tunnel** (`cloudflared tunnel --url http://localhost:5080`). Serviços como Render e Vercel no plano grátis desligam o servidor ou apagam o disco, e o site precisa guardar o banco.
+
+## Onde ficam os logs do ArcDPS
+
+`Documentos\Guild Wars 2\addons\arcdps\arcdps.cbtlogs\`. Para gravar **WvW**: no jogo, Alt+Shift+T → *Logging* → ative a gravação de WvW. Cura e barreira só aparecem se quem gravou usa o addon **Healing Stats**.
+
+## Como as métricas são calculadas
+
+- **Dano, abates e downs** contam só **jogadores inimigos**, sem guardas e estruturas. Em PvE contam os alvos da luta.
+- **Por minuto** usa o tempo ativo de cada jogador na luta.
+- **Boons** são o volume gerado para o squad (`squadBuffVolumes` do Elite Insights).
+- **Função** é estimada por luta: é suporte quem cura e dá barreira mais que metade do próprio dano, ou quem está entre os maiores geradores de boons do squad.

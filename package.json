@@ -1,0 +1,25 @@
+{
+  "name": "gw2-clan-logs",
+  "private": true,
+  "version": "0.2.0",
+  "description": "Histórico de lutas de WvW do Guild Wars 2 para clãs e alianças, a partir dos logs do ArcDPS.",
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=20.19"
+  },
+  "scripts": {
+    "dev": "npm run dev -w @gw2logs/api & npm run dev -w @gw2logs/web",
+    "dev:api": "npm run dev -w @gw2logs/api",
+    "dev:web": "npm run dev -w @gw2logs/web",
+    "build": "npm run build -w @gw2logs/web && npm run build -w @gw2logs/api",
+    "start": "npm run start -w @gw2logs/api",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "import:legacy": "npm run import:legacy -w @gw2logs/api",
+    "reingest": "npm run reingest -w @gw2logs/api"
+  }
+}

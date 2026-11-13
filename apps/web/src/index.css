@@ -1,0 +1,48 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Cinzel", Georgia, serif;
+
+  --color-bg: #0d0f14;
+  --color-surface: #151820;
+  --color-surface-2: #1c2029;
+  --color-surface-3: #252a35;
+  --color-line: #2a303c;
+  --color-text: #e8eaef;
+  --color-muted: #8f98a8;
+  --color-faint: #5d6575;
+  --color-gold: #e0b25a;
+  --color-gold-soft: #e0b25a26;
+  --color-good: #4fc38a;
+  --color-bad: #ef6b6b;
+  --color-info: #6aa7ff;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  background:
+    radial-gradient(1200px 500px at 10% -10%, #e0b25a12, transparent 60%),
+    radial-gradient(900px 400px at 100% 0%, #6aa7ff0d, transparent 60%),
+    var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  min-height: 100vh;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* barras de rolagem discretas */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-surface-3) transparent;
+}
+
+.recharts-tooltip-wrapper {
+  outline: none;
+}

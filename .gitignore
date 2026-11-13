@@ -3,18 +3,23 @@ data/
 logs-arcdps/
 *.zevtc
 *.evtc
+*.db
+*.db-*
 
-# Elite Insights: baixado pelo iniciar.ps1 / Dockerfile
+# Elite Insights (baixado pelo script ou pelo Dockerfile)
 tools/
 
-# Build do .NET
-bin/
-obj/
-*.user
+# Node
+node_modules/
+dist/
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
 
 # Editor / SO
-.vs/
 .vscode/
 .idea/
+.DS_Store
 Thumbs.db
 desktop.ini
