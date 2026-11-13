@@ -185,6 +185,19 @@ export interface PlayerProfile {
   guilds: { guildId: string; fights: number }[];
 }
 
+/** Dano de um jogador por habilidade, somado nas lutas filtradas (dano em jogadores inimigos). */
+export interface PlayerSkill {
+  skillId: number;
+  name: string | null;
+  damage: number;
+  hits: number;
+  connectedHits: number;
+  /** % do dano total em habilidades (0 a 100) */
+  pct: number;
+  /** dano médio por acerto que conectou */
+  avgHit: number;
+}
+
 export interface GuildSummary extends Guild {
   players: number;
   fights: number;

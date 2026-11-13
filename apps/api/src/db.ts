@@ -80,6 +80,19 @@ function migrate(db: DB) {
 
     CREATE TABLE IF NOT EXISTS maps (id INTEGER PRIMARY KEY, name TEXT NOT NULL);
 
+    -- dano por habilidade de cada jogador em cada luta (some com a luta, pela retenção)
+    CREATE TABLE IF NOT EXISTS skills (id INTEGER PRIMARY KEY, name TEXT);
+    CREATE TABLE IF NOT EXISTS player_skills (
+      fight_id       TEXT NOT NULL REFERENCES fights(id) ON DELETE CASCADE,
+      account        TEXT NOT NULL,
+      skill_id       INTEGER NOT NULL,
+      damage         REAL NOT NULL,
+      hits           INTEGER NOT NULL,
+      connected_hits INTEGER NOT NULL,
+      PRIMARY KEY (fight_id, account, skill_id)
+    );
+    CREATE INDEX IF NOT EXISTS ix_pskills_account ON player_skills(account);
+
     -- ícones baixados uma vez (chave ex.: "buff:1122"); não são apagados com as lutas antigas
     CREATE TABLE IF NOT EXISTS media (
       key          TEXT PRIMARY KEY,

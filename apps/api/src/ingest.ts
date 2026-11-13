@@ -4,6 +4,14 @@ import { emptyStats, STAT_KEYS, STAT_META, type Mode, type Role, type Stats } fr
 
 type J = Record<string, any>;
 
+export interface ExtractedSkill {
+  id: number;
+  name: string | null;
+  damage: number;
+  hits: number;
+  connectedHits: number;
+}
+
 export interface ExtractedPlayer extends Stats {
   account: string;
   name: string | null;
@@ -14,6 +22,7 @@ export interface ExtractedPlayer extends Stats {
   role: Role;
   activeMs: number;
   distToCom: number | null;
+  skills: ExtractedSkill[];
 }
 
 export interface ExtractedFight {
@@ -80,11 +89,13 @@ export function extractFight(r: J): ExtractedFight {
   // Em WvW os "alvos" que interessam são os jogadores inimigos; em PvE, todos os alvos (bosses).
   const targetIdx = targets.map((t, i) => (!wvw || t.enemyPlayer ? i : -1)).filter((i) => i >= 0);
   const durationMs = num(r, "durationMS");
+  const skillMap = (r.skillMap ?? {}) as J;
+  const buffMap = (r.buffMap ?? {}) as J;
 
   const all = arr(r, "players").filter((p) => !p.isFake && !p.friendlyNPC);
   const squad = all.filter((p) => !p.notInSquad);
 
-  const players: ExtractedPlayer[] = squad.map((p) => {
+  const instances: ExtractedPlayer[] = squad.map((p) => {
     const dpsAll = phase0(p, "dpsAll");
     const statsAll = phase0(p, "statsAll");
     const def = phase0(p, "defenses");
@@ -153,9 +164,11 @@ export function extractFight(r: J): ExtractedFight {
       role: "dps",
       activeMs: typeof at === "number" ? at : durationMs,
       distToCom: typeof statsAll.distToCom === "number" ? statsAll.distToCom : null,
+      skills: skillDamage(p, targetIdx, skillMap, buffMap),
     };
   });
 
+  const players = mergeSameAccount(instances);
   classifyRoles(players);
 
   const sum = (k: keyof Stats) => players.reduce((a, p) => a + p[k], 0);
@@ -167,7 +180,7 @@ export function extractFight(r: J): ExtractedFight {
     durationMs,
     success: r.success === true,
     recordedBy: str(r, "recordedAccountBy") ?? str(r, "recordedBy"),
-    squadCount: squad.length,
+    squadCount: players.length,
     allyCount: all.length - squad.length,
     enemyCount: wvw ? targets.filter((t) => t.enemyPlayer).length : targets.length,
     squadDamage: sum("damage"),
@@ -177,6 +190,57 @@ export function extractFight(r: J): ExtractedFight {
     eiVersion: str(r, "eliteInsightsVersion"),
     players,
   };
+}
+
+/**
+ * O ArcDPS cria outra instância da mesma conta quando o jogador cai da luta ou reconecta.
+ * Juntamos tudo numa linha por conta: estatísticas e tempo somados; classe e grupo da instância mais longa.
+ */
+function mergeSameAccount(players: ExtractedPlayer[]): ExtractedPlayer[] {
+  const byAccount = new Map<string, ExtractedPlayer[]>();
+  for (const p of players) byAccount.set(p.account, [...(byAccount.get(p.account) ?? []), p]);
+  return [...byAccount.values()].map((group) => {
+    if (group.length === 1) return group[0]!;
+    const main = group.reduce((a, b) => (b.activeMs > a.activeMs ? b : a));
+    const merged: ExtractedPlayer = { ...main, activeMs: 0, commander: group.some((p) => p.commander), skills: [] };
+    for (const k of STAT_KEYS) merged[k] = group.reduce((a, p) => a + p[k], 0);
+    merged.activeMs = group.reduce((a, p) => a + p.activeMs, 0);
+    const skills = new Map<number, ExtractedSkill>();
+    for (const sk of group.flatMap((p) => p.skills)) {
+      const cur = skills.get(sk.id) ?? { ...sk, damage: 0, hits: 0, connectedHits: 0 };
+      cur.damage += sk.damage;
+      cur.hits += sk.hits;
+      cur.connectedHits += sk.connectedHits;
+      cur.name ??= sk.name;
+      skills.set(sk.id, cur);
+    }
+    merged.skills = [...skills.values()];
+    return merged;
+  });
+}
+
+/**
+ * Dano por habilidade nos mesmos alvos do dano total (jogadores inimigos em WvW), incluindo o de pets, clones e
+ * engenhocas (minions): o dano total do jogador também os inclui. Sem dado por alvo, usa o total do jogador.
+ */
+function skillDamage(p: J, targetIdx: number[], skillMap: J, buffMap: J): ExtractedSkill[] {
+  const lists = (owner: J): J[][] => {
+    const byTarget = arr(owner, "targetDamageDist");
+    if (byTarget.length && targetIdx.length) return targetIdx.map((i) => (byTarget[i] as unknown as J[][] | undefined)?.[0] ?? []);
+    return [(arr(owner, "totalDamageDist")[0] as unknown as J[] | undefined) ?? []];
+  };
+  const sum = new Map<number, ExtractedSkill>();
+  for (const list of [...lists(p), ...arr(p, "minions").flatMap(lists)]) {
+    for (const d of Array.isArray(list) ? list : []) {
+      const id = num(d, "id");
+      const cur = sum.get(id) ?? { id, name: str(skillMap[`s${id}`], "name") ?? str(buffMap[`b${id}`], "name"), damage: 0, hits: 0, connectedHits: 0 };
+      cur.damage += num(d, "totalDamage");
+      cur.hits += num(d, "hits");
+      cur.connectedHits += num(d, "connectedHits");
+      sum.set(id, cur);
+    }
+  }
+  return [...sum.values()].filter((s) => s.damage > 0);
 }
 
 /**

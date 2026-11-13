@@ -145,6 +145,10 @@ export async function buildApp(cfg: Config, opts: { logger?: boolean } = {}): Pr
     return prof ?? reply.code(404).send({ error: "Jogador não encontrado." });
   });
 
+  server.get<{ Params: { account: string } }>("/api/players/:account/skills", async (req) =>
+    q.playerSkills(db, req.params.account, parseFilters(req.query as Record<string, string>)),
+  );
+
   server.get("/api/compare", async (req, reply) => {
     const qs = req.query as Record<string, string>;
     const accounts = String(qs.accounts ?? "").split(",").map((s) => s.trim()).filter(Boolean).slice(0, 6);

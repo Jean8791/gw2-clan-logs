@@ -10,7 +10,7 @@ import type { DB } from "./db.js";
 import { runEliteInsights } from "./elite-insights.js";
 import type { Gw2Api } from "./gw2api.js";
 import { extractFight } from "./ingest.js";
-import { collectBuffIcons, type MediaStore } from "./media.js";
+import { collectBuffIcons, collectSkillIcons, ensureMany, type MediaStore } from "./media.js";
 import { saveFight, setStatus } from "./store.js";
 
 export function parseJsonBuffer(buf: Buffer): any {
@@ -27,7 +27,8 @@ export async function ingestJson(db: DB, api: Gw2Api, media: MediaStore, id: str
   const mapName = await api.mapName(f.mapId);
   saveFight(db, id, f, mapName, hasReport);
   // ícones novos; falha aqui não invalida a luta (ensure nunca lança)
-  for (const { key, url } of collectBuffIcons(json)) await media.ensure(key, url);
+  const skillIds = new Set(f.players.flatMap((p) => p.skills.map((s) => s.id)));
+  await ensureMany(media, [...collectBuffIcons(json), ...collectSkillIcons(json, skillIds)]);
   await ensureProfessionIcons(api, media, f.players.map((p) => p.profession));
 }
 

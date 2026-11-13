@@ -8,14 +8,22 @@ export function saveFight(db: DB, id: string, f: ExtractedFight, mapName: string
   const insertPlayer = db.prepare(`INSERT OR REPLACE INTO player_stats (${cols.join(",")}) VALUES (${cols.map(() => "?").join(",")})`);
   const insertGuild = db.prepare("INSERT OR IGNORE INTO guilds (id) VALUES (?)");
 
+  const insertSkill = db.prepare("INSERT INTO player_skills (fight_id, account, skill_id, damage, hits, connected_hits) VALUES (?, ?, ?, ?, ?, ?)");
+  const upsertSkillName = db.prepare("INSERT INTO skills (id, name) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET name = COALESCE(excluded.name, name)");
+
   db.transaction(() => {
     db.prepare("DELETE FROM player_stats WHERE fight_id = ?").run(id);
+    db.prepare("DELETE FROM player_skills WHERE fight_id = ?").run(id);
     for (const p of f.players) {
       if (p.guildId) insertGuild.run(p.guildId);
       insertPlayer.run(
         id, p.account, p.name, p.profession, p.guildId, p.group, p.commander ? 1 : 0, p.role, Math.round(p.activeMs), p.distToCom,
         ...STAT_KEYS.map((k) => p[k]),
       );
+      for (const sk of p.skills) {
+        upsertSkillName.run(sk.id, sk.name?.slice(0, 100) ?? null);
+        insertSkill.run(id, p.account, sk.id, sk.damage, sk.hits, sk.connectedHits);
+      }
     }
     db.prepare(
       `UPDATE fights SET status='done', error=NULL, mode=@mode, fight_name=@fightName, map_id=@mapId, map_name=@mapName,
