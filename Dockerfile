@@ -1,6 +1,6 @@
 # Logs do Clã: site + API + Elite Insights numa imagem só.
 # Build:  docker build -t gw2-clan-logs .
-# Rodar:  docker run -d -p 8080:8080 -v gw2logs-data:/data -e UPLOAD_KEY=senhadocla -e RETENTION_DAYS=7 --restart unless-stopped gw2-clan-logs
+# Rodar:  docker run -d -p 8080:8080 -v gw2logs-data:/data -e UPLOAD_KEY=senhadocla -e RETENTION_DAYS=30--restart unless-stopped gw2-clan-logs
 
 FROM node:20-bookworm-slim AS build
 WORKDIR /app

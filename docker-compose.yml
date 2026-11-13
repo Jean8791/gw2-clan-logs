@@ -7,7 +7,7 @@ services:
     environment:
       UPLOAD_KEY: ${UPLOAD_KEY:?defina UPLOAD_KEY no .env}
       ADMIN_KEY: ${ADMIN_KEY:?defina ADMIN_KEY no .env}
-      RETENTION_DAYS: ${RETENTION_DAYS:-7}
+      RETENTION_DAYS: ${RETENTION_DAYS:-30}
     volumes:
       - dados:/data
 
