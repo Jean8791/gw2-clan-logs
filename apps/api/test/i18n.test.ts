@@ -71,7 +71,7 @@ describe("dicionário: nada de tradução esquecida", () => {
 
   it("o inglês não é só uma cópia do português nos textos comuns", () => {
     expect(DICT.en["nav.days"]).not.toBe(DICT.pt["nav.days"]);
-    expect(DICT.en["nav.upload"]).toBe("Upload logs");
+    expect(DICT.en["nav.fights"]).toBe("Fights");
   });
 });
 

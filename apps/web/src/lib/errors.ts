@@ -34,7 +34,3 @@ export function fightErrorText(raw: string): string {
   const key = `fighterr.${code}`;
   return known(key) ? t(key, { detail: rest.join("|") }) : raw;
 }
-
-/** Erro de um arquivo do envio, ou nada se deu certo. */
-export const uploadErrorText = (r: { error?: string; code?: string; max?: number }) =>
-  r.error ? (r.code && known(`api.${r.code}`) ? t(`api.${r.code}`, r.max != null ? { max: r.max } : undefined) : r.error) : null;

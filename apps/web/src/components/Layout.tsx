@@ -1,4 +1,4 @@
-import { BarChart3, CalendarDays, GitCompareArrows, Home, Shield, Swords, Upload, UserRound } from "lucide-react";
+import { BarChart3, CalendarDays, GitCompareArrows, Home, Shield, Swords, UserRound } from "lucide-react";
 import { ROUTES } from "@gw2logs/shared";
 import { NavLink, Outlet } from "react-router-dom";
 import { useMe } from "../lib/hooks";
@@ -75,9 +75,6 @@ export function Layout() {
             <UserRound className="size-4" />
             <span className="truncate">{me ? accountShort(me) : t("nav.myProfile")}</span>
           </NavLink>
-          <NavLink to={ROUTES.upload} className="mt-2 flex items-center justify-center gap-2 rounded-lg bg-gold px-3 py-2.5 text-sm font-semibold text-[#1a1408] transition hover:brightness-110">
-            <Upload className="size-4" /> {t("nav.upload")}
-          </NavLink>
         </div>
       </aside>
 
@@ -87,9 +84,6 @@ export function Layout() {
           <Brand />
           <div className="flex items-center gap-2">
             <LangToggle />
-            <NavLink to={ROUTES.upload} className="flex items-center gap-1.5 rounded-lg bg-gold px-3 py-1.5 text-xs font-semibold text-[#1a1408]">
-              <Upload className="size-3.5" /> {t("nav.uploadShort")}
-            </NavLink>
           </div>
         </div>
         <nav className="flex gap-1 overflow-x-auto px-3 pb-2">

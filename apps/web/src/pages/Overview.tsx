@@ -1,4 +1,4 @@
-import { ArrowRight, Upload, X } from "lucide-react";
+import { ArrowRight, X } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { perSecond, ROUTES, topByRate, type RankingRow, type StatKey } from "@gw2logs/shared";
@@ -6,7 +6,7 @@ import { DataTable, type Column } from "../components/DataTable";
 import { FilterBar } from "../components/FilterBar";
 import { FightStatus, KillDeath, SquadVsEnemy, Won } from "../components/FightBits";
 import { GuildTag, PlayerLink, Profession, ProfessionDot } from "../components/badges";
-import { Button, Card, Empty, ErrorBox, Kpi, Loading, PageHeader, cx } from "../components/ui";
+import { Card, Empty, ErrorBox, Kpi, Loading, PageHeader, cx } from "../components/ui";
 import { useOverview, useRanking } from "../lib/api";
 import { useFilters } from "../lib/hooks";
 import { t } from "../lib/i18n";
@@ -104,13 +104,6 @@ export function OverviewPage() {
       <PageHeader
         title={t("page.overview.title")}
         subtitle={t("page.overview.subtitle")}
-        actions={
-          <Link to={ROUTES.upload}>
-            <Button variant="primary">
-              <Upload className="size-4" /> {t("nav.upload")}
-            </Button>
-          </Link>
-        }
       />
       <FilterBar value={filters} onChange={setFilters} fields={["period", "day", "guild", "size"]} />
 
@@ -119,11 +112,7 @@ export function OverviewPage() {
       {ov.data && ov.data.fights === 0 && (
         <Card>
           <Empty title={t("overview.empty.title")}>
-            {t("overview.empty.before")}
-            <Link className="text-gold" to={ROUTES.upload}>
-              {t("nav.upload")}
-            </Link>
-            {t("overview.empty.after")}
+            {t("empty.changeFilters")}
           </Empty>
         </Card>
       )}

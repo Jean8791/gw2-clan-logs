@@ -8,7 +8,6 @@ export const ROUTES = {
   player: (account: string) => `/players/${encodeURIComponent(account)}`,
   compare: "/compare",
   guilds: "/guilds",
-  upload: "/upload",
   me: "/me",
 } as const;
 
@@ -19,7 +18,6 @@ const LEGACY: Record<string, string> = {
   jogadores: "players",
   comparar: "compare",
   guildas: "guilds",
-  enviar: "upload",
   eu: "me",
 };
 
