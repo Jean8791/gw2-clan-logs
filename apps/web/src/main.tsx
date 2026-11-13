@@ -11,6 +11,7 @@ import { PlayerPage, MePage } from "./pages/Player";
 import { ComparePage } from "./pages/Compare";
 import { GuildsPage } from "./pages/Guilds";
 import { UploadPage } from "./pages/Upload";
+import { DaysPage } from "./pages/Days";
 import { Empty } from "./components/ui";
 import "./index.css";
 
@@ -21,6 +22,7 @@ const router = createBrowserRouter([
     element: <Layout />,
     children: [
       { path: "/", element: <OverviewPage /> },
+      { path: "/dias", element: <DaysPage /> },
       { path: "/lutas", element: <FightsPage /> },
       { path: "/lutas/:id", element: <FightPage /> },
       { path: "/ranking", element: <RankingPage /> },

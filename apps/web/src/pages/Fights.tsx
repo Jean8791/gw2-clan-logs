@@ -42,7 +42,7 @@ export function FightsPage() {
   return (
     <>
       <PageHeader title="Lutas" subtitle="Cada log enviado vira uma luta. Clique para ver os detalhes." />
-      <FilterBar value={filters} onChange={setFilters} fields={["period", "map", "size", "duration", "guild"]} />
+      <FilterBar value={filters} onChange={setFilters} fields={["period", "day", "map", "size", "duration", "guild"]} />
       {error && <ErrorBox error={error} />}
       {isLoading && <Loading />}
       {data && (

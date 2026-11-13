@@ -240,6 +240,8 @@ export interface Filters {
   guild?: string;
   role?: Role;
   profession?: string;
+  /** dias de batalha (AAAA-MM-DD, ver battleDay): vale a união dos dias escolhidos */
+  day?: string[];
 }
 
 export const FILTER_KEYS = [
@@ -255,9 +257,42 @@ export const FILTER_KEYS = [
   "guild",
   "role",
   "profession",
+  "day",
 ] as const satisfies readonly (keyof Filters)[];
 
 const NUMERIC_FILTERS = new Set<keyof Filters>(["days", "map", "minSquad", "maxSquad", "minEnemies", "minDurationSec"]);
+
+// ---------- Dia de batalha ----------
+
+/**
+ * O dia de batalha vai das 06:00 às 06:00 (horário de Brasília, UTC-3): uma luta às 00:08 de 13/11 ainda é a noite de 12/11.
+ * A data do dia é a do instante menos 9 horas em UTC (3 de fuso + 6 de corte).
+ */
+export const BATTLE_DAY_SHIFT_HOURS = 9;
+
+export function battleDay(iso: string | null | undefined): string | null {
+  const t = iso ? Date.parse(iso) : NaN;
+  return Number.isNaN(t) ? null : new Date(t - BATTLE_DAY_SHIFT_HOURS * 3_600_000).toISOString().slice(0, 10);
+}
+
+function isValidDay(d: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return false;
+  const t = Date.parse(`${d}T00:00:00Z`);
+  // data impossível (2026-13-45) dá NaN; 2026-02-30 "rola" para março e a volta não bate
+  return !Number.isNaN(t) && new Date(t).toISOString().slice(0, 10) === d;
+}
+
+/** Resumo de um dia de batalha. */
+export interface DaySummary {
+  day: string;
+  fights: number;
+  durationMs: number;
+  players: number;
+  kills: number;
+  deaths: number;
+  first: string;
+  last: string;
+}
 
 /** Lê filtros de um objeto de query string, descartando valores inválidos. */
 export function parseFilters(q: Record<string, unknown>): Filters {
@@ -271,6 +306,9 @@ export function parseFilters(q: Record<string, unknown>): Filters {
       if (Number.isFinite(n) && n > 0) (f as Record<string, unknown>)[k] = Math.floor(n);
     } else if (k === "mode") {
       if (s === "wvw" || s === "pve") f.mode = s;
+    } else if (k === "day") {
+      const days = [...new Set(s.split(",").map((d) => d.trim()).filter(isValidDay))].slice(0, 62);
+      if (days.length) f.day = days;
     } else if (k === "role") {
       if (s === "dps" || s === "support") f.role = s;
     } else if (k === "from" || k === "to") {
@@ -286,7 +324,7 @@ export function filtersToQuery(f: Filters): string {
   const p = new URLSearchParams();
   for (const k of FILTER_KEYS) {
     const v = f[k];
-    if (v !== undefined && v !== null && v !== "") p.set(k, String(v));
+    if (v !== undefined && v !== null && v !== "" && !(Array.isArray(v) && v.length === 0)) p.set(k, String(v));
   }
   return p.toString();
 }

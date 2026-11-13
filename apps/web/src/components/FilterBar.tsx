@@ -1,10 +1,11 @@
 import { RotateCcw, SlidersHorizontal } from "lucide-react";
 import { useState } from "react";
 import type { Filters, Role } from "@gw2logs/shared";
-import { useGuilds, useMeta } from "../lib/api";
+import { useDays, useGuilds, useMeta } from "../lib/api";
+import { dayLabel } from "../lib/format";
 import { Button, Input, Select, cx } from "./ui";
 
-type Field = "period" | "map" | "size" | "duration" | "guild" | "role" | "profession";
+type Field = "period" | "day" | "map" | "size" | "duration" | "guild" | "role" | "profession";
 
 const SIZES = [
   { id: "", label: "Qualquer tamanho", min: undefined, max: undefined },
@@ -18,6 +19,7 @@ const sizeId = (f: Filters) => SIZES.find((s) => s.min === f.minSquad && s.max =
 export function FilterBar({ value, onChange, fields }: { value: Filters; onChange: (f: Filters) => void; fields: Field[] }) {
   const { data: meta } = useMeta();
   const { data: guilds } = useGuilds();
+  const { data: days } = useDays({ ...value, day: undefined }, fields.includes("day"));
   const [open, setOpen] = useState(false);
   const has = (f: Field) => fields.includes(f);
   const set = (patch: Partial<Filters>) => onChange({ ...value, ...patch });
@@ -55,6 +57,21 @@ export function FilterBar({ value, onChange, fields }: { value: Filters; onChang
             <option value="30">Últimos 30 dias</option>
             <option value="90">Últimos 90 dias</option>
             <option value="custom">Escolher datas…</option>
+          </Select>
+        )}
+        {has("day") && (
+          <Select
+            label="Dia de batalha"
+            value={value.day?.length === 1 ? value.day[0] : value.day?.length ? "varios" : ""}
+            onChange={(e) => set({ day: e.target.value && e.target.value !== "varios" ? [e.target.value] : undefined })}
+          >
+            <option value="">Todos os dias</option>
+            {(value.day?.length ?? 0) > 1 && <option value="varios">{value.day!.length} dias escolhidos</option>}
+            {(days ?? []).map((d) => (
+              <option key={d.day} value={d.day}>
+                {dayLabel(d.day)} · {d.fights} {d.fights === 1 ? "luta" : "lutas"}
+              </option>
+            ))}
           </Select>
         )}
         {has("period") && custom && (

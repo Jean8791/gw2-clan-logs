@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   filtersToQuery,
   type Aggregate,
+  type DaySummary,
   type Fight,
   type FightDetail,
   type Filters,
@@ -55,6 +56,9 @@ export const useMeta = () => useQuery({ queryKey: ["meta"], queryFn: () => get<M
 export const useGuilds = () => useQuery({ queryKey: ["guilds"], queryFn: () => get<GuildSummary[]>("/api/guilds"), staleTime: 60_000 });
 
 export const useOverview = (f: Filters) => useQuery({ queryKey: ["overview", f], queryFn: () => get<Overview>(withFilters("/api/overview", f)) });
+
+export const useDays = (f: Filters, enabled = true) =>
+  useQuery({ queryKey: ["days", f], queryFn: () => get<DaySummary[]>(withFilters("/api/days", f)), enabled });
 
 export const useFights = (f: Filters, limit = 100) =>
   useQuery({

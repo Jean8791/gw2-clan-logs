@@ -1,6 +1,8 @@
 // Consultas da API. Todas aceitam os mesmos filtros (Filters) do pacote compartilhado.
 import {
+  BATTLE_DAY_SHIFT_HOURS,
   STAT_KEYS,
+  type DaySummary,
   type Aggregate,
   type Fight,
   type FightDetail,
@@ -15,6 +17,9 @@ import {
 import { STAT_COL, type DB } from "./db.js";
 
 type Params = Record<string, string | number>;
+
+/** Dia de batalha de uma luta (ver battleDay em shared): data da luta menos 9 horas. */
+const BATTLE_DAY = `date(f.time_start, '-${BATTLE_DAY_SHIFT_HOURS} hours')`;
 
 // ---------- Filtros → SQL ----------
 
@@ -31,6 +36,10 @@ export function fightConditions(fl: Filters, now = new Date()): { where: string[
   if (fl.maxSquad) (where.push("f.squad_count <= @maxSquad"), (params.maxSquad = fl.maxSquad));
   if (fl.minEnemies) (where.push("f.enemy_count >= @minEnemies"), (params.minEnemies = fl.minEnemies));
   if (fl.minDurationSec) (where.push("f.duration_ms >= @minDur"), (params.minDur = fl.minDurationSec * 1000));
+  if (fl.day?.length) {
+    where.push(`${BATTLE_DAY} IN (${fl.day.map((_, i) => `@day${i}`).join(", ")})`);
+    fl.day.forEach((d, i) => (params[`day${i}`] = d));
+  }
   return { where, params };
 }
 
@@ -138,6 +147,34 @@ export function playerSkills(db: DB, account: string, fl: Filters): PlayerSkill[
     .all({ ...params, account }) as Omit<PlayerSkill, "pct" | "avgHit">[];
   const total = rows.reduce((a, r) => a + r.damage, 0);
   return rows.map((r) => ({ ...r, pct: total ? (r.damage / total) * 100 : 0, avgHit: r.connectedHits ? r.damage / r.connectedHits : 0 }));
+}
+
+/** Dias de batalha com lutas, do mais recente ao mais antigo. Ignora o filtro de dia, senão só sobraria o escolhido. */
+export function battleDays(db: DB, fl: Filters): DaySummary[] {
+  const all: Filters = { ...fl, day: undefined };
+  const f = fightConditions(all);
+  const days = db
+    .prepare(
+      `SELECT ${BATTLE_DAY} AS day, COUNT(*) AS fights, COALESCE(SUM(f.duration_ms), 0) AS durationMs,
+              COALESCE(SUM(f.squad_kills), 0) AS kills, COALESCE(SUM(f.squad_deaths), 0) AS deaths,
+              MIN(f.time_start) AS first, MAX(f.time_start) AS last
+       FROM fights f WHERE ${f.where.join(" AND ")} AND f.time_start IS NOT NULL
+       GROUP BY day ORDER BY day DESC`,
+    )
+    .all(f.params) as Omit<DaySummary, "players">[];
+  const c = combined(all);
+  const players = new Map(
+    (
+      db
+        .prepare(
+          `SELECT ${BATTLE_DAY} AS day, COUNT(DISTINCT ps.account) AS players
+           FROM player_stats ps JOIN fights f ON f.id = ps.fight_id
+           WHERE ${c.where} AND f.time_start IS NOT NULL GROUP BY day`,
+        )
+        .all(c.params) as { day: string; players: number }[]
+    ).map((r) => [r.day, r.players]),
+  );
+  return days.map((d) => ({ ...d, players: players.get(d.day) ?? 0 }));
 }
 
 export function playerProfile(db: DB, account: string, fl: Filters): PlayerProfile | null {

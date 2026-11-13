@@ -52,3 +52,7 @@ export function diffPct(a: number, b: number): number | null {
 }
 
 export const accountShort = (account: string) => account.replace(/\.\d{4}$/, "");
+
+/** "2026-11-12" → "qui, 12/11" (o dia de batalha, ver battleDay em shared). */
+export const dayLabel = (day: string) =>
+  new Date(`${day}T12:00:00Z`).toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit", month: "2-digit", timeZone: "UTC" }).replace(".", "");
