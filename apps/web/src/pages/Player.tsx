@@ -36,8 +36,10 @@ function VsAverage({ k, player, avg }: { k: StatKey; player: Aggregate; avg: Agg
   const a = pm(player, k);
   const b = pm(avg, k);
   const max = Math.max(a, b) || 1;
+  // a unidade vem escrita: sem ela, "26,5 mil" de dano recebido parecia o total, e é por minuto
+  const unit = isUptimeStat(k) ? "" : meta.format === "volume" ? "/luta" : "/min";
   return (
-    <div className="grid grid-cols-[minmax(0,9rem)_1fr_auto] items-center gap-3 py-1.5">
+    <div className="grid grid-cols-[minmax(0,12rem)_1fr_auto] items-center gap-3 py-1.5">
       <span className="truncate text-sm text-muted" title={meta.hint}>
         {meta.label}
       </span>
@@ -45,8 +47,11 @@ function VsAverage({ k, player, avg }: { k: StatKey; player: Aggregate; avg: Agg
         <div className="absolute inset-y-0 left-0 rounded-full bg-gold/80" style={{ width: `${(a / max) * 100}%` }} />
         <div className="absolute -inset-y-1 w-0.5 rounded bg-text/70" style={{ left: `calc(${(b / max) * 100}% - 1px)` }} title={`Média: ${stat(k, b, true)}`} />
       </div>
-      <div className="flex w-28 items-center justify-end gap-2">
-        <span className="tabular text-sm font-medium">{stat(k, a, true)}</span>
+      <div className="flex w-40 items-center justify-end gap-2">
+        <span className="tabular text-sm font-medium">
+          {stat(k, a, true)}
+          {unit && <span className="ml-0.5 text-xs font-normal text-faint">{unit}</span>}
+        </span>
         <Delta pct={diffPct(a, b)} higherIsBetter={meta.higherIsBetter} />
       </div>
     </div>
@@ -254,7 +259,7 @@ export function PlayerPage() {
                 ))}
               </div>
               <p className="border-t border-line px-5 py-2.5 text-xs text-faint">
-                Valores por minuto de luta (boons: média por luta; uptime: % do tempo ativo, e “Pilhas de Poder” é a média de pilhas). O traço branco é a média dos jogadores na função escolhida, com os mesmos filtros.
+                Valores por minuto de luta (boons: média por luta; uptime: % do tempo ativo, e “Pilhas de Poder” é a média de pilhas). + verde é melhor que a média e − vermelho é pior (em mortes, dano recebido e vezes derrubado, menos é melhor). O traço branco é a média dos jogadores na função escolhida, com os mesmos filtros.
               </p>
             </Card>
           )}

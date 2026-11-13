@@ -148,13 +148,21 @@ export function Empty({ title, children }: { title: string; children?: ReactNode
 }
 
 /** Variação em relação à média: verde se melhor, vermelho se pior. */
+/**
+ * Diferença em relação à média, do ponto de vista de quem lê: "+" verde é melhor que a média e "−" vermelho é pior, mesmo
+ * quando o número caiu (em mortes e dano recebido, menos é melhor, então 51% menos mortes é "+51% melhor"). A direção
+ * real do número fica no tooltip.
+ */
 export function Delta({ pct, higherIsBetter = true }: { pct: number | null; higherIsBetter?: boolean }) {
   if (pct == null || !Number.isFinite(pct)) return null;
-  const good = higherIsBetter ? pct >= 0 : pct <= 0;
+  const n = Math.round(Math.abs(pct));
+  if (n === 0) return <span className="tabular text-xs font-semibold text-muted" title="Igual à média">0%</span>;
+  const up = pct > 0;
+  const good = up === higherIsBetter;
+  const title = `${n}% ${up ? "acima" : "abaixo"} da média${higherIsBetter ? "" : " (nesta métrica, menos é melhor)"}`;
   return (
-    <span className={cx("tabular text-xs font-semibold", good ? "text-good" : "text-bad")}>
-      {pct >= 0 ? "+" : ""}
-      {Math.round(pct)}%
+    <span className={cx("tabular text-xs font-semibold", good ? "text-good" : "text-bad")} title={title}>
+      {good ? "+" : "−"}{n}%
     </span>
   );
 }
