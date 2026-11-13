@@ -10,6 +10,7 @@ import {
   STAT_KEYS,
   STAT_META,
   statsOfGroup,
+  statText,
   uptimeValue,
   type Aggregate,
   type PlayerHistoryRow,
@@ -25,6 +26,7 @@ import { SkillIcon } from "../components/MediaIcon";
 import { Badge, Button, Card, Delta, Empty, ErrorBox, Kpi, Loading, PageHeader, Select, cx } from "../components/ui";
 import { usePlayer, usePlayerSkills, useRanking } from "../lib/api";
 import { mainRole, setMe, useFilters, useMe } from "../lib/hooks";
+import { getLang, t as tr } from "../lib/i18n"; // "t" já é o total do jogador nesta página
 import { BaselinePicker, type BaselineRole } from "../components/BaselinePicker";
 import { accountShort, axis, compact, date, dateTime, diffPct, duration, int, stat } from "../lib/format";
 
@@ -40,8 +42,8 @@ function VsAverage({ k, player, avg }: { k: StatKey; player: Aggregate; avg: Agg
   const unit = isUptimeStat(k) ? "" : meta.format === "volume" ? "/luta" : "/min";
   return (
     <div className="grid grid-cols-[minmax(0,12rem)_1fr_auto] items-center gap-3 py-1.5">
-      <span className="truncate text-sm text-muted" title={meta.hint}>
-        {meta.label}
+      <span className="truncate text-sm text-muted" title={statText(k, getLang()).hint}>
+        {statText(k, getLang()).label}
       </span>
       <div className="relative h-2.5 rounded-full bg-surface-3">
         <div className="absolute inset-y-0 left-0 rounded-full bg-gold/80" style={{ width: `${(a / max) * 100}%` }} />
@@ -193,10 +195,10 @@ export function PlayerPage() {
               action={
                 <Select className="w-52" value={metric} onChange={(e) => setMetric(e.target.value as StatKey)} aria-label="Métrica">
                   {STAT_GROUPS.map((g) => (
-                    <optgroup key={g.id} label={g.label}>
+                    <optgroup key={g.id} label={tr(`group.${g.id}`)}>
                       {statsOfGroup(g.id).map((k) => (
                         <option key={k} value={k}>
-                          {STAT_META[k].label}
+                          {statText(k, getLang()).label}
                           {STAT_META[k].format === "volume" || isUptimeStat(k) ? "" : " / min"}
                         </option>
                       ))}
@@ -246,7 +248,7 @@ export function PlayerPage() {
                 <div className="flex gap-1">
                   {STAT_GROUPS.map((g) => (
                     <button key={g.id} onClick={() => setGroup(g.id)} className={cx("rounded-md px-2 py-1 text-xs font-medium", group === g.id ? "bg-surface-3 text-gold" : "text-muted hover:text-text")}>
-                      {g.label}
+                      {tr(`group.${g.id}`)}
                     </button>
                   ))}
                 </div>
@@ -287,7 +289,7 @@ export function MePage() {
   if (me) return <Navigate to={`/jogadores/${encodeURIComponent(me)}`} replace />;
   return (
     <>
-      <PageHeader title="Meu perfil" subtitle="Escolha sua conta para ver só o seu histórico e se comparar com o squad." />
+      <PageHeader title={tr("page.me.title")} subtitle={tr("page.me.subtitle")} />
       <Card className="max-w-xl p-5">
         <PlayerPicker onPick={(a) => setMe(a)} button="Sou eu" />
         <p className="mt-3 text-xs text-faint">Fica salvo só neste navegador. Sua conta precisa aparecer em pelo menos um log enviado.</p>

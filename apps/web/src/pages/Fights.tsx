@@ -6,6 +6,7 @@ import { FightStatus, KillDeath, SquadVsEnemy, Won } from "../components/FightBi
 import { Card, Empty, ErrorBox, Loading, PageHeader } from "../components/ui";
 import { useFights } from "../lib/api";
 import { useFilters } from "../lib/hooks";
+import { t } from "../lib/i18n";
 import { compact, dateTime, duration } from "../lib/format";
 
 const columns: Column<Fight>[] = [
@@ -42,7 +43,7 @@ export function FightsPage() {
 
   return (
     <>
-      <PageHeader title="Lutas" subtitle="Cada log enviado vira uma luta. Clique para ver os detalhes." />
+      <PageHeader title={t("page.fights.title")} subtitle={t("page.fights.subtitle")} />
       <FilterBar value={filters} onChange={setFilters} fields={["period", "day", "map", "size", "duration", "guild"]} />
       {error && <ErrorBox error={error} />}
       {isLoading && <Loading />}

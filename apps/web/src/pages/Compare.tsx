@@ -2,7 +2,7 @@ import { X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { PolarAngleAxis, PolarGrid, Radar, RadarChart, ResponsiveContainer, Tooltip, Legend } from "recharts";
-import { isUptimeStat, perMinute, STAT_META, statsOfGroup, uptimeValue, type Aggregate, type StatGroup, type StatKey } from "@gw2logs/shared";
+import { isUptimeStat, perMinute, STAT_META, statsOfGroup, statText, uptimeValue, type Aggregate, type StatGroup, type StatKey } from "@gw2logs/shared";
 import { FilterBar } from "../components/FilterBar";
 import { GroupTabs } from "../components/statColumns";
 import { PlayerPicker } from "../components/PlayerPicker";
@@ -11,6 +11,7 @@ import { SERIES, TOOLTIP } from "../components/charts";
 import { Card, Empty, ErrorBox, Loading, PageHeader, cx } from "../components/ui";
 import { useCompare, useRanking } from "../lib/api";
 import { mainRole, useFilters, useMe } from "../lib/hooks";
+import { getLang, t } from "../lib/i18n";
 import { BaselinePicker, type BaselineRole } from "../components/BaselinePicker";
 import { accountShort, duration, stat } from "../lib/format";
 
@@ -47,14 +48,14 @@ export function ComparePage() {
     const meta = STAT_META[k];
     // quando menor é melhor (mortes, dano recebido), inverte: 100 = nada, 0 = o pior
     const norm = (v: number) => (meta.higherIsBetter ? (v / max) * 100 : (1 - v / max) * 100);
-    const row: Record<string, number | string> = { metric: meta.short, Média: norm(avg) };
+    const row: Record<string, number | string> = { metric: statText(k, getLang()).short, Média: norm(avg) };
     players.forEach((p, i) => (row[`p${i}`] = norm(vals[i]!)));
     return row;
   });
 
   return (
     <>
-      <PageHeader title="Comparar jogadores" subtitle="Até 4 jogadores lado a lado, por minuto de luta, contra a média do squad com os mesmos filtros." />
+      <PageHeader title={t("page.compare.title")} subtitle={t("page.compare.subtitle")} />
       <FilterBar value={filters} onChange={setFilters} fields={["period", "day", "role", "profession", "size", "map"]} />
 
       <Card className="mb-6 p-4">
@@ -148,8 +149,8 @@ export function ComparePage() {
                       const best = meta.higherIsBetter ? Math.max(...vals) : Math.min(...vals);
                       return (
                         <tr key={k} className="border-t border-line/60">
-                          <td className="px-4 py-2 text-muted" title={meta.hint}>
-                            {meta.label}
+                          <td className="px-4 py-2 text-muted" title={statText(k, getLang()).hint}>
+                            {statText(k, getLang()).label}
                           </td>
                           {vals.map((v, i) => (
                             <td key={i} className={cx("px-4 py-2 text-right", v === best && players.length > 1 && v !== 0 ? "font-semibold text-gold" : v === 0 ? "text-faint" : "")}>

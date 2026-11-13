@@ -6,6 +6,7 @@ import { KillDeath } from "../components/FightBits";
 import { Card, Empty, ErrorBox, Loading, PageHeader } from "../components/ui";
 import { useDays } from "../lib/api";
 import { useFilters } from "../lib/hooks";
+import { t } from "../lib/i18n";
 import { dayLabel, duration, int } from "../lib/format";
 
 const link = (page: string, day: string) => `/${page}?${filtersToQuery({ mode: "wvw", day: [day] })}`;
@@ -40,7 +41,7 @@ export function DaysPage() {
 
   return (
     <>
-      <PageHeader title="Dias de batalha" subtitle="Cada dia vai das 06:00 às 06:00 (Brasília): a noite que passa da meia-noite continua no mesmo dia." />
+      <PageHeader title={t("page.days.title")} subtitle={t("page.days.subtitle")} />
       <FilterBar value={filters} onChange={setFilters} fields={["period", "guild", "size", "map"]} />
       {error && <ErrorBox error={error} />}
       {isLoading && <Loading />}

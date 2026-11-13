@@ -9,6 +9,7 @@ import { GuildTag, PlayerLink, Profession, ProfessionDot } from "../components/b
 import { Button, Card, Empty, ErrorBox, Kpi, Loading, PageHeader, cx } from "../components/ui";
 import { useOverview, useRanking } from "../lib/api";
 import { useFilters } from "../lib/hooks";
+import { t } from "../lib/i18n";
 import { accountShort, compact, dateTime, dec, duration, int, stat } from "../lib/format";
 
 const BOARDS: { key: StatKey; title: string }[] = [
@@ -101,8 +102,8 @@ export function OverviewPage() {
   return (
     <>
       <PageHeader
-        title="Visão geral"
-        subtitle="O desempenho do clã e da aliança nas lutas enviadas."
+        title={t("page.overview.title")}
+        subtitle={t("page.overview.subtitle")}
         actions={
           <Link to="/enviar">
             <Button variant="primary">

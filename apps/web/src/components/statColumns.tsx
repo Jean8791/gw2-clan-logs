@@ -1,8 +1,9 @@
-import { isUptimeStat, perMinute, perSecond, STAT_GROUPS, STAT_META, statsOfGroup, uptimeValue, type StatGroup, type StatKey, type Stats } from "@gw2logs/shared";
+import { isUptimeStat, perMinute, perSecond, STAT_GROUPS, STAT_META, statsOfGroup, statText, uptimeValue, type StatGroup, type StatKey, type Stats } from "@gw2logs/shared";
 import { BuffIcon } from "./MediaIcon";
 import type { Column } from "./DataTable";
 import { Segmented, cx } from "./ui";
 import { stat } from "../lib/format";
+import { getLang, t } from "../lib/i18n";
 
 export type ValueMode = "total" | "perMin" | "perSec";
 
@@ -10,6 +11,7 @@ export type ValueMode = "total" | "perMin" | "perSec";
 export function statColumns<T extends Stats & { activeMs: number }>(group: StatGroup, mode: ValueMode, rows: T[]): Column<T>[] {
   return statsOfGroup(group).map((k: StatKey) => {
     const meta = STAT_META[k];
+    const text = statText(k, getLang());
     // uptime é % do tempo ativo (ou média de pilhas) nos dois modos: o "por minuto" não se aplica
     const uptime = isUptimeStat(k);
     const isRate = mode !== "total" && meta.format !== "volume" && !uptime;
@@ -20,10 +22,10 @@ export function statColumns<T extends Stats & { activeMs: number }>(group: StatG
     const label = meta.buffId ? (
       <span className="inline-flex items-center gap-1">
         <BuffIcon id={meta.buffId} />
-        {meta.short}
+        {text.short}
       </span>
     ) : (
-      meta.short
+      text.short
     );
     return {
       id: k,
@@ -31,12 +33,12 @@ export function statColumns<T extends Stats & { activeMs: number }>(group: StatG
       header: isRate ? (
         <span className="inline-flex flex-col items-end leading-tight">
           {label}
-          <span className="text-[9px] font-normal normal-case tracking-normal text-faint">{perSec ? "por seg" : "por min"}</span>
+          <span className="text-[9px] font-normal normal-case tracking-normal text-faint">{t(perSec ? "rate.perSec" : "rate.perMin")}</span>
         </span>
       ) : (
         label
       ),
-      title: [meta.hint ? `${meta.label} — ${meta.hint}` : meta.label, isRate && (perSec ? "por segundo de luta" : "por minuto de luta")].filter(Boolean).join(" · "),
+      title: [text.hint ? `${text.label} — ${text.hint}` : text.label, isRate && t(perSec ? "rate.titleSec" : "rate.titleMin")].filter(Boolean).join(" · "),
       align: "right",
       sort: value,
       cell: (r: T) => {
@@ -48,7 +50,7 @@ export function statColumns<T extends Stats & { activeMs: number }>(group: StatG
 }
 
 export function GroupTabs({ value, onChange }: { value: StatGroup; onChange: (g: StatGroup) => void }) {
-  return <Segmented value={value} onChange={onChange} options={STAT_GROUPS.map((g) => ({ value: g.id, label: g.label }))} />;
+  return <Segmented value={value} onChange={onChange} options={STAT_GROUPS.map((g) => ({ value: g.id, label: t(`group.${g.id}`) }))} />;
 }
 
 export function ModeToggle({ value, onChange }: { value: ValueMode; onChange: (m: ValueMode) => void }) {
@@ -58,9 +60,9 @@ export function ModeToggle({ value, onChange }: { value: ValueMode; onChange: (m
       value={value}
       onChange={onChange}
       options={[
-        { value: "total", label: "Total" },
-        { value: "perMin", label: "Por minuto" },
-        { value: "perSec", label: "Por segundo" },
+        { value: "total", label: t("mode.total") },
+        { value: "perMin", label: t("mode.perMin") },
+        { value: "perSec", label: t("mode.perSec") },
       ]}
     />
   );

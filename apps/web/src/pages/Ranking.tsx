@@ -10,6 +10,7 @@ import { Button, Card, Empty, ErrorBox, Loading, PageHeader, Select, cx } from "
 import { useRanking } from "../lib/api";
 import { useFilters, useMe } from "../lib/hooks";
 import { duration } from "../lib/format";
+import { t } from "../lib/i18n";
 
 const SORT_BY_GROUP: Record<StatGroup, string> = { offense: "damage", support: "strips", boons: "stabOut", uptime: "stabUp", defense: "damageTaken" };
 
@@ -38,7 +39,7 @@ export function RankingPage() {
       cell: (r) => (
         <input
           type="checkbox"
-          aria-label="Selecionar para comparar"
+          aria-label={t("ranking.selectToCompare")}
           className="size-4 cursor-pointer accent-[#e0b25a]"
           checked={selected.includes(r.account)}
           onChange={() => toggle(r.account)}
@@ -47,15 +48,15 @@ export function RankingPage() {
       ),
     },
     { id: "pos", header: "#", align: "right", cell: (_r, i) => <span className="text-faint">{i + 1}</span> },
-    { id: "player", header: "Jogador", sticky: true, fixed: true, sort: (r) => r.name ?? r.account, cell: (r) => <PlayerLink account={r.account} name={r.name} /> },
-    { id: "prof", header: "Classe", sort: (r) => r.profession ?? "", cell: (r) => <Profession profession={r.profession} /> },
-    { id: "guild", header: "Guilda", cell: (r) => <GuildTag id={r.guildId} /> },
-    { id: "fights", header: "Lutas", align: "right", sort: (r) => r.fights, cell: (r) => r.fights },
-    { id: "time", header: "Tempo", align: "right", sort: (r) => r.activeMs, cell: (r) => <span className="text-muted">{duration(r.activeMs)}</span> },
+    { id: "player", header: t("table.player"), sticky: true, fixed: true, sort: (r) => r.name ?? r.account, cell: (r) => <PlayerLink account={r.account} name={r.name} /> },
+    { id: "prof", header: t("table.class"), sort: (r) => r.profession ?? "", cell: (r) => <Profession profession={r.profession} /> },
+    { id: "guild", header: t("table.guild"), cell: (r) => <GuildTag id={r.guildId} /> },
+    { id: "fights", header: t("table.fights"), align: "right", sort: (r) => r.fights, cell: (r) => r.fights },
+    { id: "time", header: t("table.time"), align: "right", sort: (r) => r.activeMs, cell: (r) => <span className="text-muted">{duration(r.activeMs)}</span> },
     {
       id: "sup",
-      header: "Suporte",
-      title: "Em quantas lutas jogou como suporte",
+      header: t("table.support"),
+      title: t("table.supportTitle"),
       align: "right",
       sort: (r) => r.supportFights / r.fights,
       cell: (r) => <span className="text-muted">{Math.round((r.supportFights / r.fights) * 100)}%</span>,
@@ -76,11 +77,11 @@ export function RankingPage() {
   return (
     <>
       <PageHeader
-        title="Ranking"
-        subtitle="Some as lutas por período, guilda, função ou classe. Os filtros ficam no link: dá para mandar no Discord."
+        title={t("page.ranking.title")}
+        subtitle={t("page.ranking.subtitle")}
         actions={
           <Button onClick={copyLink}>
-            <Link2 className="size-4" /> {copied ? "Link copiado!" : "Copiar link"}
+            <Link2 className="size-4" /> {copied ? t("common.linkCopied") : t("common.copyLink")}
           </Button>
         }
       />
@@ -90,17 +91,17 @@ export function RankingPage() {
         <div className="flex flex-wrap items-center gap-3 border-b border-line px-4 py-3">
           <GroupTabs value={group} onChange={setGroup} />
           <ModeToggle value={mode} onChange={setMode} />
-          <Select className="w-44" value={String(minMinutes)} onChange={(e) => setMinMinutes(Number(e.target.value))} aria-label="Tempo mínimo de luta">
-            <option value="0">Qualquer tempo</option>
-            <option value="2">Mín. 2 min de luta</option>
-            <option value="5">Mín. 5 min de luta</option>
-            <option value="15">Mín. 15 min de luta</option>
-            <option value="60">Mín. 1 h de luta</option>
+          <Select className="w-56" value={String(minMinutes)} onChange={(e) => setMinMinutes(Number(e.target.value))} aria-label={t("ranking.minTime")}>
+            <option value="0">{t("ranking.minTime.any")}</option>
+            <option value="2">{t("ranking.minTime.2")}</option>
+            <option value="5">{t("ranking.minTime.5")}</option>
+            <option value="15">{t("ranking.minTime.15")}</option>
+            <option value="60">{t("ranking.minTime.60")}</option>
           </Select>
           <div className={cx("ml-auto flex items-center gap-2 transition", selected.length ? "opacity-100" : "pointer-events-none opacity-0")}>
-            <span className="text-xs text-muted">{selected.length}/4 selecionados</span>
+            <span className="text-xs text-muted">{t("ranking.selected", { n: selected.length })}</span>
             <Button variant="ghost" size="sm" onClick={() => setSelected([])}>
-              Limpar
+              {t("common.clear")}
             </Button>
             <Button
               variant="primary"
@@ -110,7 +111,7 @@ export function RankingPage() {
                 nav(`/comparar?accounts=${encodeURIComponent(selected.join(","))}${q ? `&${q}` : ""}`);
               }}
             >
-              <GitCompareArrows className="size-4" /> Comparar
+              <GitCompareArrows className="size-4" /> {t("common.compare")}
             </Button>
           </div>
         </div>
@@ -120,7 +121,7 @@ export function RankingPage() {
           </div>
         )}
         {isLoading && <Loading />}
-        {data && rows.length === 0 && <Empty title="Ninguém com esses filtros">Tente outro período, guilda ou um tempo mínimo menor.</Empty>}
+        {data && rows.length === 0 && <Empty title={t("ranking.empty.title")}>{t("ranking.empty.text")}</Empty>}
         {data && rows.length > 0 && (
           <DataTable
             key={group}
@@ -135,12 +136,7 @@ export function RankingPage() {
           />
         )}
       </Card>
-      <p className="mt-3 text-xs text-faint">
-        “Total” soma todas as lutas do filtro. “Por minuto” divide pelo tempo ativo de cada jogador (0,74 em Kills = 0,74 abate por minuto) e serve
-        para comparar quem jogou mais ou menos lutas. “Por segundo” é a mesma conta por segundo (o DPS). Suporte é a parcela das lutas em que a pessoa jogou de suporte. Boons mostram o volume gerado
-        para o squad (unidade do Elite Insights). Uptime é a % do tempo ativo do jogador com o boon (em Estab. e Poder, o tempo com pelo menos uma
-        pilha; “Poder (pilhas)” é a média de pilhas). A função (DPS/suporte) é estimada por luta, pela cura, barreira e boons gerados.
-      </p>
+      <p className="mt-3 text-xs text-faint">{t("ranking.note")}</p>
     </>
   );
 }

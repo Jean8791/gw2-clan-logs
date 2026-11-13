@@ -7,6 +7,7 @@ import { Button, Card, ErrorBox, Input, PageHeader, cx } from "../components/ui"
 import { uploadLogs, useConfig, useFights } from "../lib/api";
 import { useMe, useSessionValue } from "../lib/hooks";
 import { accountShort } from "../lib/format";
+import { t } from "../lib/i18n";
 
 const ACCEPT = [".zevtc", ".evtc", ".zip", ".json"];
 
@@ -55,7 +56,7 @@ export function UploadPage() {
 
   return (
     <>
-      <PageHeader title="Enviar logs" subtitle="Arraste os arquivos do ArcDPS. Cada log vira uma luta; o mesmo arquivo enviado duas vezes é ignorado." />
+      <PageHeader title={t("page.upload.title")} subtitle={t("page.upload.subtitle")} />
 
       <div className="grid gap-6 lg:grid-cols-[1fr_340px]">
         <div className="flex flex-col gap-4">

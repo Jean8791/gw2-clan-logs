@@ -12,6 +12,7 @@ import { Badge, Button, Card, ErrorBox, Kpi, Loading, PageHeader, Segmented, Sel
 import { useFight } from "../lib/api";
 import { useMe } from "../lib/hooks";
 import { accountShort, axis, compact, dateTime, duration, int } from "../lib/format";
+import { t } from "../lib/i18n";
 
 interface GroupRow extends Stats {
   id: string;
@@ -122,7 +123,7 @@ export function FightPage() {
       </Link>
       <PageHeader
         title={f.fightName}
-        subtitle={`${dateTime(f.timeStart)} · ${duration(f.durationMs)}${f.recordedBy ? ` · gravado por ${f.recordedBy}` : ""}${f.uploader ? ` · enviado por ${f.uploader}` : ""}`}
+        subtitle={`${dateTime(f.timeStart)} · ${duration(f.durationMs)}${f.recordedBy ? ` · ${t("page.fight.recordedBy", { name: f.recordedBy })}` : ""}${f.uploader ? ` · ${t("page.fight.uploadedBy", { name: f.uploader })}` : ""}`}
         actions={
           f.hasReport && (
             <a href={`/api/fights/${f.id}/report`} target="_blank" rel="noreferrer">

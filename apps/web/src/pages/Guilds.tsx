@@ -8,6 +8,7 @@ import { Badge, Card, ErrorBox, Input, Loading, PageHeader, cx } from "../compon
 import { setGuildAlliance, useConfig, useGuilds } from "../lib/api";
 import { useSessionValue } from "../lib/hooks";
 import { date } from "../lib/format";
+import { t } from "../lib/i18n";
 
 export function GuildsPage() {
   const { data, error, isLoading } = useGuilds();
@@ -66,8 +67,8 @@ export function GuildsPage() {
   return (
     <>
       <PageHeader
-        title="Guildas"
-        subtitle="Marque com ★ as guildas da sua aliança. Depois filtre o ranking e as lutas por “Só a aliança” ou por guilda."
+        title={t("page.guilds.title")}
+        subtitle={t("page.guilds.subtitle")}
       />
       {cfg?.adminKeyRequired && (
         <Card className="mb-4 max-w-md p-4">

@@ -1,6 +1,7 @@
 import clsx from "clsx";
 import { AlertTriangle, Loader2 } from "lucide-react";
 import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, SelectHTMLAttributes } from "react";
+import { t } from "../lib/i18n";
 
 export const cx = clsx;
 
@@ -122,7 +123,7 @@ export function Kpi({ label, value, hint, accent }: { label: string; value: Reac
   );
 }
 
-export function Loading({ label = "Carregando…" }: { label?: string }) {
+export function Loading({ label = t("loading") }: { label?: string }) {
   return (
     <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted">
       <Loader2 className="size-4 animate-spin" /> {label}
@@ -133,7 +134,7 @@ export function Loading({ label = "Carregando…" }: { label?: string }) {
 export function ErrorBox({ error }: { error: unknown }) {
   return (
     <div className="flex items-center gap-2 rounded-xl border border-bad/30 bg-bad/10 px-4 py-3 text-sm text-bad">
-      <AlertTriangle className="size-4 shrink-0" /> {error instanceof Error ? error.message : "Algo deu errado."}
+      <AlertTriangle className="size-4 shrink-0" /> {error instanceof Error ? error.message : t("error.generic")}
     </div>
   );
 }

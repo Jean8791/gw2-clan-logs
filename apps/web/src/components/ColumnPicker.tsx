@@ -1,5 +1,6 @@
 import { Columns3 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { t } from "../lib/i18n";
 import { cx } from "./ui";
 
 export interface PickableColumn {
@@ -43,7 +44,7 @@ export function ColumnPicker({ columns, hidden, onChange }: { columns: PickableC
         )}
       >
         <Columns3 className="size-3.5" />
-        Colunas
+        {t("table.columns")}
         <span className="tabular text-faint">
           {shown}/{pickable.length}
         </span>
@@ -57,7 +58,7 @@ export function ColumnPicker({ columns, hidden, onChange }: { columns: PickableC
               disabled={hidden.length === 0}
               className="mb-1 w-full rounded-md px-2 py-1.5 text-left text-xs font-medium text-gold hover:bg-surface-2 disabled:text-faint disabled:hover:bg-transparent"
             >
-              Mostrar todas
+              {t("table.showAll")}
             </button>
             {pickable.map((c) => (
               <label key={c.id} className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-surface-2">
