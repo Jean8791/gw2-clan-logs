@@ -398,4 +398,16 @@ export const professionColor = (p: string | null | undefined): string =>
 export const perMinute = (value: number, activeMs: number): number => (activeMs > 0 ? (value * 60000) / activeMs : 0);
 
 /** Valor por segundo de tempo ativo em luta (o "DPS"). */
+/**
+ * Os `n` jogadores com mais `key` por minuto de tempo ativo, do maior para o menor. Ignora quem lutou menos de `minActiveMs`
+ * (quem apareceu 10 s) e quem tem zero. O cartão do top 5 e o painel do top 10 usam esta mesma conta.
+ */
+export function topByRate<T extends Stats & { activeMs: number }>(rows: T[], key: StatKey, n: number, minActiveMs: number): { row: T; perMin: number }[] {
+  return rows
+    .filter((r) => r.activeMs >= minActiveMs && r[key] > 0)
+    .map((row) => ({ row, perMin: perMinute(row[key], row.activeMs) }))
+    .sort((a, b) => b.perMin - a.perMin)
+    .slice(0, n);
+}
+
 export const perSecond = (value: number, activeMs: number): number => (activeMs > 0 ? (value * 1000) / activeMs : 0);
