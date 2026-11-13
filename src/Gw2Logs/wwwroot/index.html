@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Logs do Clã</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><path d='M16 2 4 8v8c0 7 5 12 12 14 7-2 12-7 12-14V8z' fill='%23c9a227'/></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#/">
+      <svg viewBox="0 0 32 32" width="22" height="22" aria-hidden="true"><path d="M16 2 4 8v8c0 7 5 12 12 14 7-2 12-7 12-14V8z" fill="currentColor"/></svg>
+      <span>Logs do Clã</span>
+    </a>
+    <nav>
+      <a href="#/" data-nav="fights">Lutas</a>
+      <a href="#/ranking" data-nav="ranking">Ranking</a>
+      <a href="#/upload" data-nav="upload" class="btn-primary">Enviar logs</a>
+    </nav>
+  </header>
+  <main id="app" aria-live="polite"></main>
+  <script src="app.js"></script>
+</body>
+</html>

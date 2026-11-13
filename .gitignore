@@ -1,0 +1,20 @@
+# Dados do clã (logs enviados, banco, relatórios): nunca versionar
+data/
+logs-arcdps/
+*.zevtc
+*.evtc
+
+# Elite Insights: baixado pelo iniciar.ps1 / Dockerfile
+tools/
+
+# Build do .NET
+bin/
+obj/
+*.user
+
+# Editor / SO
+.vs/
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini

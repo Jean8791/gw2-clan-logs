@@ -1,0 +1,3 @@
+# Scripts de shell precisam de fim de linha LF para rodar no Linux
+*.sh text eol=lf
+Dockerfile text eol=lf
