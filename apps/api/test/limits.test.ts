@@ -191,6 +191,17 @@ describe("envio: limites de capacidade", () => {
     expect(res.json().map((r: any) => r.code ?? r.status)).toEqual(["queued", "hourlyLimit"]);
   });
 
+  it("log duplicado não é recusado por fila cheia: continua sendo só ignorado", async () => {
+    const a = await start({ UPLOAD_MAX_QUEUE: "1" });
+    const first = await upload(a, [{ name: "a.json", content: fightJson(1) }]);
+    expect(first.json()[0].status).toBe("queued");
+
+    const again = await upload(a, [{ name: "a.json", content: fightJson(1) }]);
+
+    expect(again.json()[0]).toMatchObject({ duplicate: true });
+    expect(again.json()[0].code).toBeUndefined();
+  });
+
   it("extensão inválida continua dando badFormat antes de olhar os limites", async () => {
     const a = await start({ UPLOAD_MAX_QUEUE: "1" });
     putRow(a, "q1", "queued", new Date().toISOString());
@@ -203,7 +214,7 @@ describe("configuração dos limites", () => {
   it("valores padrão sensatos", () => {
     const c = loadConfig({});
 
-    expect(c.limits).toEqual({ maxFailedKeys: 5, blockMinutes: 15, maxQueue: 30, maxPerHour: 100, maxUploadsMb: 4096 });
+    expect(c.limits).toEqual({ maxFailedKeys: 5, blockMinutes: 15, maxQueue: 30, maxPerHour: 500, maxUploadsMb: 4096 });
     expect(c.trustProxy).toBe(false);
   });
 

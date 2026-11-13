@@ -61,7 +61,7 @@ npm test
 | `TRUST_PROXY` | `true` atrás do Caddy: conta o IP real do cliente nos bloqueios. O compose já liga | `false` |
 | `UPLOAD_MAX_FAILS` / `UPLOAD_BLOCK_MIN` | Erros de senha seguidos do mesmo IP até bloquear, e por quantos minutos | `5` / `15` |
 | `UPLOAD_MAX_QUEUE` | Logs esperando ou em processamento; acima disso o envio é recusado | `30` |
-| `UPLOAD_MAX_PER_HOUR` | Logs aceitos por hora | `100` |
+| `UPLOAD_MAX_PER_HOUR` | Logs novos aceitos por hora | `500` |
 | `UPLOAD_MAX_DISK_MB` | Espaço máximo dos logs enviados | `4096` |
 | `APP_MEM_LIMIT` (compose) | Teto de memória do container; em VM de 1 GB use `800m` | `1500m` |
 

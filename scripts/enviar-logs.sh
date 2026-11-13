@@ -19,7 +19,9 @@ QUEUE_WAIT=${GW2LOGS_QUEUE_WAIT:-60}
 erro() { echo "enviar-logs: $*" >&2; }
 
 if [ -f "$CONFIG_FILE" ]; then
-  while IFS='=' read -r nome valor; do
+  # `|| [ -n "$nome" ]` lê também a última linha sem quebra de linha; o ${valor%$'\r'} tira o CR de arquivos do Windows
+  while IFS='=' read -r nome valor || [ -n "$nome" ]; do
+    valor=${valor%$'\r'}
     case "$nome" in GW2LOGS_URL | GW2LOGS_KEY | GW2LOGS_UPLOADER) [ -z "${!nome:-}" ] && export "$nome=$valor" ;; esac
   done <"$CONFIG_FILE"
 fi
@@ -59,9 +61,12 @@ resumo() { echo "Resumo: $sent enviado(s), $known já enviado(s), $failed com er
 post() {
   local key=${GW2LOGS_KEY//\\/\\\\}
   key=${key//\"/\\\"}
+  # no -F do curl, ; , e aspas têm significado: o caminho vai entre aspas, com \ e " escapados
+  local caminho=${1//\\/\\\\}
+  caminho=${caminho//\"/\\\"}
   local out
   out=$(printf 'header = "X-Upload-Key: %s"\n' "$key" | curl -sS --config - -m 900 -w '\n%{http_code}' \
-    -F "file=@$1" ${GW2LOGS_UPLOADER:+-F "uploader=$GW2LOGS_UPLOADER"} "$URL/api/upload") || return 1
+    -F "file=@\"$caminho\"" ${GW2LOGS_UPLOADER:+--form-string "uploader=$GW2LOGS_UPLOADER"} "$URL/api/upload") || return 1
   http=${out##*$'\n'}
   body=${out%$'\n'*}
 }

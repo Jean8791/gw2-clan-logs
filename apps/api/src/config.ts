@@ -60,7 +60,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       maxFailedKeys: positive(env.UPLOAD_MAX_FAILS, 5),
       blockMinutes: positive(env.UPLOAD_BLOCK_MIN, 15),
       maxQueue: positive(env.UPLOAD_MAX_QUEUE, 30),
-      maxPerHour: positive(env.UPLOAD_MAX_PER_HOUR, 100),
+      maxPerHour: positive(env.UPLOAD_MAX_PER_HOUR, 500),
       maxUploadsMb: positive(env.UPLOAD_MAX_DISK_MB, 4096),
     },
   };

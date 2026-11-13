@@ -99,12 +99,6 @@ export async function buildApp(cfg: Config, opts: { logger?: boolean } = {}): Pr
         results.push({ file: part.filename, error: "Invalid format (use .zevtc, .evtc or the Elite Insights .json).", code: "badFormat" });
         continue;
       }
-      const blocked = await uploadBlocker();
-      if (blocked) {
-        part.file.resume();
-        results.push({ file: part.filename, error: LIMIT_MESSAGES[blocked], code: blocked });
-        continue;
-      }
       // grava num temporário calculando o hash: o mesmo log enviado duas vezes é ignorado
       const tmp = path.join(p.uploads, `tmp-${crypto.randomUUID()}`);
       const hash = crypto.createHash("sha256");
@@ -123,6 +117,13 @@ export async function buildApp(cfg: Config, opts: { logger?: boolean } = {}): Pr
       if (existing) {
         await fs.rm(tmp, { force: true });
         results.push({ file: part.filename, id: existing.id, status: existing.status, duplicate: true });
+        continue;
+      }
+      // os limites valem só para log novo: um duplicado é ignorado de qualquer jeito e não custa nada
+      const blocked = await uploadBlocker();
+      if (blocked) {
+        await fs.rm(tmp, { force: true });
+        results.push({ file: part.filename, error: LIMIT_MESSAGES[blocked], code: blocked });
         continue;
       }
       const id = `${new Date().toISOString().replace(/\D/g, "").slice(0, 14)}-${sha.slice(0, 8)}`;

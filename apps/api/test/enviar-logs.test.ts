@@ -27,8 +27,8 @@ const logFile = (name: string, n: number) => {
   return f;
 };
 /** Roda o script e devolve saída e código de saída (não lança quando o código não é 0). */
-const enviar = async (args: string[], key = "chave-certa") => {
-  const env = { PATH: process.env.PATH, HOME: home, GW2LOGS_URL: url, GW2LOGS_KEY: key };
+const enviar = async (args: string[], key = "chave-certa", extraEnv: Record<string, string> = {}) => {
+  const env = { PATH: process.env.PATH, HOME: home, GW2LOGS_URL: url, GW2LOGS_KEY: key, ...extraEnv };
   try {
     const r = await run("bash", [script, ...args], { env });
     return { code: 0, out: r.stdout + r.stderr };
@@ -132,5 +132,64 @@ describe("scripts/enviar-logs.sh: registro do que já foi enviado", () => {
     await outro.server.close();
 
     expect(r.stdout).toMatch(/1 enviado/);
+  });
+});
+
+describe("scripts/enviar-logs.sh: casos de borda", () => {
+  it("lê o arquivo de configuração mesmo sem quebra de linha no fim e com CRLF", async () => {
+    await start();
+    const conf = path.join(home, ".config", "gw2logs");
+    fs.mkdirSync(conf, { recursive: true });
+    fs.writeFileSync(path.join(conf, "env"), `GW2LOGS_URL=${url}\r\nGW2LOGS_KEY=chave-certa`);
+    const a = logFile("a.json", 1);
+
+    const r = await run("bash", [script, a], { env: { PATH: process.env.PATH, HOME: home } });
+
+    expect(r.stdout).toMatch(/1 enviado/);
+  });
+
+  it("variável de ambiente vale mais que o arquivo de configuração", async () => {
+    await start();
+    const conf = path.join(home, ".config", "gw2logs");
+    fs.mkdirSync(conf, { recursive: true });
+    fs.writeFileSync(path.join(conf, "env"), `GW2LOGS_URL=http://127.0.0.1:1\nGW2LOGS_KEY=chave-errada\n`);
+
+    expect((await enviar([logFile("a.json", 1)])).out).toMatch(/1 enviado/);
+  });
+
+  it("nome de arquivo com ponto e vírgula, vírgula e aspas é enviado normalmente", async () => {
+    await start();
+    const f = path.join(home, 'log; "estranho", 1.json');
+    fs.writeFileSync(f, JSON.stringify({ ...wvwFixture(), fightName: "Luta estranha" }));
+
+    const r = await enviar([f]);
+    await app.worker.idle();
+
+    expect(r.out).toMatch(/1 enviado/);
+    // o curl codifica as aspas do nome (%22), como todo multipart; o importante é o arquivo entrar inteiro
+    expect((await app.server.inject("/api/fights")).json()[0].fileName).toMatch(/^log; .*estranho.*, 1\.json$/);
+  });
+
+  it("fila cheia: espera e tenta de novo até caber", async () => {
+    await start({ UPLOAD_MAX_QUEUE: "1" });
+    app.db.prepare("INSERT INTO fights (id, sha256, status, uploaded_at) VALUES ('preso', 'sha-preso', 'queued', ?)").run(new Date().toISOString());
+    setTimeout(() => app.db.prepare("UPDATE fights SET status = 'done' WHERE id = 'preso'").run(), 700);
+
+    const r = await enviar([logFile("a.json", 1)], "chave-certa", { GW2LOGS_QUEUE_WAIT: "1" });
+
+    expect(r.code).toBe(0);
+    expect(r.out).toMatch(/Fila do servidor cheia/);
+    expect(r.out).toMatch(/1 enviado/);
+  });
+
+  it("disco cheio: para com aviso de limite e não envia nada", async () => {
+    await start({ UPLOAD_MAX_DISK_MB: "0.0005" });
+    fs.writeFileSync(path.join(dir, "uploads", "antigo.zevtc"), Buffer.alloc(2048));
+
+    const r = await enviar([logFile("a.json", 1)]);
+
+    expect(r.code).not.toBe(0);
+    expect(r.out).toMatch(/limite/i);
+    expect(r.out).toMatch(/0 enviado/);
   });
 });
