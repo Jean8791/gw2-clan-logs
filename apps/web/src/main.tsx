@@ -14,6 +14,7 @@ import { GuildsPage } from "./pages/Guilds";
 import { UploadPage } from "./pages/Upload";
 import { DaysPage } from "./pages/Days";
 import { Empty } from "./components/ui";
+import { t } from "./lib/i18n";
 import "./index.css";
 
 const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: 15_000, refetchOnWindowFocus: false } } });
@@ -22,7 +23,7 @@ const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: 15
 function NotFound() {
   const { pathname, search, hash } = useLocation();
   const novo = legacyRoute(pathname);
-  return novo ? <Navigate to={`${novo}${search}${hash}`} replace /> : <Empty title="Página não encontrada" />;
+  return novo ? <Navigate to={`${novo}${search}${hash}`} replace /> : <Empty title={t("notfound.title")} />;
 }
 
 const router = createBrowserRouter([

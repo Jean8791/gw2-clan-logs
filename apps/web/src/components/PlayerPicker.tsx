@@ -1,9 +1,10 @@
 import { useId, useState } from "react";
 import { useMeta } from "../lib/api";
+import { t } from "../lib/i18n";
 import { Button, Input } from "./ui";
 
 /** Campo com sugestões das contas que já apareceram nos logs. */
-export function PlayerPicker({ onPick, label = "Conta do GW2", button = "Escolher", exclude = [] }: { onPick: (account: string) => void; label?: string; button?: string; exclude?: string[] }) {
+export function PlayerPicker({ onPick, label = t("picker.label"), button = t("picker.button"), exclude = [] }: { onPick: (account: string) => void; label?: string; button?: string; exclude?: string[] }) {
   const { data } = useMeta();
   const [value, setValue] = useState("");
   const listId = useId();
@@ -25,7 +26,7 @@ export function PlayerPicker({ onPick, label = "Conta do GW2", button = "Escolhe
         submit();
       }}
     >
-      <Input className="flex-1" label={label} list={listId} placeholder="Nome.1234 ou nome do personagem" value={value} onChange={(e) => setValue(e.target.value)} />
+      <Input className="flex-1" label={label} list={listId} placeholder={t("picker.placeholder")} value={value} onChange={(e) => setValue(e.target.value)} />
       <datalist id={listId}>
         {players.map((p) => (
           <option key={p.account} value={p.account}>

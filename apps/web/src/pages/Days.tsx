@@ -11,23 +11,23 @@ import { dayLabel, duration, int } from "../lib/format";
 
 const link = (path: string, day: string) => `${path}?${filtersToQuery({ mode: "wvw", day: [day] })}`;
 
-const columns: Column<DaySummary>[] = [
-  { id: "day", header: "Dia", sort: (d) => d.day, cell: (d) => <span className="font-medium capitalize">{dayLabel(d.day)}</span> },
-  { id: "fights", header: "Lutas", align: "right", sort: (d) => d.fights, cell: (d) => int(d.fights) },
-  { id: "time", header: "Tempo de luta", align: "right", sort: (d) => d.durationMs, cell: (d) => duration(d.durationMs) },
-  { id: "players", header: "Jogadores", align: "right", sort: (d) => d.players, cell: (d) => int(d.players) },
-  { id: "kd", header: "Kills / mortes", align: "right", sort: (d) => d.kills - d.deaths, cell: (d) => <KillDeath kills={d.kills} deaths={d.deaths} /> },
+const columns = (): Column<DaySummary>[] => [
+  { id: "day", header: t("days.col.day"), sort: (d) => d.day, cell: (d) => <span className="font-medium capitalize">{dayLabel(d.day)}</span> },
+  { id: "fights", header: t("days.col.fights"), align: "right", sort: (d) => d.fights, cell: (d) => int(d.fights) },
+  { id: "time", header: t("days.col.time"), align: "right", sort: (d) => d.durationMs, cell: (d) => duration(d.durationMs) },
+  { id: "players", header: t("days.col.players"), align: "right", sort: (d) => d.players, cell: (d) => int(d.players) },
+  { id: "kd", header: t("days.col.kd"), align: "right", sort: (d) => d.kills - d.deaths, cell: (d) => <KillDeath kills={d.kills} deaths={d.deaths} /> },
   {
     id: "go",
-    header: "Ver",
+    header: t("days.col.go"),
     align: "right",
     cell: (d) => (
       <span className="inline-flex gap-3 text-gold">
         <Link to={link(ROUTES.fights, d.day)} onClick={(e) => e.stopPropagation()} className="hover:underline">
-          Lutas
+          {t("days.link.fights")}
         </Link>
         <Link to={link(ROUTES.ranking, d.day)} onClick={(e) => e.stopPropagation()} className="hover:underline">
-          Ranking
+          {t("days.link.ranking")}
         </Link>
       </span>
     ),
@@ -48,9 +48,9 @@ export function DaysPage() {
       {data && (
         <Card>
           {data.length === 0 ? (
-            <Empty title="Nenhum dia encontrado">Mude os filtros ou envie novos logs.</Empty>
+            <Empty title={t("days.empty.title")}>{t("empty.changeFilters")}</Empty>
           ) : (
-            <DataTable rows={data} columns={columns} rowKey={(d) => d.day} initialSort={{ id: "day", desc: true }} onRowClick={(d) => nav(link(ROUTES.fights, d.day))} />
+            <DataTable rows={data} columns={columns()} rowKey={(d) => d.day} initialSort={{ id: "day", desc: true }} onRowClick={(d) => nav(link(ROUTES.fights, d.day))} />
           )}
         </Card>
       )}

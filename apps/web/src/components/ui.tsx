@@ -1,6 +1,7 @@
 import clsx from "clsx";
 import { AlertTriangle, Loader2 } from "lucide-react";
 import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, SelectHTMLAttributes } from "react";
+import { errorText } from "../lib/errors";
 import { t } from "../lib/i18n";
 
 export const cx = clsx;
@@ -134,7 +135,7 @@ export function Loading({ label = t("loading") }: { label?: string }) {
 export function ErrorBox({ error }: { error: unknown }) {
   return (
     <div className="flex items-center gap-2 rounded-xl border border-bad/30 bg-bad/10 px-4 py-3 text-sm text-bad">
-      <AlertTriangle className="size-4 shrink-0" /> {error instanceof Error ? error.message : t("error.generic")}
+      <AlertTriangle className="size-4 shrink-0" /> {errorText(error)}
     </div>
   );
 }
@@ -157,10 +158,10 @@ export function Empty({ title, children }: { title: string; children?: ReactNode
 export function Delta({ pct, higherIsBetter = true }: { pct: number | null; higherIsBetter?: boolean }) {
   if (pct == null || !Number.isFinite(pct)) return null;
   const n = Math.round(Math.abs(pct));
-  if (n === 0) return <span className="tabular text-xs font-semibold text-muted" title="Igual à média">0%</span>;
+  if (n === 0) return <span className="tabular text-xs font-semibold text-muted" title={t("delta.equal")}>0%</span>;
   const up = pct > 0;
   const good = up === higherIsBetter;
-  const title = `${n}% ${up ? "acima" : "abaixo"} da média${higherIsBetter ? "" : " (nesta métrica, menos é melhor)"}`;
+  const title = t(up ? "delta.above" : "delta.below", { pct: n }) + (higherIsBetter ? "" : t("delta.lessIsBetter"));
   return (
     <span className={cx("tabular text-xs font-semibold", good ? "text-good" : "text-bad")} title={title}>
       {good ? "+" : "−"}{n}%

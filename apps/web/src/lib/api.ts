@@ -14,20 +14,13 @@ import {
   type UploadResult,
 } from "@gw2logs/shared";
 
-export class ApiError extends Error {
-  constructor(
-    public status: number,
-    message: string,
-  ) {
-    super(message);
-  }
-}
+import { ApiError, apiErrorFrom } from "./errors";
 
 async function get<T>(url: string): Promise<T> {
   const res = await fetch(url);
   if (!res.ok) {
     const body = await res.json().catch(() => null);
-    throw new ApiError(res.status, body?.error ?? `Erro ${res.status}`);
+    throw apiErrorFrom(res.status, body);
   }
   return res.json() as Promise<T>;
 }
@@ -104,9 +97,9 @@ export async function uploadLogs(files: File[], uploader: string, key: string, o
         /* resposta vazia */
       }
       if (xhr.status >= 200 && xhr.status < 300) resolve(body as UploadResult[]);
-      else reject(new ApiError(xhr.status, body?.error ?? `Erro ${xhr.status}`));
+      else reject(apiErrorFrom(xhr.status, body));
     };
-    xhr.onerror = () => reject(new ApiError(0, "Falha de rede ao enviar."));
+    xhr.onerror = () => reject(new ApiError(0, "Network error", "network"));
     xhr.send(form);
   });
 }
@@ -117,5 +110,5 @@ export async function setGuildAlliance(id: string, inAlliance: boolean, key: str
     headers: { "Content-Type": "application/json", ...(key ? { "X-Upload-Key": key } : {}) },
     body: JSON.stringify({ inAlliance }),
   });
-  if (!res.ok) throw new ApiError(res.status, (await res.json().catch(() => null))?.error ?? `Erro ${res.status}`);
+  if (!res.ok) throw apiErrorFrom(res.status, await res.json().catch(() => null));
 }

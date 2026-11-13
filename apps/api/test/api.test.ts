@@ -56,7 +56,7 @@ describe("API", () => {
   it("recusa extensão inválida", async () => {
     const m = multipart([{ name: "virus.exe", content: "x" }]);
     const res = await app.server.inject({ method: "POST", url: "/api/upload", payload: m.payload, headers: { ...m.headers, "x-upload-key": "segredo" } });
-    expect(res.json()[0].error).toMatch(/Formato inválido/);
+    expect(res.json()[0].error).toMatch(/Invalid format/);
   });
 
   it("ranking filtra por guilda, função e aliança", async () => {
