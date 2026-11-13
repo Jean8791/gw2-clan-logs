@@ -1,0 +1,29 @@
+# Site completo: a API (com o Elite Insights) atrás do Caddy, que cuida do HTTPS.
+# Uso: copie .env.example para .env, preencha e rode `docker compose up -d --build`.
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    environment:
+      UPLOAD_KEY: ${UPLOAD_KEY:?defina UPLOAD_KEY no .env}
+      ADMIN_KEY: ${ADMIN_KEY:?defina ADMIN_KEY no .env}
+      RETENTION_DAYS: ${RETENTION_DAYS:-7}
+    volumes:
+      - dados:/data
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on: [app]
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMINIO: ${DOMINIO:?defina DOMINIO no .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - certificados:/data
+
+volumes:
+  dados:
+  certificados:

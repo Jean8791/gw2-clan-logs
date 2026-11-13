@@ -56,21 +56,24 @@ npm test
 | `DATA_DIR` | Banco SQLite, logs enviados e relatórios | `./data` |
 | `EI_DIR` | Pasta do Elite Insights CLI | `./tools/GW2EICLI` |
 | `PORT` / `HOST` | Endereço do servidor | `5080` / `127.0.0.1` |
+| `RETENTION_DAYS` | Dias que as lutas ficam guardadas (0 = para sempre) | `0` |
 | `GW2_API` | `off` desliga a busca de nomes de guildas e mapas | ligado |
 
 Faça backup da pasta `data`: é ali que fica todo o histórico.
 
-## Colocar no ar
+## Colocar no ar (grátis, 24 h, sem depender do seu PC)
 
-A imagem Docker já traz o Elite Insights e o runtime .NET:
+Serviços como Render e Vercel no plano grátis desligam o servidor ou apagam o disco, e o site precisa guardar o banco. A opção usada aqui é uma VM *Always Free* da Oracle Cloud (Ampere A1, ARM) com HTTPS automático pelo Caddy e um subdomínio grátis do DuckDNS.
 
-```bash
-docker build -t gw2-clan-logs .
-docker run -d --name gw2logs -p 8080:8080 -v gw2logs-data:/data \
-  -e UPLOAD_KEY=senhadocla --restart unless-stopped gw2-clan-logs
-```
+1. **VM na Oracle Cloud:** crie a conta e uma instância `VM.Standard.A1.Flex` (1 a 2 OCPUs e 6 a 12 GB bastam), imagem Ubuntu 24.04, com IP público e sua chave SSH. Na VCN, libere as portas 80 e 443 de entrada (*Security List*). No Ubuntu da Oracle o firewall do sistema também bloqueia: `sudo iptables -I INPUT 6 -p tcp --dport 80 -j ACCEPT && sudo iptables -I INPUT 6 -p tcp --dport 443 -j ACCEPT && sudo netfilter-persistent save`.
+2. **Subdomínio:** em duckdns.org crie `algo.duckdns.org` apontando para o IP público da VM.
+3. **Docker na VM:** `curl -fsSL https://get.docker.com | sudo sh && sudo usermod -aG docker $USER` (saia e entre de novo no SSH).
+4. **Projeto:** `git clone https://github.com/Jean8791/gw2-clan-logs && cd gw2-clan-logs && cp .env.example .env`, e edite o `.env` (domínio e senhas fortes).
+5. **Subir:** `docker compose up -d --build`. O primeiro build leva alguns minutos; o certificado HTTPS sai sozinho na primeira visita.
+6. **Backup diário:** `crontab -e` e `0 4 * * * cd ~/gw2-clan-logs && scripts/backup.sh`. Ele guarda as últimas 7 cópias do banco em `/data/backup` (dentro do volume). Os logs enviados e relatórios ficam em `/data` e expiram com `RETENTION_DAYS`.
+7. **Atualizar:** `git pull && docker compose up -d --build`.
 
-Opções gratuitas: uma VM *Always Free* da Oracle Cloud (Ampere A1), ou o próprio PC com **Cloudflare Tunnel** (`cloudflared tunnel --url http://localhost:5080`). Serviços como Render e Vercel no plano grátis desligam o servidor ou apagam o disco, e o site precisa guardar o banco.
+Para testar sem VM, o PC com **Cloudflare Tunnel** também serve (`cloudflared tunnel --url http://localhost:5080`), mas só fica no ar com o PC ligado.
 
 ## Onde ficam os logs do ArcDPS
 
