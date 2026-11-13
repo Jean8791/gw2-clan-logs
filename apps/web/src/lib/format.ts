@@ -3,6 +3,7 @@ import { STAT_META, type StatKey } from "@gw2logs/shared";
 const nf0 = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 });
 const nf1 = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 1 });
 const nf2 = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 2 });
+const nf3 = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 3 });
 
 export const int = (n: number | null | undefined) => (n == null ? "—" : nf0.format(n));
 export const dec = (n: number | null | undefined, d = 1) => (n == null ? "—" : (d === 2 ? nf2 : nf1).format(n));
@@ -16,11 +17,15 @@ export function compact(n: number | null | undefined): string {
   return a < 10 && n % 1 !== 0 ? nf2.format(n) : nf0.format(n);
 }
 
-export function stat(key: StatKey, v: number, perMin = false): string {
+/** Por segundo os números são pequenos (3 abates em 4 min = 0,0125/s): menos de 1 mostra 3 casas, senão sumiria na casa 0,01. */
+const perSecondText = (v: number) => (v >= 1e4 ? compact(v) : v >= 100 ? int(v) : v >= 10 ? dec(v, 1) : v >= 1 ? dec(v, 2) : nf3.format(v));
+
+export function stat(key: StatKey, v: number, perMin = false, perSec = false): string {
   const format = STAT_META[key].format;
   if (format === "pct") return `${dec(v, 1)}%`;
   if (format === "avg") return dec(v, 1);
   if (format === "volume") return dec(v, 2);
+  if (perSec) return perSecondText(v);
   if (perMin) return v >= 1e4 ? compact(v) : v >= 100 ? int(v) : v < 10 ? dec(v, 2) : dec(v, 1);
   return compact(v);
 }

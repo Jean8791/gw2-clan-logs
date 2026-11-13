@@ -396,3 +396,6 @@ export const professionColor = (p: string | null | undefined): string =>
 
 /** Valor por minuto de tempo ativo em luta. */
 export const perMinute = (value: number, activeMs: number): number => (activeMs > 0 ? (value * 60000) / activeMs : 0);
+
+/** Valor por segundo de tempo ativo em luta (o "DPS"). */
+export const perSecond = (value: number, activeMs: number): number => (activeMs > 0 ? (value * 1000) / activeMs : 0);
