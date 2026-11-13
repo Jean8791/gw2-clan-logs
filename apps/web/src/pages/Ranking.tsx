@@ -1,7 +1,7 @@
 import { GitCompareArrows, Link2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { filtersToQuery, type RankingRow, type StatGroup } from "@gw2logs/shared";
+import { filtersToQuery, ROUTES, type RankingRow, type StatGroup } from "@gw2logs/shared";
 import { DataTable, type Column } from "../components/DataTable";
 import { FilterBar } from "../components/FilterBar";
 import { GroupTabs, ModeToggle, statColumns, type ValueMode } from "../components/statColumns";
@@ -108,7 +108,7 @@ export function RankingPage() {
               size="sm"
               onClick={() => {
                 const q = filtersToQuery(filters);
-                nav(`/comparar?accounts=${encodeURIComponent(selected.join(","))}${q ? `&${q}` : ""}`);
+                nav(`${ROUTES.compare}?accounts=${encodeURIComponent(selected.join(","))}${q ? `&${q}` : ""}`);
               }}
             >
               <GitCompareArrows className="size-4" /> {t("common.compare")}

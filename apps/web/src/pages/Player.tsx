@@ -6,6 +6,7 @@ import {
   filtersToQuery,
   isUptimeStat,
   perMinute,
+  ROUTES,
   STAT_GROUPS,
   STAT_KEYS,
   STAT_META,
@@ -124,7 +125,7 @@ export function PlayerPage() {
 
   const histCols: Column<PlayerHistoryRow>[] = [
     { id: "when", header: "Quando", fixed: true, sort: (h) => h.timeStart, cell: (h) => <span className="text-muted">{dateTime(h.timeStart)}</span> },
-    { id: "map", header: "Mapa", sort: (h) => h.mapName ?? "", cell: (h) => <Link className="hover:text-gold" to={`/lutas/${h.fightId}`}>{h.fightName ?? h.mapName}</Link> },
+    { id: "map", header: "Mapa", sort: (h) => h.mapName ?? "", cell: (h) => <Link className="hover:text-gold" to={ROUTES.fight(h.fightId)}>{h.fightName ?? h.mapName}</Link> },
     { id: "prof", header: "Classe", sort: (h) => h.profession ?? "", cell: (h) => <Profession profession={h.profession} /> },
     { id: "role", header: "Função", sort: (h) => h.role, cell: (h) => (h.role === "support" ? <Badge tone="info">Suporte</Badge> : <Badge>DPS</Badge>) },
     { id: "guild", header: "Guilda", cell: (h) => <GuildTag id={h.guildId} /> },
@@ -164,7 +165,7 @@ export function PlayerPage() {
               onClick={() => {
                 const others = me && me !== account ? [me, account] : [account];
                 const q = filtersToQuery(filters);
-                nav(`/comparar?accounts=${encodeURIComponent(others.join(","))}${q ? `&${q}` : ""}`);
+                nav(`${ROUTES.compare}?accounts=${encodeURIComponent(others.join(","))}${q ? `&${q}` : ""}`);
               }}
             >
               <GitCompareArrows className="size-4" /> {me && me !== account ? "Comparar comigo" : "Comparar"}
@@ -286,7 +287,7 @@ export function PlayerPage() {
 
 export function MePage() {
   const me = useMe();
-  if (me) return <Navigate to={`/jogadores/${encodeURIComponent(me)}`} replace />;
+  if (me) return <Navigate to={ROUTES.player(me)} replace />;
   return (
     <>
       <PageHeader title={tr("page.me.title")} subtitle={tr("page.me.subtitle")} />

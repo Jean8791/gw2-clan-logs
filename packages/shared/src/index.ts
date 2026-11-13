@@ -1,6 +1,7 @@
 // Tipos e metadados compartilhados entre a API e o site.
 
 export * from "./i18n.js";
+export * from "./routes.js";
 
 export type Mode = "wvw" | "pve";
 export type Role = "dps" | "support";

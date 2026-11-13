@@ -2,7 +2,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, FileUp, Info, Loader2, XCircle } from "lucide-react";
 import { useRef, useState, type DragEvent } from "react";
 import { Link } from "react-router-dom";
-import type { UploadResult } from "@gw2logs/shared";
+import { ROUTES, type UploadResult } from "@gw2logs/shared";
 import { Button, Card, ErrorBox, Input, PageHeader, cx } from "../components/ui";
 import { uploadLogs, useConfig, useFights } from "../lib/api";
 import { useMe, useSessionValue } from "../lib/hooks";
@@ -120,7 +120,7 @@ export function UploadPage() {
                       <span className="min-w-0 flex-1 truncate">{r.file}</span>
                       <span className="shrink-0 text-xs text-muted">
                         {r.error ??
-                          (f?.error ? f.error : r.duplicate ? "Já enviado antes" : st === "done" ? <Link className="text-gold hover:underline" to={`/lutas/${r.id}`}>Ver luta</Link> : st === "parsing" ? "Processando…" : "Na fila")}
+                          (f?.error ? f.error : r.duplicate ? "Já enviado antes" : st === "done" ? <Link className="text-gold hover:underline" to={ROUTES.fight(r.id ?? "")}>Ver luta</Link> : st === "parsing" ? "Processando…" : "Na fila")}
                       </span>
                     </li>
                   );

@@ -2,7 +2,7 @@ import { ArrowLeft, ExternalLink } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { emptyStats, professionColor, STAT_KEYS, type PlayerFight, type StatGroup, type Stats } from "@gw2logs/shared";
+import { emptyStats, professionColor, ROUTES, STAT_KEYS, type PlayerFight, type StatGroup, type Stats } from "@gw2logs/shared";
 import { DataTable, type Column } from "../components/DataTable";
 import { GroupTabs, ModeToggle, statColumns, type ValueMode } from "../components/statColumns";
 import { GuildTag, PlayerLink, Profession } from "../components/badges";
@@ -118,7 +118,7 @@ export function FightPage() {
 
   return (
     <>
-      <Link to="/lutas" className="mb-3 inline-flex items-center gap-1 text-sm text-muted hover:text-text">
+      <Link to={ROUTES.fights} className="mb-3 inline-flex items-center gap-1 text-sm text-muted hover:text-text">
         <ArrowLeft className="size-4" /> Lutas
       </Link>
       <PageHeader
@@ -151,7 +151,7 @@ export function FightPage() {
               <XAxis dataKey="name" {...AXIS} interval={0} angle={-35} textAnchor="end" height={70} />
               <YAxis {...AXIS} tickFormatter={axis} width={56} />
               <Tooltip {...TOOLTIP} formatter={(v: number) => [compact(v), "Dano"]} />
-              <Bar dataKey="damage" radius={[6, 6, 0, 0]} onClick={(d: any) => nav(`/jogadores/${encodeURIComponent(d.account)}`)} className="cursor-pointer">
+              <Bar dataKey="damage" radius={[6, 6, 0, 0]} onClick={(d: any) => nav(ROUTES.player(d.account))} className="cursor-pointer">
                 {chart.map((c) => (
                   <Cell key={c.account} fill={c.color} fillOpacity={c.account === me ? 1 : 0.75} stroke={c.account === me ? "#e0b25a" : undefined} strokeWidth={2} />
                 ))}

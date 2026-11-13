@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import type { Fight } from "@gw2logs/shared";
+import { ROUTES, type Fight } from "@gw2logs/shared";
 import { DataTable, type Column } from "../components/DataTable";
 import { FilterBar } from "../components/FilterBar";
 import { FightStatus, KillDeath, SquadVsEnemy, Won } from "../components/FightBits";
@@ -52,7 +52,7 @@ export function FightsPage() {
           {data.length === 0 ? (
             <Empty title="Nenhuma luta encontrada">Mude os filtros ou envie novos logs.</Empty>
           ) : (
-            <DataTable pickerKey="fights" rows={data} columns={columns} rowKey={(f) => f.id} onRowClick={(f) => f.status === "done" && nav(`/lutas/${f.id}`)} />
+            <DataTable pickerKey="fights" rows={data} columns={columns} rowKey={(f) => f.id} onRowClick={(f) => f.status === "done" && nav(ROUTES.fight(f.id))} />
           )}
         </Card>
       )}

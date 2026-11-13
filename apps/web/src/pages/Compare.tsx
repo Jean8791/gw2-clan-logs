@@ -2,7 +2,7 @@ import { X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { PolarAngleAxis, PolarGrid, Radar, RadarChart, ResponsiveContainer, Tooltip, Legend } from "recharts";
-import { isUptimeStat, perMinute, STAT_META, statsOfGroup, statText, uptimeValue, type Aggregate, type StatGroup, type StatKey } from "@gw2logs/shared";
+import { isUptimeStat, perMinute, ROUTES, STAT_META, statsOfGroup, statText, uptimeValue, type Aggregate, type StatGroup, type StatKey } from "@gw2logs/shared";
 import { FilterBar } from "../components/FilterBar";
 import { GroupTabs } from "../components/statColumns";
 import { PlayerPicker } from "../components/PlayerPicker";
@@ -63,7 +63,7 @@ export function ComparePage() {
           {accounts.map((a, i) => (
             <span key={a} className="inline-flex items-center gap-2 rounded-lg border border-line bg-surface-2 py-1 pl-2.5 pr-1 text-sm" style={{ borderColor: SERIES[i] + "80" }}>
               <span className="size-2.5 rounded-full" style={{ background: SERIES[i] }} />
-              <Link to={`/jogadores/${encodeURIComponent(a)}`} className="font-medium hover:text-gold">
+              <Link to={ROUTES.player(a)} className="font-medium hover:text-gold">
                 {label(a)}
               </Link>
               <button aria-label="Remover" className="rounded p-1 text-faint hover:bg-surface-3 hover:text-text" onClick={() => setAccounts(accounts.filter((x) => x !== a))}>

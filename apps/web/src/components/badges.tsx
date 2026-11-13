@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { professionColor, PROFESSIONS } from "@gw2logs/shared";
+import { professionColor, PROFESSIONS, ROUTES } from "@gw2logs/shared";
 import { useGuilds } from "../lib/api";
 import { useMe } from "../lib/hooks";
 import { accountShort } from "../lib/format";
@@ -63,7 +63,7 @@ export function GuildTag({ id, withName = false }: { id: string | null; withName
 export function PlayerLink({ account, name }: { account: string; name?: string | null }) {
   const me = useMe();
   return (
-    <Link to={`/jogadores/${encodeURIComponent(account)}`} className="group flex min-w-0 flex-col leading-tight">
+    <Link to={ROUTES.player(account)} className="group flex min-w-0 flex-col leading-tight">
       <span className={cx("truncate font-medium group-hover:text-gold", me === account ? "text-gold" : "text-text")}>
         {name ?? accountShort(account)}
         {me === account && <span className="ml-1.5 text-[10px] font-bold uppercase tracking-wider">você</span>}

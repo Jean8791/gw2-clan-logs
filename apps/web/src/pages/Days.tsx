@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "react-router-dom";
-import { filtersToQuery, type DaySummary } from "@gw2logs/shared";
+import { filtersToQuery, ROUTES, type DaySummary } from "@gw2logs/shared";
 import { DataTable, type Column } from "../components/DataTable";
 import { FilterBar } from "../components/FilterBar";
 import { KillDeath } from "../components/FightBits";
@@ -9,7 +9,7 @@ import { useFilters } from "../lib/hooks";
 import { t } from "../lib/i18n";
 import { dayLabel, duration, int } from "../lib/format";
 
-const link = (page: string, day: string) => `/${page}?${filtersToQuery({ mode: "wvw", day: [day] })}`;
+const link = (path: string, day: string) => `${path}?${filtersToQuery({ mode: "wvw", day: [day] })}`;
 
 const columns: Column<DaySummary>[] = [
   { id: "day", header: "Dia", sort: (d) => d.day, cell: (d) => <span className="font-medium capitalize">{dayLabel(d.day)}</span> },
@@ -23,10 +23,10 @@ const columns: Column<DaySummary>[] = [
     align: "right",
     cell: (d) => (
       <span className="inline-flex gap-3 text-gold">
-        <Link to={link("lutas", d.day)} onClick={(e) => e.stopPropagation()} className="hover:underline">
+        <Link to={link(ROUTES.fights, d.day)} onClick={(e) => e.stopPropagation()} className="hover:underline">
           Lutas
         </Link>
-        <Link to={link("ranking", d.day)} onClick={(e) => e.stopPropagation()} className="hover:underline">
+        <Link to={link(ROUTES.ranking, d.day)} onClick={(e) => e.stopPropagation()} className="hover:underline">
           Ranking
         </Link>
       </span>
@@ -50,7 +50,7 @@ export function DaysPage() {
           {data.length === 0 ? (
             <Empty title="Nenhum dia encontrado">Mude os filtros ou envie novos logs.</Empty>
           ) : (
-            <DataTable rows={data} columns={columns} rowKey={(d) => d.day} initialSort={{ id: "day", desc: true }} onRowClick={(d) => nav(link("lutas", d.day))} />
+            <DataTable rows={data} columns={columns} rowKey={(d) => d.day} initialSort={{ id: "day", desc: true }} onRowClick={(d) => nav(link(ROUTES.fights, d.day))} />
           )}
         </Card>
       )}

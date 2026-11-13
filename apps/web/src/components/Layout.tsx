@@ -1,4 +1,5 @@
 import { BarChart3, CalendarDays, GitCompareArrows, Home, Shield, Swords, Upload, UserRound } from "lucide-react";
+import { ROUTES } from "@gw2logs/shared";
 import { NavLink, Outlet } from "react-router-dom";
 import { useMe } from "../lib/hooks";
 import { accountShort } from "../lib/format";
@@ -6,12 +7,12 @@ import { setLang, useLang, useT } from "../lib/i18n";
 import { Segmented, cx } from "./ui";
 
 const NAV = [
-  { to: "/", label: "nav.overview", icon: Home, end: true },
-  { to: "/dias", label: "nav.days", icon: CalendarDays },
-  { to: "/lutas", label: "nav.fights", icon: Swords },
-  { to: "/ranking", label: "nav.ranking", icon: BarChart3 },
-  { to: "/comparar", label: "nav.compare", icon: GitCompareArrows },
-  { to: "/guildas", label: "nav.guilds", icon: Shield },
+  { to: ROUTES.overview, label: "nav.overview", icon: Home, end: true },
+  { to: ROUTES.days, label: "nav.days", icon: CalendarDays },
+  { to: ROUTES.fights, label: "nav.fights", icon: Swords },
+  { to: ROUTES.ranking, label: "nav.ranking", icon: BarChart3 },
+  { to: ROUTES.compare, label: "nav.compare", icon: GitCompareArrows },
+  { to: ROUTES.guilds, label: "nav.guilds", icon: Shield },
 ];
 
 /** Botão PT | EN. A escolha fica salva no navegador, e a tela é refeita no idioma novo. */
@@ -70,11 +71,11 @@ export function Layout() {
           ))}
         </nav>
         <div className="mt-auto flex flex-col gap-1">
-          <NavLink to="/eu" className={({ isActive }) => link(isActive)}>
+          <NavLink to={ROUTES.me} className={({ isActive }) => link(isActive)}>
             <UserRound className="size-4" />
             <span className="truncate">{me ? accountShort(me) : t("nav.myProfile")}</span>
           </NavLink>
-          <NavLink to="/enviar" className="mt-2 flex items-center justify-center gap-2 rounded-lg bg-gold px-3 py-2.5 text-sm font-semibold text-[#1a1408] transition hover:brightness-110">
+          <NavLink to={ROUTES.upload} className="mt-2 flex items-center justify-center gap-2 rounded-lg bg-gold px-3 py-2.5 text-sm font-semibold text-[#1a1408] transition hover:brightness-110">
             <Upload className="size-4" /> {t("nav.upload")}
           </NavLink>
         </div>
@@ -86,13 +87,13 @@ export function Layout() {
           <Brand />
           <div className="flex items-center gap-2">
             <LangToggle />
-            <NavLink to="/enviar" className="flex items-center gap-1.5 rounded-lg bg-gold px-3 py-1.5 text-xs font-semibold text-[#1a1408]">
+            <NavLink to={ROUTES.upload} className="flex items-center gap-1.5 rounded-lg bg-gold px-3 py-1.5 text-xs font-semibold text-[#1a1408]">
               <Upload className="size-3.5" /> {t("nav.uploadShort")}
             </NavLink>
           </div>
         </div>
         <nav className="flex gap-1 overflow-x-auto px-3 pb-2">
-          {[...NAV, { to: "/eu", label: "nav.me", icon: UserRound, end: false }].map(({ to, label, icon: Icon, end }) => (
+          {[...NAV, { to: ROUTES.me, label: "nav.me", icon: UserRound, end: false }].map(({ to, label, icon: Icon, end }) => (
             <NavLink key={to} to={to} end={end} className={({ isActive }) => cx(link(isActive), "shrink-0 px-2.5 py-1.5 text-xs")}>
               <Icon className="size-3.5" /> {t(label)}
             </NavLink>
