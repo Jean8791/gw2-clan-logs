@@ -1,4 +1,4 @@
-import { BarChart3, GitCompareArrows, Home, Shield, Swords, Upload, UserRound } from "lucide-react";
+import { BarChart3, CalendarDays, GitCompareArrows, Home, Shield, Swords, Upload, UserRound } from "lucide-react";
 import { NavLink, Outlet } from "react-router-dom";
 import { useMe } from "../lib/hooks";
 import { accountShort } from "../lib/format";
@@ -6,6 +6,7 @@ import { cx } from "./ui";
 
 const NAV = [
   { to: "/", label: "Visão geral", icon: Home, end: true },
+  { to: "/dias", label: "Dias", icon: CalendarDays },
   { to: "/lutas", label: "Lutas", icon: Swords },
   { to: "/ranking", label: "Ranking", icon: BarChart3 },
   { to: "/comparar", label: "Comparar", icon: GitCompareArrows },

@@ -172,6 +172,7 @@ export async function buildApp(cfg: Config, opts: { logger?: boolean } = {}): Pr
   });
 
   // ---------- Visão geral ----------
+  server.get("/api/days", async (req) => q.battleDays(db, parseFilters(req.query as Record<string, string>)));
   server.get("/api/overview", async (req) => q.overview(db, parseFilters(req.query as Record<string, string>)));
   server.get("/api/meta", async () => q.meta(db));
 

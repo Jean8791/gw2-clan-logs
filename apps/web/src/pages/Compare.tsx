@@ -55,7 +55,7 @@ export function ComparePage() {
   return (
     <>
       <PageHeader title="Comparar jogadores" subtitle="Até 4 jogadores lado a lado, por minuto de luta, contra a média do squad com os mesmos filtros." />
-      <FilterBar value={filters} onChange={setFilters} fields={["period", "role", "profession", "size", "map"]} />
+      <FilterBar value={filters} onChange={setFilters} fields={["period", "day", "role", "profession", "size", "map"]} />
 
       <Card className="mb-6 p-4">
         <div className="flex flex-wrap items-center gap-2">

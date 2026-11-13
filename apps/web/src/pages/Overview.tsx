@@ -68,7 +68,7 @@ export function OverviewPage() {
           </Link>
         }
       />
-      <FilterBar value={filters} onChange={setFilters} fields={["period", "guild", "size"]} />
+      <FilterBar value={filters} onChange={setFilters} fields={["period", "day", "guild", "size"]} />
 
       {ov.error && <ErrorBox error={ov.error} />}
       {ov.isLoading && <Loading />}

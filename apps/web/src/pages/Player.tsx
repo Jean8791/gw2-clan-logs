@@ -163,7 +163,7 @@ export function PlayerPage() {
           </>
         }
       />
-      <FilterBar value={filters} onChange={setFilters} fields={["period", "role", "profession", "size", "map"]} />
+      <FilterBar value={filters} onChange={setFilters} fields={["period", "day", "role", "profession", "size", "map"]} />
 
       {data.history.length === 0 ? (
         <Card>
