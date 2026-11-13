@@ -1,0 +1,7 @@
+{$DOMINIO} {
+	# os logs de WvW podem passar de 20 MB (limite da API: 80 MB)
+	request_body {
+		max_size 85MB
+	}
+	reverse_proxy app:8080
+}
