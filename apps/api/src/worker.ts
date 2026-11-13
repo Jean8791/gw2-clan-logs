@@ -112,7 +112,7 @@ export class LogWorker {
         // JSON já gerado pelo Elite Insights (ex.: baixado do dps.report)
         jsonFile = src;
       } else {
-        const out = await runEliteInsights({ eiDir: this.cfg.eiDir, dotnet: this.cfg.dotnet, logFile: src, outDir: work });
+        const out = await runEliteInsights({ eiDir: this.cfg.eiDir, dotnet: this.cfg.dotnet, logFile: src, outDir: work, html: this.cfg.eiHtml });
         jsonFile = out.json;
         html = out.html;
       }

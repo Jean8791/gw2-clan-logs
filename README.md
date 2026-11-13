@@ -58,6 +58,7 @@ npm test
 | `PORT` / `HOST` | Endereço do servidor | `5080` / `127.0.0.1` |
 | `RETENTION_DAYS` | Dias que as lutas ficam guardadas, contados pela data da luta e não pela do envio (0 = para sempre). No Docker Compose o padrão é 30 | `0` |
 | `GW2_API` | `off` desliga a busca de nomes de guildas e mapas | ligado |
+| `EI_HTML` | `true` gera o relatório HTML do Elite Insights (botão "Relatório completo"). Custa 40 a 50 MB de disco e ~300 MB de memória a mais por luta grande, então fica desligado | `false` |
 | `TRUST_PROXY` | `true` atrás do Caddy: conta o IP real do cliente nos bloqueios. O compose já liga | `false` |
 | `UPLOAD_MAX_FAILS` / `UPLOAD_BLOCK_MIN` | Erros de senha seguidos do mesmo IP até bloquear, e por quantos minutos | `5` / `15` |
 | `UPLOAD_MAX_QUEUE` | Logs esperando ou em processamento; acima disso o envio é recusado | `30` |
