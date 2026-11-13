@@ -17,7 +17,7 @@ export function RankingPage() {
   const [filters, setFilters] = useFilters({ mode: "wvw" });
   const { data, error, isLoading } = useRanking(filters);
   const [group, setGroup] = useState<StatGroup>("offense");
-  const [mode, setMode] = useState<ValueMode>("perMin");
+  const [mode, setMode] = useState<ValueMode>("total");
   const [minMinutes, setMinMinutes] = useState(2);
   const [selected, setSelected] = useState<string[]>([]);
   const [copied, setCopied] = useState(false);
@@ -134,8 +134,9 @@ export function RankingPage() {
         )}
       </Card>
       <p className="mt-3 text-xs text-faint">
-        “Por minuto” usa o tempo ativo de cada jogador. Boons mostram o volume gerado para o squad (unidade do Elite Insights). Função (DPS/suporte) é
-        estimada por luta, pela cura, barreira e boons gerados.
+        “Total” soma todas as lutas do filtro. “Por minuto” divide pelo tempo ativo de cada jogador (0,74 em Kills = 0,74 abate por minuto) e serve
+        para comparar quem jogou mais ou menos lutas. Suporte é a parcela das lutas em que a pessoa jogou de suporte. Boons mostram o volume gerado
+        para o squad (unidade do Elite Insights). A função (DPS/suporte) é estimada por luta, pela cura, barreira e boons gerados.
       </p>
     </>
   );

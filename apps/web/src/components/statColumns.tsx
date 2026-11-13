@@ -9,13 +9,21 @@ export type ValueMode = "total" | "perMin";
 export function statColumns<T extends Stats & { activeMs: number }>(group: StatGroup, mode: ValueMode, rows: T[]): Column<T>[] {
   return statsOfGroup(group).map((k: StatKey) => {
     const meta = STAT_META[k];
-    const value = (r: T) => (mode === "perMin" && meta.format !== "volume" ? perMinute(r[k], r.activeMs) : r[k]);
+    const isRate = mode === "perMin" && meta.format !== "volume";
+    const value = (r: T) => (isRate ? perMinute(r[k], r.activeMs) : r[k]);
     const values = rows.map(value);
     const best = values.length ? (meta.higherIsBetter ? Math.max(...values) : Math.min(...values)) : 0;
     return {
       id: k,
-      header: meta.short,
-      title: meta.hint ? `${meta.label} — ${meta.hint}` : meta.label,
+      header: isRate ? (
+        <span className="inline-flex flex-col items-end leading-tight">
+          {meta.short}
+          <span className="text-[9px] font-normal normal-case tracking-normal text-faint">por min</span>
+        </span>
+      ) : (
+        meta.short
+      ),
+      title: [meta.hint ? `${meta.label} — ${meta.hint}` : meta.label, isRate && "por minuto de luta"].filter(Boolean).join(" · "),
       align: "right",
       sort: value,
       cell: (r: T) => {
