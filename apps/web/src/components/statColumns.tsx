@@ -1,5 +1,5 @@
 import { perMinute, STAT_GROUPS, STAT_META, statsOfGroup, type StatGroup, type StatKey, type Stats } from "@gw2logs/shared";
-import { BuffIcon } from "./BuffIcon";
+import { BuffIcon } from "./MediaIcon";
 import type { Column } from "./DataTable";
 import { Segmented, cx } from "./ui";
 import { stat } from "../lib/format";

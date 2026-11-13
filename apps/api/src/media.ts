@@ -20,6 +20,8 @@ export function isAllowedIconUrl(raw: string): boolean {
   return u.protocol === "https:" && u.hostname === ALLOWED_HOST && u.port === "" && u.username === "" && u.password === "" && u.pathname.startsWith("/file/");
 }
 
+const CONCURRENCY = 8;
+
 export interface Media {
   contentType: string;
   bytes: Buffer;
@@ -55,6 +57,25 @@ export class MediaStore {
       return false;
     }
   }
+}
+
+/** Garante vários ícones, alguns por vez: o primeiro log traz centenas. Nunca lança erro. */
+export async function ensureMany(store: MediaStore, items: { key: string; url: string }[]): Promise<void> {
+  for (let i = 0; i < items.length; i += CONCURRENCY) {
+    await Promise.all(items.slice(i, i + CONCURRENCY).map((it) => store.ensure(it.key, it.url)));
+  }
+}
+
+/** Ícones das habilidades usadas (skillMap do Elite Insights; auras e efeitos vêm do buffMap), só de URLs permitidas. */
+export function collectSkillIcons(json: any, ids: Iterable<number>): { key: string; url: string }[] {
+  const out: { key: string; url: string }[] = [];
+  const skills = json?.skillMap;
+  const buffs = json?.buffMap;
+  for (const id of ids) {
+    const icon = skills?.[`s${id}`]?.icon ?? buffs?.[`b${id}`]?.icon;
+    if (typeof icon === "string" && isAllowedIconUrl(icon)) out.push({ key: `skill:${id}`, url: icon });
+  }
+  return out;
 }
 
 /** Ícones dos boons que aparecem no JSON do Elite Insights (buffMap), só de URLs permitidas. */

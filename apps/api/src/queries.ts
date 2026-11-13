@@ -9,6 +9,7 @@ import {
   type Overview,
   type PlayerFight,
   type PlayerProfile,
+  type PlayerSkill,
   type RankingRow,
 } from "@gw2logs/shared";
 import { STAT_COL, type DB } from "./db.js";
@@ -118,6 +119,25 @@ export function ranking(db: DB, fl: Filters): RankingRow[] {
 export function baseline(db: DB, fl: Filters): Aggregate {
   const { where, params } = combined(fl);
   return toAggregate(db.prepare(`SELECT ${AGG_SELECT} FROM player_stats ps JOIN fights f ON f.id = ps.fight_id WHERE ${where}`).get(params));
+}
+
+/** Dano do jogador por habilidade nas lutas filtradas, da que mais causa dano para a que menos causa. */
+export function playerSkills(db: DB, account: string, fl: Filters): PlayerSkill[] {
+  const { where, params } = combined(fl);
+  const rows = db
+    .prepare(
+      `SELECT sk.skill_id AS skillId, s.name AS name, SUM(sk.damage) AS damage, SUM(sk.hits) AS hits, SUM(sk.connected_hits) AS connectedHits
+       FROM player_skills sk
+       JOIN player_stats ps ON ps.fight_id = sk.fight_id AND ps.account = sk.account
+       JOIN fights f ON f.id = sk.fight_id
+       LEFT JOIN skills s ON s.id = sk.skill_id
+       WHERE sk.account = @account AND ${where}
+       GROUP BY sk.skill_id
+       ORDER BY damage DESC`,
+    )
+    .all({ ...params, account }) as Omit<PlayerSkill, "pct" | "avgHit">[];
+  const total = rows.reduce((a, r) => a + r.damage, 0);
+  return rows.map((r) => ({ ...r, pct: total ? (r.damage / total) * 100 : 0, avgHit: r.connectedHits ? r.damage / r.connectedHits : 0 }));
 }
 
 export function playerProfile(db: DB, account: string, fl: Filters): PlayerProfile | null {
