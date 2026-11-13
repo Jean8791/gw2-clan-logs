@@ -49,8 +49,16 @@ export function statColumns<T extends Stats & { activeMs: number }>(group: StatG
   });
 }
 
-/** Coluna pela qual a tabela do grupo começa ordenada (a primeira métrica do alcance escolhido). */
-export const firstStat = (group: StatGroup, scope: BoonScope): StatKey => statsOfGroup(group, scope)[0]!;
+const SORT_BY_GROUP: Record<StatGroup, StatKey> = { offense: "damage", support: "strips", boons: "stabOut", uptime: "stabUp", defense: "damageTaken" };
+
+/** Coluna pela qual a tabela de um grupo começa ordenada (nos boons, a primeira métrica do alcance escolhido). */
+export const defaultSort = (group: StatGroup, scope: BoonScope): { id: StatKey; desc: boolean } => ({
+  id: group === "boons" ? statsOfGroup(group, scope)[0]! : SORT_BY_GROUP[group],
+  desc: group !== "defense",
+});
+
+/** Chave do seletor de colunas: nos boons, cada alcance tem a sua. */
+export const pickerView = (group: StatGroup, scope: BoonScope) => (group === "boons" ? `${group}-${scope}` : group);
 
 /** Abas dos grupos de métricas; na aba Boons aparece também a escolha do alcance (squad, grupo ou próprio). */
 export function GroupTabs({ value, onChange, scope, onScopeChange }: { value: StatGroup; onChange: (g: StatGroup) => void; scope: BoonScope; onScopeChange: (s: BoonScope) => void }) {

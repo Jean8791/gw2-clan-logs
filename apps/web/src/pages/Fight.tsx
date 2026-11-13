@@ -4,7 +4,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { emptyStats, professionColor, ROUTES, STAT_KEYS, type BoonScope, type PlayerFight, type StatGroup, type Stats } from "@gw2logs/shared";
 import { DataTable, type Column } from "../components/DataTable";
-import { firstStat, GroupTabs, ModeToggle, statColumns, type ValueMode } from "../components/statColumns";
+import { defaultSort, GroupTabs, pickerView, ModeToggle, statColumns, type ValueMode } from "../components/statColumns";
 import { GuildTag, PlayerLink, Profession } from "../components/badges";
 import { AXIS, GRID, TOOLTIP } from "../components/charts";
 import { KillDeath } from "../components/FightBits";
@@ -190,18 +190,18 @@ export function FightPage() {
         {view === "players" ? (
           <DataTable
             key={`players-${group}-${scope}`}
-            pickerKey={`fight-players:${group}`}
+            pickerKey={`fight-players:${pickerView(group, scope)}`}
             rows={players}
             columns={playerCols}
             rowKey={(p) => p.account}
-            initialSort={{ id: group === "offense" ? "damage" : group === "support" ? "strips" : group === "boons" ? firstStat(group, scope) : group === "uptime" ? "stabUp" : "damageTaken", desc: true }}
+            initialSort={{ ...defaultSort(group, scope), desc: true }}
             rowClassName={(p) => (p.account === me ? "bg-gold/5" : undefined)}
             dense
           />
         ) : view === "guilds" ? (
-          <DataTable key={`guilds-${group}-${scope}`} pickerKey={`fight-guilds:${group}`} rows={guildRows} columns={guildCols} rowKey={(g) => g.id} initialSort={{ id: "players", desc: true }} dense />
+          <DataTable key={`guilds-${group}-${scope}`} pickerKey={`fight-guilds:${pickerView(group, scope)}`} rows={guildRows} columns={guildCols} rowKey={(g) => g.id} initialSort={{ id: "players", desc: true }} dense />
         ) : (
-          <DataTable key={`groups-${group}-${scope}`} pickerKey={`fight-groups:${group}`} rows={groupRows} columns={groupCols} rowKey={(g) => g.id} initialSort={{ id: "group", desc: false }} dense />
+          <DataTable key={`groups-${group}-${scope}`} pickerKey={`fight-groups:${pickerView(group, scope)}`} rows={groupRows} columns={groupCols} rowKey={(g) => g.id} initialSort={{ id: "group", desc: false }} dense />
         )}
         {group === "uptime" && (
           <p className="border-t border-line px-5 py-2.5 text-xs text-faint">

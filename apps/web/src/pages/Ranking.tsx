@@ -4,15 +4,13 @@ import { useNavigate } from "react-router-dom";
 import { filtersToQuery, ROUTES, type BoonScope, type RankingRow, type StatGroup } from "@gw2logs/shared";
 import { DataTable, type Column } from "../components/DataTable";
 import { FilterBar } from "../components/FilterBar";
-import { firstStat, GroupTabs, ModeToggle, statColumns, type ValueMode } from "../components/statColumns";
+import { defaultSort, GroupTabs, pickerView, ModeToggle, statColumns, type ValueMode } from "../components/statColumns";
 import { GuildTag, PlayerLink, Profession } from "../components/badges";
 import { Button, Card, Empty, ErrorBox, Loading, PageHeader, Select, cx } from "../components/ui";
 import { useRanking } from "../lib/api";
 import { useFilters, useMe } from "../lib/hooks";
 import { duration } from "../lib/format";
 import { t } from "../lib/i18n";
-
-const SORT_BY_GROUP: Record<StatGroup, string> = { offense: "damage", support: "strips", boons: "stabOut", uptime: "stabUp", defense: "damageTaken" };
 
 export function RankingPage() {
   const [filters, setFilters] = useFilters({ mode: "wvw" });
@@ -126,11 +124,11 @@ export function RankingPage() {
         {data && rows.length > 0 && (
           <DataTable
             key={`${group}-${scope}`}
-            pickerKey={`ranking:${group}`}
+            pickerKey={`ranking:${pickerView(group, scope)}`}
             rows={rows}
             columns={columns}
             rowKey={(r) => r.account}
-            initialSort={{ id: group === "boons" ? firstStat(group, scope) : SORT_BY_GROUP[group], desc: group !== "defense" }}
+            initialSort={defaultSort(group, scope)}
             rowClassName={(r) => (r.account === me ? "bg-gold/5" : selected.includes(r.account) ? "bg-info/5" : undefined)}
             onRowClick={(r) => toggle(r.account)}
             dense

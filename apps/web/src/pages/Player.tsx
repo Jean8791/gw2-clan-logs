@@ -3,12 +3,12 @@ import { useMemo, useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { CartesianGrid, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import {
+  BOON_SCOPES,
   filtersToQuery,
   isUptimeStat,
   perMinute,
   ROUTES,
   STAT_GROUPS,
-  STAT_KEYS,
   STAT_META,
   statsOfGroup,
   statText,
@@ -200,9 +200,10 @@ export function PlayerPage() {
                 <Select className="w-52" value={metric} onChange={(e) => setMetric(e.target.value as StatKey)} aria-label={tr("player.metric")}>
                   {STAT_GROUPS.map((g) => (
                     <optgroup key={g.id} label={tr(`group.${g.id}`)}>
-                      {statsOfGroup(g.id).map((k) => (
+                      {(g.id === "boons" ? BOON_SCOPES.flatMap((s) => statsOfGroup(g.id, s)) : statsOfGroup(g.id)).map((k) => (
                         <option key={k} value={k}>
                           {statText(k, getLang()).label}
+                          {STAT_META[k].scope ? ` (${tr(`scope.${STAT_META[k].scope}`)})` : ""}
                           {STAT_META[k].format === "volume" || isUptimeStat(k) ? "" : " / min"}
                         </option>
                       ))}

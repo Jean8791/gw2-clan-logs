@@ -2,6 +2,8 @@
 
 export * from "./i18n.js";
 export * from "./routes.js";
+export * from "./boons.js";
+import { BOON_BASES, type ScopedKey } from "./boons.js";
 
 export type Mode = "wvw" | "pve";
 export type Role = "dps" | "support";
@@ -83,7 +85,6 @@ export type Stats = Record<StatKey, number>;
 /** Para quem o boon é gerado: o squad todo (padrão, as métricas "Out"), só o grupo ou só o próprio jogador. */
 export type BoonScope = "squad" | "group" | "self";
 export const BOON_SCOPES: BoonScope[] = ["squad", "group", "self"];
-export type ScopedKey = `${"stab" | "quick" | "alac" | "prot" | "might" | "aegis" | "resist" | "resol" | "fury" | "superspeed"}${"Group" | "Self"}`;
 
 export type StatGroup = "offense" | "support" | "boons" | "uptime" | "defense";
 
@@ -161,12 +162,10 @@ const SCOPE_HINT: Record<"group" | "self", string> = {
 const scopedMeta = (): Record<ScopedKey, StatMeta> =>
   Object.fromEntries(
     (["Group", "Self"] as const).flatMap((suffix) =>
-      (Object.keys(BASE_META) as (keyof typeof BASE_META)[])
-        .filter((k) => k.endsWith("Out"))
-        .map((k) => {
-          const scope = suffix === "Group" ? "group" : "self";
-          return [k.replace(/Out$/, suffix), { ...BASE_META[k], scope, hint: SCOPE_HINT[scope] }];
-        }),
+      BOON_BASES.map((b) => {
+        const scope = suffix === "Group" ? "group" : "self";
+        return [`${b}${suffix}`, { ...BASE_META[`${b}Out`], scope, hint: SCOPE_HINT[scope] }];
+      }),
     ),
   ) as Record<ScopedKey, StatMeta>;
 

@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import Database from "better-sqlite3";
 import { describe, expect, it } from "vitest";
-import { statsOfGroup, STAT_KEYS, STAT_META, type StatKey } from "@gw2logs/shared";
+import { BOON_BASES, DICT, statsOfGroup, STAT_EN, STAT_KEYS, STAT_META, type StatKey } from "@gw2logs/shared";
 import { paths } from "../src/config.js";
 import { openDb, STAT_COL } from "../src/db.js";
 import { extractFight } from "../src/ingest.js";
@@ -72,6 +72,26 @@ describe("métricas por alcance", () => {
 
   it("outros grupos não mudam com o alcance", () => {
     expect(statsOfGroup("offense", "self")).toEqual(statsOfGroup("offense"));
+  });
+});
+
+describe("os 30 boons por alcance, em todos os lugares", () => {
+  it("STAT_KEYS, STAT_META e STAT_EN têm exatamente as mesmas chaves", () => {
+    expect(Object.keys(STAT_META).sort()).toEqual([...new Set(STAT_KEYS)].sort());
+    expect(Object.keys(STAT_EN).sort()).toEqual([...new Set(STAT_KEYS)].sort());
+  });
+
+  it("a lista de boons gera as chaves Out, Group e Self de STAT_KEYS", () => {
+    const esperadas = BOON_BASES.flatMap((b) => [`${b}Out`, `${b}Group`, `${b}Self`]);
+    expect(esperadas.filter((k) => !STAT_KEYS.includes(k as StatKey))).toEqual([]);
+    expect(STAT_KEYS.filter((k) => STAT_META[k].group === "boons")).toHaveLength(esperadas.length);
+  });
+
+  it("o seletor de alcance tem texto nos dois idiomas", () => {
+    for (const k of ["scope.label", "scope.squad", "scope.group", "scope.self"]) {
+      expect(DICT.pt[k]).toBeTruthy();
+      expect(DICT.en[k]).toBeTruthy();
+    }
   });
 });
 

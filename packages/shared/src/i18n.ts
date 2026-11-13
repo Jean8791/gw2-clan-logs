@@ -1,5 +1,6 @@
 // Idiomas do site: português (padrão) e inglês. Sem biblioteca: um dicionário por idioma e a função translate.
-import type { ScopedKey, StatKey } from "./index.js";
+import { BOON_BASES, type ScopedKey } from "./boons.js";
+import type { StatKey } from "./index.js";
 import { STAT_META } from "./index.js";
 
 export type Lang = "pt" | "en";
@@ -693,9 +694,7 @@ const SCOPE_HINT_EN = { Group: "Volume generated for your group (includes you)",
 const scopedEn = (): Record<ScopedKey, StatEn> =>
   Object.fromEntries(
     (["Group", "Self"] as const).flatMap((suffix) =>
-      Object.entries(BASE_EN)
-        .filter(([k]) => k.endsWith("Out"))
-        .map(([k, v]) => [k.replace(/Out$/, suffix), { ...v, hint: SCOPE_HINT_EN[suffix] }]),
+      BOON_BASES.map((b) => [`${b}${suffix}`, { ...BASE_EN[`${b}Out`], hint: SCOPE_HINT_EN[suffix] }]),
     ),
   ) as Record<ScopedKey, StatEn>;
 
