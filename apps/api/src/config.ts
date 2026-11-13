@@ -18,6 +18,8 @@ export interface Config {
   adminKey: string;
   /** Pasta com o site compilado (apps/web/dist). */
   webDir: string;
+  /** Dias que as lutas ficam guardadas. 0 = guardar para sempre. */
+  retentionDays: number;
   /** Buscar nomes de mapas e guildas na API oficial do GW2. */
   gw2Api: boolean;
 }
@@ -33,6 +35,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     uploadKey,
     adminKey: env.ADMIN_KEY ?? uploadKey,
     webDir: path.resolve(env.WEB_DIR ?? path.join(repoRoot, "apps", "web", "dist")),
+    retentionDays: Number(env.RETENTION_DAYS ?? 0),
     gw2Api: env.GW2_API !== "off",
   };
 }
