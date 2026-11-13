@@ -27,6 +27,7 @@ export function statColumns<T extends Stats & { activeMs: number }>(group: StatG
     );
     return {
       id: k,
+      label: meta.label,
       header: isRate ? (
         <span className="inline-flex flex-col items-end leading-tight">
           {label}

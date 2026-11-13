@@ -13,6 +13,7 @@ const columns: Column<Fight>[] = [
   {
     id: "time",
     header: "Quando",
+    fixed: true,
     sort: (f) => f.timeStart ?? f.uploadedAt,
     cell: (f) => <span className="text-muted">{dateTime(f.timeStart ?? f.uploadedAt)}</span>,
   },
@@ -50,7 +51,7 @@ export function FightsPage() {
           {data.length === 0 ? (
             <Empty title="Nenhuma luta encontrada">Mude os filtros ou envie novos logs.</Empty>
           ) : (
-            <DataTable rows={data} columns={columns} rowKey={(f) => f.id} onRowClick={(f) => f.status === "done" && nav(`/lutas/${f.id}`)} />
+            <DataTable pickerKey="fights" rows={data} columns={columns} rowKey={(f) => f.id} onRowClick={(f) => f.status === "done" && nav(`/lutas/${f.id}`)} />
           )}
         </Card>
       )}

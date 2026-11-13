@@ -1,5 +1,8 @@
 import { ArrowDown, ArrowUp } from "lucide-react";
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { visibleColumns } from "@gw2logs/shared";
+import { loadHiddenColumns, saveHiddenColumns } from "../lib/columns";
+import { ColumnPicker } from "./ColumnPicker";
 import { cx } from "./ui";
 
 export interface Column<T> {
@@ -13,6 +16,10 @@ export interface Column<T> {
   className?: string;
   /** coluna fixa à esquerda ao rolar na horizontal */
   sticky?: boolean;
+  /** nome em texto na lista do botão "Colunas" (o header pode ser um ícone); sem ele usa o header ou o id */
+  label?: string;
+  /** coluna que não pode ser escondida (nome do jogador, caixa de seleção) */
+  fixed?: boolean;
 }
 
 export function DataTable<T>({
@@ -24,6 +31,7 @@ export function DataTable<T>({
   rowClassName,
   footer,
   dense,
+  pickerKey,
 }: {
   rows: T[];
   columns: Column<T>[];
@@ -33,8 +41,17 @@ export function DataTable<T>({
   rowClassName?: (r: T) => string | undefined;
   footer?: ReactNode;
   dense?: boolean;
+  /** com ele, aparece o botão "Colunas" e a escolha fica salva no navegador, por tabela */
+  pickerKey?: string;
 }) {
   const [sort, setSort] = useState(initialSort ?? null);
+  const [hidden, setHidden] = useState<string[]>(() => (pickerKey ? loadHiddenColumns(pickerKey) : []));
+  useEffect(() => setHidden(pickerKey ? loadHiddenColumns(pickerKey) : []), [pickerKey]);
+  const shown = useMemo(() => visibleColumns(columns, hidden), [columns, hidden]);
+  const choose = (next: string[]) => {
+    setHidden(next);
+    if (pickerKey) saveHiddenColumns(pickerKey, next);
+  };
   const sorted = useMemo(() => {
     const col = sort && columns.find((c) => c.id === sort.id);
     if (!col?.sort) return rows;
@@ -53,11 +70,19 @@ export function DataTable<T>({
   return (
     // Área de rolagem com altura limitada: assim o cabeçalho (sticky) fica preso no topo dela ao rolar, como na bel.st.
     // Com overflow só no eixo x o cabeçalho colava num contêiner que não rola na vertical e sumia.
-    <div className="max-h-[calc(100vh-5rem)] overflow-auto">
+    <div>
+      {pickerKey && (
+        <ColumnPicker
+          columns={columns.map((c) => ({ id: c.id, fixed: c.fixed, label: c.label ?? (typeof c.header === "string" && c.header ? c.header : c.id) }))}
+          hidden={hidden}
+          onChange={choose}
+        />
+      )}
+      <div className="max-h-[calc(100vh-5rem)] overflow-auto">
       <table className="w-full border-separate border-spacing-0 text-sm">
         <thead>
           <tr>
-            {columns.map((c) => {
+            {shown.map((c) => {
               const active = sort?.id === c.id;
               return (
                 <th
@@ -88,7 +113,7 @@ export function DataTable<T>({
               onClick={onRowClick ? () => onRowClick(r) : undefined}
               className={cx("group", onRowClick && "cursor-pointer", rowClassName?.(r))}
             >
-              {columns.map((c) => (
+              {shown.map((c) => (
                 <td
                   key={c.id}
                   className={cx(
@@ -107,6 +132,7 @@ export function DataTable<T>({
         </tbody>
         {footer}
       </table>
+      </div>
     </div>
   );
 }

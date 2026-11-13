@@ -399,3 +399,31 @@ export const perMinute = (value: number, activeMs: number): number => (activeMs 
 
 /** Valor por segundo de tempo ativo em luta (o "DPS"). */
 export const perSecond = (value: number, activeMs: number): number => (activeMs > 0 ? (value * 1000) / activeMs : 0);
+
+// ---------- Colunas escolhidas na tabela ----------
+
+const MAX_HIDDEN_COLUMNS = 100;
+const MAX_COLUMN_ID = 64;
+
+/**
+ * Lê a lista de colunas ocultas guardada no navegador. O valor pode estar quebrado ou adulterado, então só aceita lista
+ * de textos curtos, sem repetidos e com tamanho limitado; qualquer outra coisa vira "nada oculto".
+ */
+export function parseHiddenColumns(raw: string | null): string[] {
+  if (!raw) return [];
+  let value: unknown;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(value)) return [];
+  const ids = value.filter((v): v is string => typeof v === "string" && v.length > 0 && v.length <= MAX_COLUMN_ID);
+  return [...new Set(ids)].slice(0, MAX_HIDDEN_COLUMNS);
+}
+
+/** Colunas que aparecem: tira as ocultas, mas nunca as fixas (nome do jogador, caixa de seleção). */
+export function visibleColumns<T extends { id: string; fixed?: boolean }>(columns: T[], hidden: string[]): T[] {
+  const off = new Set(hidden);
+  return columns.filter((c) => c.fixed || !off.has(c.id));
+}
