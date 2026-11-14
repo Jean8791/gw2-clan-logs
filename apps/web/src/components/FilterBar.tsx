@@ -2,7 +2,7 @@ import { RotateCcw, SlidersHorizontal } from "lucide-react";
 import { useState } from "react";
 import type { Filters, Role } from "@gw2logs/shared";
 import { useDays, useGuilds, useMeta } from "../lib/api";
-import { dayLabel } from "../lib/format";
+import { dayLabel, instantToLocal, localToInstant } from "../lib/format";
 import { useT } from "../lib/i18n";
 import { Button, Input, Select, cx } from "./ui";
 
@@ -78,8 +78,8 @@ export function FilterBar({ value, onChange, fields }: { value: Filters; onChang
         )}
         {has("period") && custom && (
           <>
-            <Input label={t("filter.from")} type="date" value={value.from ?? ""} onChange={(e) => set({ from: e.target.value || undefined })} />
-            <Input label={t("filter.to")} type="date" value={value.to ?? ""} onChange={(e) => set({ to: e.target.value || undefined })} />
+            <Input label={t("filter.from")} type="datetime-local" value={instantToLocal(value.from)} onChange={(e) => set({ from: localToInstant(e.target.value) })} />
+            <Input label={t("filter.to")} type="datetime-local" value={instantToLocal(value.to, true)} onChange={(e) => set({ to: localToInstant(e.target.value) })} />
           </>
         )}
         {has("guild") && (
