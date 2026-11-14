@@ -1,6 +1,7 @@
 name: Site no ar?
 
 # Pergunta ao site se ele está vivo a cada 15 minutos. Se não responder, o job falha e o GitHub avisa por e-mail.
+# (Registrado de novo em 2026-11-14, quando o repositório foi recriado.)
 # O endereço fica na variável SITE_URL do repositório (Settings > Secrets and variables > Actions > Variables).
 on:
   schedule:
