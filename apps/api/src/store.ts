@@ -29,7 +29,8 @@ export function saveFight(db: DB, id: string, f: ExtractedFight, mapName: string
       `UPDATE fights SET status='done', error=NULL, mode=@mode, fight_name=@fightName, map_id=@mapId, map_name=@mapName,
          time_start=@timeStart, duration_ms=@durationMs, success=@success, recorded_by=@recordedBy, squad_count=@squadCount,
          ally_count=@allyCount, enemy_count=@enemyCount, squad_damage=@squadDamage, squad_kills=@squadKills,
-         squad_downs=@squadDowns, squad_deaths=@squadDeaths, ei_version=@eiVersion, has_report=@hasReport
+         squad_downs=@squadDowns, squad_deaths=@squadDeaths, enemy_downs=@enemyDowns, enemy_deaths=@enemyDeaths,
+         ei_version=@eiVersion, has_report=@hasReport
        WHERE id=@id`,
     ).run({
       id,
@@ -49,6 +50,8 @@ export function saveFight(db: DB, id: string, f: ExtractedFight, mapName: string
       squadKills: f.squadKills,
       squadDowns: f.squadDowns,
       squadDeaths: f.squadDeaths,
+      enemyDowns: f.enemyDowns,
+      enemyDeaths: f.enemyDeaths,
       eiVersion: f.eiVersion,
       hasReport: hasReport ? 1 : 0,
     });

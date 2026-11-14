@@ -230,6 +230,9 @@ export interface Fight {
   squadKills: number | null;
   squadDowns: number | null;
   squadDeaths: number | null;
+  /** inimigos caídos e mortos na luta toda, de quem for o crédito (squadKills e squadDowns só contam o crédito do squad) */
+  enemyDowns: number | null;
+  enemyDeaths: number | null;
   hasReport: boolean;
 }
 

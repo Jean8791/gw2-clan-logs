@@ -49,7 +49,10 @@ export const wvwFixture = () => ({
   recordedAccountBy: "Comandante.1111",
   detailedWvW: true,
   wvWMapData: { redTeamID: 1 },
-  targets: [{ name: "Inimigo", enemyPlayer: true }, { name: "Guard", enemyPlayer: false }],
+  targets: [
+    { name: "Inimigo", enemyPlayer: true, defenses: [stat({ downCount: 5, deadCount: 4 })] },
+    { name: "Guard", enemyPlayer: false, defenses: [stat({ downCount: 0, deadCount: 1 })] },
+  ],
   players: [
     player({ account: "Comandante.1111", prof: "Firebrand", guild: "GUILD-A", dmgEnemy: 20000, healing: 50000, stab: 3, commander: true }),
     player({ account: "Atacante.2222", prof: "Reaper", guild: "GUILD-A", dmgEnemy: 300000, dmgNpc: 999999, kills: 3 }),

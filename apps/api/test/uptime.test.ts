@@ -170,6 +170,25 @@ describe("migração: banco antigo ganha as colunas novas", () => {
     expect(row).toEqual({ damage: 123, stab_up: 0 });
   });
 
+  it("adiciona enemy_downs e enemy_deaths na tabela fights e mantém os dados", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "gw2logs-mig-"));
+    const file = paths(dir).db;
+    const old = new Database(file);
+    old.exec(`
+      CREATE TABLE fights (id TEXT PRIMARY KEY, sha256 TEXT NOT NULL UNIQUE, status TEXT NOT NULL, uploaded_at TEXT NOT NULL,
+        time_start TEXT, squad_kills INTEGER);
+      INSERT INTO fights (id, sha256, status, uploaded_at, squad_kills) VALUES ('f1', 'h1', 'done', '2026-11-13T00:00:00Z', 7);
+    `);
+    old.close();
+
+    const db = openDb(file);
+    const row = db.prepare("SELECT squad_kills, enemy_downs, enemy_deaths FROM fights WHERE id = 'f1'").get();
+    db.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+
+    expect(row).toEqual({ squad_kills: 7, enemy_downs: null, enemy_deaths: null });
+  });
+
   it("abrir de novo um banco já atualizado não dá erro", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "gw2logs-mig-"));
     openDb(paths(dir).db).close();
