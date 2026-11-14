@@ -89,10 +89,11 @@ export function FightPage() {
     { id: "player", header: t("table.player"), sticky: true, fixed: true, sort: (p) => p.name ?? p.account, cell: (p) => <PlayerLink account={p.account} name={p.name} /> },
     { id: "prof", header: t("table.class"), sort: (p) => p.profession ?? "", cell: (p) => <Profession profession={p.profession} /> },
     { id: "guild", header: t("table.guild"), cell: (p) => <GuildTag id={p.guildId} /> },
-    { id: "grp", header: t("fight.col.group"), align: "center", sort: (p) => p.group, cell: (p) => <span className="text-muted">{p.group ?? "—"}</span> },
+    { id: "grp", header: t("fight.col.group"), title: t("fight.col.group.tip"), align: "center", sort: (p) => p.group, cell: (p) => <span className="text-muted">{p.group ?? "—"}</span> },
     {
       id: "role",
       header: t("fight.col.role"),
+      title: t("fight.col.role.tip"),
       sort: (p) => p.role,
       cell: (p) => (p.role === "support" ? <Badge tone="info">{t("fight.role.support")}</Badge> : <Badge>{t("fight.role.dps")}</Badge>),
     },
