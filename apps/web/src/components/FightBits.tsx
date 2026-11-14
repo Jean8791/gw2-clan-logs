@@ -20,6 +20,11 @@ export function FightStatus({ fight }: { fight: Fight }) {
   );
 }
 
+/** Inimigos mortos na luta toda, de quem for o crédito (o mesmo número do wvw.bel.st). Lutas sem ele caem nos kills do squad. */
+export function fightKills(fight: Fight): number | null {
+  return fight.enemyDeaths ?? fight.squadKills;
+}
+
 /** Kills × mortes do squad, com cor pelo saldo. */
 export function KillDeath({ kills, deaths }: { kills: number | null; deaths: number | null }) {
   const k = kills ?? 0;
@@ -45,7 +50,7 @@ export function SquadVsEnemy({ fight }: { fight: Fight }) {
 }
 
 export function Won({ fight }: { fight: Fight }) {
-  const k = fight.squadKills ?? 0;
+  const k = fightKills(fight) ?? 0;
   const d = fight.squadDeaths ?? 0;
   if (fight.mode !== "wvw") return fight.success ? <CheckCircle2 className="size-4 text-good" /> : <XCircle className="size-4 text-bad" />;
   if (k === 0 && d === 0) return <span className="inline-block size-2 rounded-full bg-faint" title={t("fight.won.none")} />;

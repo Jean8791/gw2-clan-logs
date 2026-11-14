@@ -7,7 +7,7 @@ import { DataTable, type Column } from "../components/DataTable";
 import { defaultSort, GroupTabs, pickerView, ModeToggle, statColumns, type ValueMode } from "../components/statColumns";
 import { GuildTag, PlayerLink, Profession } from "../components/badges";
 import { AXIS, GRID, TOOLTIP } from "../components/charts";
-import { KillDeath } from "../components/FightBits";
+import { fightKills, KillDeath } from "../components/FightBits";
 import { Badge, Button, Card, ErrorBox, Kpi, Loading, PageHeader, Segmented, Select } from "../components/ui";
 import { useFight } from "../lib/api";
 import { useMe } from "../lib/hooks";
@@ -142,8 +142,8 @@ export function FightPage() {
         <Kpi label={t("fight.kpi.enemies")} value={int(f.enemyCount)} />
         <Kpi
           label={t("fight.kpi.kd")}
-          value={<KillDeath kills={f.squadKills} deaths={f.squadDeaths} />}
-          hint={f.enemyDeaths != null ? t("fight.kpi.enemyDeaths", { n: int(f.enemyDeaths) }) : undefined}
+          value={<KillDeath kills={fightKills(f)} deaths={f.squadDeaths} />}
+          hint={f.enemyDeaths != null ? t("fight.kpi.squadKills", { n: int(f.squadKills) }) : undefined}
           accent
         />
         <Kpi label={t("fight.kpi.damage")} value={compact(f.squadDamage)} hint={durMin > 0 ? `${compact((f.squadDamage ?? 0) / durMin / 60)} DPS` : undefined} />

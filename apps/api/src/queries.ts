@@ -157,7 +157,7 @@ export function battleDays(db: DB, fl: Filters): DaySummary[] {
   const days = db
     .prepare(
       `SELECT ${BATTLE_DAY} AS day, COUNT(*) AS fights, COALESCE(SUM(f.duration_ms), 0) AS durationMs,
-              COALESCE(SUM(f.squad_kills), 0) AS kills, COALESCE(SUM(f.squad_deaths), 0) AS deaths,
+              COALESCE(SUM(COALESCE(f.enemy_deaths, f.squad_kills)), 0) AS kills, COALESCE(SUM(f.squad_deaths), 0) AS deaths,
               MIN(f.time_start) AS first, MAX(f.time_start) AS last
        FROM fights f WHERE ${f.where.join(" AND ")} AND f.time_start IS NOT NULL
        GROUP BY day ORDER BY day DESC`,
@@ -229,7 +229,7 @@ export function overview(db: DB, fl: Filters): Overview {
   const w = where.join(" AND ");
   const t = db
     .prepare(
-      `SELECT COUNT(*) AS fights, COALESCE(SUM(duration_ms),0) AS durationMs, COALESCE(SUM(squad_kills),0) AS kills,
+      `SELECT COUNT(*) AS fights, COALESCE(SUM(duration_ms),0) AS durationMs, COALESCE(SUM(COALESCE(enemy_deaths, squad_kills)),0) AS kills,
               COALESCE(SUM(squad_deaths),0) AS deaths, MIN(time_start) AS first, MAX(time_start) AS last
        FROM fights f WHERE ${w}`,
     )

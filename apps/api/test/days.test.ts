@@ -61,11 +61,11 @@ let db: DB;
 let n = 0;
 
 /** Luta já processada, com o tempo em UTC, e os jogadores dela (conta → dano). */
-function fight(start: string, players: Record<string, number>, o: { kills?: number; deaths?: number; durationMs?: number } = {}) {
+function fight(start: string, players: Record<string, number>, o: { kills?: number; enemyDeaths?: number; deaths?: number; durationMs?: number } = {}) {
   const id = `l${++n}`;
   db.prepare(
-    "INSERT INTO fights (id, sha256, status, uploaded_at, mode, time_start, duration_ms, squad_kills, squad_deaths) VALUES (?, ?, 'done', ?, 'wvw', ?, ?, ?, ?)",
-  ).run(id, "sha-" + id, new Date().toISOString(), start, o.durationMs ?? 60000, o.kills ?? 0, o.deaths ?? 0);
+    "INSERT INTO fights (id, sha256, status, uploaded_at, mode, time_start, duration_ms, squad_kills, enemy_deaths, squad_deaths) VALUES (?, ?, 'done', ?, 'wvw', ?, ?, ?, ?, ?)",
+  ).run(id, "sha-" + id, new Date().toISOString(), start, o.durationMs ?? 60000, o.kills ?? 0, o.enemyDeaths ?? null, o.deaths ?? 0);
   for (const [account, damage] of Object.entries(players)) {
     db.prepare("INSERT INTO player_stats (fight_id, account, name, profession, damage, active_ms) VALUES (?, ?, ?, 'Reaper', ?, 60000)").run(id, account, account, damage);
   }
@@ -83,6 +83,15 @@ beforeEach(() => {
 afterEach(() => {
   db.close();
   fs.rmSync(dir, { recursive: true, force: true });
+});
+
+describe("K/D usa os inimigos mortos no total, de quem for o crédito", () => {
+  it("o dia e a visão geral somam enemy_deaths; sem ele, caem nos kills do squad", () => {
+    fight(T.dia13_1000, { "A.1111": 1 }, { kills: 1, enemyDeaths: 10 });
+
+    expect(q.battleDays(db, {})[0]).toMatchObject({ day: "2026-11-13", kills: 8 + 10 });
+    expect(q.overview(db, {}).kills).toBe(1 + 2 + 4 + 8 + 10);
+  });
 });
 
 describe("filtro por dia nas consultas", () => {
