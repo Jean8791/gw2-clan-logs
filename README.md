@@ -79,6 +79,16 @@ O script não manda de novo o que já enviou, espera quando a fila do servidor e
 
 Faça backup da pasta `data`: é ali que fica todo o histórico.
 
+## Branches e lançamento
+
+| Branch | Para quê |
+|---|---|
+| `development` | O que está sendo desenvolvido e testado. Todo trabalho novo sai dela, e os PRs das tarefas voltam para ela. É a branch padrão no GitHub |
+| `release` | A produção. O servidor roda o código desta branch |
+| `master` | Cópia da produção: depois de cada lançamento fica igual à `release`, sem commits próprios |
+
+Fluxo: tarefa (branch `DDMMAAAAHHMM`) → PR para `development` → teste (`npm test`, build do Docker e envio de logs reais) → PR de `development` para `release` → no servidor `git pull && docker compose up -d --build` → `master` é atualizada para o mesmo commit da `release`. O CI roda nas três branches e em todo PR.
+
 ## Colocar no ar (grátis, 24 h, sem depender do seu PC)
 
 Serviços como Render e Vercel no plano grátis desligam o servidor ou apagam o disco, e o site precisa guardar o banco. A opção usada aqui é uma VM *Always Free* da Oracle Cloud (Ampere A1, ARM) com HTTPS automático pelo Caddy e um subdomínio grátis do DuckDNS.
@@ -89,7 +99,7 @@ Serviços como Render e Vercel no plano grátis desligam o servidor ou apagam o 
 4. **Projeto:** `git clone https://github.com/Jean8791/gw2-clan-logs && cd gw2-clan-logs && cp .env.example .env`, e edite o `.env` (domínio e senhas fortes).
 5. **Subir:** `docker compose up -d --build`. O primeiro build leva alguns minutos; o certificado HTTPS sai sozinho na primeira visita.
 6. **Backup diário:** `crontab -e` e `0 4 * * * cd ~/gw2-clan-logs && scripts/backup.sh`. Ele guarda as últimas 7 cópias do banco em `/data/backup` (dentro do volume). Os logs enviados e relatórios ficam em `/data` e expiram com `RETENTION_DAYS` (30 dias no Compose). Cada luta ocupa cerca de 10 MB, então um mês com uns 600 logs fica perto de 6 GB: confira o espaço do disco da VM.
-7. **Atualizar:** `git pull && docker compose up -d --build`.
+7. **Atualizar:** no servidor, na branch `release`: `git pull && docker compose up -d --build`.
 
 Para testar sem VM, o PC com **Cloudflare Tunnel** também serve (`cloudflared tunnel --url http://localhost:5080`), mas só fica no ar com o PC ligado.
 
