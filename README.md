@@ -27,7 +27,7 @@ ArcDPS (.zevtc) ──scripts/enviar-logs.sh──▶ API ──▶ fila ──�
 
 - **Não há tela de envio.** Os logs entram só pela API, com uma chave, usando o script `scripts/enviar-logs.sh` (veja [Enviar logs](#enviar-logs)).
 - O mesmo log enviado duas vezes é ignorado. O site também aceita o `.json` do Elite Insights ou do dps.report.
-- O JSON completo de cada luta fica em `data/fights/<id>/ei.json.gz`. Uma métrica nova pode ser calculada depois com `npm run reingest`, sem reenviar os logs.
+- O JSON completo de cada luta fica em `data/fights/<id>/ei.json.gz`. Uma métrica nova pode ser calculada depois reprocessando as lutas guardadas, sem reenviar os logs: `npm run reingest` fora do Docker, ou `docker compose exec app node apps/api/dist/scripts/reingest.js` no servidor.
 - As lutas antigas são apagadas depois de `RETENTION_DAYS` dias, contados pela data da luta (no Docker Compose o padrão é 30; fora dele, 0 = guardar para sempre).
 
 | Parte | Tecnologia |
@@ -126,7 +126,7 @@ O site precisa de disco que não se perde e de ~1 GB de memória, então serviç
 
 ### Operação
 
-- **Atualizar:** na branch `release`, `git pull && docker compose up -d --build`. Se a extração mudou (`SCHEMA_VERSION` em `apps/api/src/db.ts`), reprocesse as lutas com `npm run reingest` sobre a pasta de dados.
+- **Atualizar:** na branch `release`, `git pull && docker compose up -d --build`. Se a extração mudou (`SCHEMA_VERSION` em `apps/api/src/db.ts`), reprocesse as lutas já importadas, a partir do JSON guardado, com `docker compose exec app node apps/api/dist/scripts/reingest.js` (com `sudo` se o seu usuário não estiver no grupo `docker`). Lutas novas já saem certas; só as antigas precisam disso.
 - **Backup diário:** `crontab -e` e `0 4 * * * cd ~/gw2-clan-logs && scripts/backup.sh`. Guarda as últimas 7 cópias do banco em `/data/backup`, dentro do mesmo disco: copie para fora se o histórico for importante. Cada luta ocupa cerca de 10 MB; confira o espaço do disco.
 - **Acompanhar:** `docker compose logs -f app`, `docker stats`, e a tela Lutas mostra a fila e os erros de processamento.
 - **Alerta de fora do ar:** `GET /api/health` responde o estado e o tamanho da fila. O workflow `.github/workflows/uptime.yml` o consulta a cada 15 minutos e o GitHub avisa por e-mail se falhar; defina a variável `SITE_URL` do repositório (Settings, Secrets and variables, Variables).
