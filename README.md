@@ -32,7 +32,7 @@ ArcDPS (.zevtc) ──scripts/enviar-logs.sh──▶ API ──▶ fila ──�
 
 | Parte | Tecnologia |
 |---|---|
-| API | Node 20 + TypeScript, Fastify, SQLite (better-sqlite3) |
+| API | Node 22 + TypeScript, Fastify, SQLite (better-sqlite3) |
 | Site | React 19 + Vite, Tailwind CSS 4, TanStack Query, Recharts |
 | Parser | [Elite Insights](https://github.com/baaron4/GW2-Elite-Insights-Parser) CLI (.NET), chamado pela API |
 | Testes e CI | Vitest, GitHub Actions |
@@ -48,7 +48,7 @@ scripts/          envio de logs, backup e download do Elite Insights
 
 ## Rodar localmente
 
-Precisa do **Node 20+**. Para processar `.zevtc` também precisa do **runtime .NET** e do Elite Insights; sem eles, o site aceita só o `.json` do EI.
+Precisa do **Node 22+**. Para processar `.zevtc` também precisa do **runtime .NET** e do Elite Insights; sem eles, o site aceita só o `.json` do EI.
 
 ```bash
 npm install
