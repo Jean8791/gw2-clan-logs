@@ -419,7 +419,9 @@ export function parseFilters(q: Record<string, unknown>): Filters {
     } else if (k === "role") {
       if (s === "dps" || s === "support") f.role = s;
     } else if (k === "from" || k === "to") {
-      if (/^\d{4}-\d{2}-\d{2}/.test(s)) f[k] = s.slice(0, 10);
+      const instant = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?Z$/.test(s) ? Date.parse(s) : NaN;
+      if (!Number.isNaN(instant)) f[k] = new Date(instant).toISOString();
+      else if (/^\d{4}-\d{2}-\d{2}/.test(s)) f[k] = s.slice(0, 10);
     } else if (s.length <= 64) {
       (f as Record<string, unknown>)[k] = s;
     }

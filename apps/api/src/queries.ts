@@ -29,8 +29,9 @@ export function fightConditions(fl: Filters, now = new Date()): { where: string[
   const params: Params = {};
   if (fl.mode) (where.push("f.mode = @mode"), (params.mode = fl.mode));
   if (fl.days) (where.push("f.time_start >= @since"), (params.since = new Date(now.getTime() - fl.days * 86_400_000).toISOString()));
-  if (fl.from) (where.push("f.time_start >= @from"), (params.from = `${fl.from}T00:00:00.000Z`));
-  if (fl.to) (where.push("f.time_start < @to"), (params.to = new Date(Date.parse(`${fl.to}T00:00:00.000Z`) + 86_400_000).toISOString()));
+  // "De"/"Até" chegam como dia (AAAA-MM-DD: o dia inteiro, em UTC) ou como instante com hora (já em UTC)
+  if (fl.from) (where.push("f.time_start >= @from"), (params.from = fl.from.includes("T") ? fl.from : `${fl.from}T00:00:00.000Z`));
+  if (fl.to) (where.push("f.time_start < @to"), (params.to = fl.to.includes("T") ? fl.to : new Date(Date.parse(`${fl.to}T00:00:00.000Z`) + 86_400_000).toISOString()));
   if (fl.map) (where.push("f.map_id = @map"), (params.map = fl.map));
   if (fl.minSquad) (where.push("f.squad_count >= @minSquad"), (params.minSquad = fl.minSquad));
   if (fl.maxSquad) (where.push("f.squad_count <= @maxSquad"), (params.maxSquad = fl.maxSquad));

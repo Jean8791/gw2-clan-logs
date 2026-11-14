@@ -70,6 +70,22 @@ export function diffPct(a: number, b: number): number | null {
   return ((a - b) / b) * 100;
 }
 
+/** Valor de um campo datetime-local (horário do navegador, "AAAA-MM-DDTHH:MM") → instante em UTC para a URL. */
+export const localToInstant = (local: string): string | undefined => {
+  const t = local ? Date.parse(local) : NaN;
+  return Number.isNaN(t) ? undefined : new Date(t).toISOString();
+};
+
+/** Filtro De/Até da URL → valor do campo datetime-local. Só o dia ("AAAA-MM-DD") vale o dia UTC inteiro: "Até" é o fim dele. */
+export function instantToLocal(value: string | undefined, isEnd = false): string {
+  if (!value) return "";
+  const t = value.includes("T") ? Date.parse(value) : Date.parse(`${value}T00:00:00.000Z`) + (isEnd ? 86_400_000 : 0);
+  if (Number.isNaN(t)) return "";
+  const d = new Date(t);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
 export const accountShort = (account: string) => account.replace(/\.\d{4}$/, "");
 
 /** "2026-11-12" → "qui, 12/11" (o dia de batalha, ver battleDay em shared). */

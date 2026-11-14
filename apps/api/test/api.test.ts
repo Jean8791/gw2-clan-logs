@@ -96,6 +96,13 @@ describe("API", () => {
     expect((await app.server.inject("/api/fights?from=2026-11-14")).json()).toHaveLength(0);
     expect((await app.server.inject("/api/fights?to=2026-11-13")).json()).toHaveLength(1);
   });
+
+  it("filtros De/Até com hora: a luta começou às 02:33:54Z", async () => {
+    expect((await app.server.inject("/api/fights?from=2026-11-13T02:33:00Z")).json()).toHaveLength(1);
+    expect((await app.server.inject("/api/fights?from=2026-11-13T02:34:00Z")).json()).toHaveLength(0);
+    expect((await app.server.inject("/api/fights?to=2026-11-13T02:33:00Z")).json()).toHaveLength(0);
+    expect((await app.server.inject("/api/fights?to=2026-11-13T02:34:00Z")).json()).toHaveLength(1);
+  });
 });
 
 describe("parseFilters", () => {
@@ -105,5 +112,10 @@ describe("parseFilters", () => {
       role: "support",
       from: "2026-11-01",
     });
+  });
+
+  it("De/Até aceitam só a data ou a data com hora em UTC", () => {
+    expect(parseFilters({ from: "2026-11-01", to: "2026-11-02T03:30:00Z" })).toEqual({ from: "2026-11-01", to: "2026-11-02T03:30:00.000Z" });
+    expect(parseFilters({ from: "2026-11-01T25:99:00Z" })).toEqual({ from: "2026-11-01" });
   });
 });
