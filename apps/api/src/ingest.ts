@@ -40,6 +40,9 @@ export interface ExtractedFight {
   squadKills: number;
   squadDowns: number;
   squadDeaths: number;
+  /** inimigos caídos e mortos na luta toda, de quem for o crédito (os campos squad* só contam o crédito de jogadores do squad) */
+  enemyDowns: number;
+  enemyDeaths: number;
   eiVersion: string | null;
   players: ExtractedPlayer[];
 }
@@ -243,6 +246,8 @@ export function extractFight(r: J): ExtractedFight {
     squadKills: sum("kills"),
     squadDowns: sum("downs"),
     squadDeaths: sum("deaths"),
+    enemyDowns: targetIdx.reduce((a, i) => a + num(phase0(targets[i], "defenses"), "downCount"), 0),
+    enemyDeaths: targetIdx.reduce((a, i) => a + num(phase0(targets[i], "defenses"), "deadCount"), 0),
     eiVersion: str(r, "eliteInsightsVersion"),
     players,
   };

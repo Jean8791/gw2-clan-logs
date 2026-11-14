@@ -12,7 +12,7 @@ export const STAT_COL: Record<StatKey, string> = Object.fromEntries(STAT_KEYS.ma
  * Versão do esquema. Ao mudar a extração (ingest.ts) ou as colunas, suba o número:
  * as lutas são reprocessadas a partir do JSON guardado (npm run reingest), sem reenviar logs.
  */
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 
 export function openDb(file: string): DB {
   const db = new Database(file);
@@ -48,6 +48,8 @@ function migrate(db: DB) {
       squad_kills   INTEGER,
       squad_downs   INTEGER,
       squad_deaths  INTEGER,
+      enemy_downs   INTEGER,                  -- inimigos caídos na luta toda (de quem for o crédito)
+      enemy_deaths  INTEGER,                  -- inimigos mortos na luta toda (de quem for o crédito)
       ei_version    TEXT,
       has_report    INTEGER NOT NULL DEFAULT 0
     );
@@ -109,6 +111,10 @@ function migrate(db: DB) {
   const have = new Set((db.pragma("table_info(player_stats)") as { name: string }[]).map((c) => c.name));
   for (const k of STAT_KEYS) {
     if (!have.has(STAT_COL[k])) db.exec(`ALTER TABLE player_stats ADD COLUMN ${STAT_COL[k]} REAL NOT NULL DEFAULT 0`);
+  }
+  const haveFights = new Set((db.pragma("table_info(fights)") as { name: string }[]).map((c) => c.name));
+  for (const col of ["enemy_downs", "enemy_deaths"]) {
+    if (!haveFights.has(col)) db.exec(`ALTER TABLE fights ADD COLUMN ${col} INTEGER`);
   }
 }
 

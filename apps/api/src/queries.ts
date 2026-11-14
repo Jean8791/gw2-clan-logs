@@ -67,7 +67,7 @@ const FIGHT_COLS = `f.id, f.status, f.error, f.uploaded_at AS uploadedAt, f.uplo
   f.fight_name AS fightName, f.map_id AS mapId, f.map_name AS mapName, f.time_start AS timeStart, f.duration_ms AS durationMs,
   f.success, f.recorded_by AS recordedBy, f.squad_count AS squadCount, f.ally_count AS allyCount, f.enemy_count AS enemyCount,
   f.squad_damage AS squadDamage, f.squad_kills AS squadKills, f.squad_downs AS squadDowns, f.squad_deaths AS squadDeaths,
-  f.has_report AS hasReport`;
+  f.enemy_downs AS enemyDowns, f.enemy_deaths AS enemyDeaths, f.has_report AS hasReport`;
 
 const toFight = (r: any): Fight => ({ ...r, success: !!r.success, hasReport: !!r.hasReport });
 
