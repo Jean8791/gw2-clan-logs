@@ -22,9 +22,9 @@
     "@gw2logs/shared": "*",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^20.17.0",
-    "tsup": "^8.4.0",
+    "tsup": "^8.5.1",
     "tsx": "^4.19.4",
     "typescript": "~5.8.3",
-    "vitest": "^3.1.4"
+    "vitest": "^4.1.12"
   }
 }
