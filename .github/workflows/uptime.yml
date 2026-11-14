@@ -1,0 +1,22 @@
+name: Site no ar?
+
+# Pergunta ao site se ele está vivo a cada 15 minutos. Se não responder, o job falha e o GitHub avisa por e-mail.
+# O endereço fica na variável SITE_URL do repositório (Settings > Secrets and variables > Actions > Variables).
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+jobs:
+  health:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Conferir /api/health
+        env:
+          SITE_URL: ${{ vars.SITE_URL }}
+        run: |
+          if [ -z "$SITE_URL" ]; then echo "Defina a variável SITE_URL do repositório." >&2; exit 1; fi
+          resposta=$(curl -fsS --max-time 30 --retry 2 --retry-delay 10 "${SITE_URL%/}/api/health") || { echo "O site não respondeu em $SITE_URL" >&2; exit 1; }
+          echo "$resposta"
+          echo "$resposta" | grep -q '"status":"ok"' || { echo "O site respondeu, mas não está saudável." >&2; exit 1; }
