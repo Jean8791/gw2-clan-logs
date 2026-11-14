@@ -74,6 +74,22 @@ const str = (o: unknown, k: string): string | null => {
   const v = (o as J | undefined)?.[k];
   return typeof v === "string" && v !== "" ? v : null;
 };
+/**
+ * Cura ou barreira dada pelo jogador `me` (posição em `players`) a si mesmo e ao seu grupo no squad. A lista do EI tem uma
+ * entrada por jogador, na mesma ordem de `players`; o grupo inclui o próprio jogador e deixa de fora quem não é do squad.
+ */
+function healingTo(list: J[], field: string, players: J[], me: number): { self: number; group: number } {
+  const group = typeof players[me]?.group === "number" ? players[me].group : null;
+  let self = 0;
+  let inGroup = 0;
+  list.forEach((entry, i) => {
+    const amount = num(Array.isArray(entry) ? entry[0] : entry, field);
+    if (i === me) self = amount;
+    if (group !== null && !players[i]?.notInSquad && players[i]?.group === group) inGroup += amount;
+  });
+  return { self, group: inGroup };
+}
+
 /** Primeira fase (a luta inteira): EI guarda as estatísticas como [fase] ou [alvo][fase]. */
 const phase0 = (o: unknown, k: string): J => {
   const first = arr(o, k)[0];
@@ -103,7 +119,9 @@ export function extractFight(r: J): ExtractedFight {
   const skillMap = (r.skillMap ?? {}) as J;
   const buffMap = (r.buffMap ?? {}) as J;
 
-  const all = arr(r, "players").filter((p) => !p.isFake && !p.friendlyNPC);
+  // as listas "por aliado" do EI são indexadas pela posição nesta lista, a original (antes de tirar NPCs e jogadores falsos)
+  const rawPlayers = arr(r, "players");
+  const all = rawPlayers.filter((p) => !p.isFake && !p.friendlyNPC);
   const squad = all.filter((p) => !p.notInSquad);
 
   const instances: ExtractedPlayer[] = squad.map((p) => {
@@ -143,8 +161,17 @@ export function extractFight(r: J): ExtractedFight {
     s.resurrects = num(sup, "resurrects");
     s.stunBreaks = num(sup, "stunBreak");
     // Cura e barreira só existem quando quem gravou usa o addon Healing Stats.
-    s.healing = num(phase0(p.extHealingStats, "outgoingHealing"), "healing");
+    const outgoing = phase0(p.extHealingStats, "outgoingHealing");
+    s.healing = num(outgoing, "healing");
+    s.downedHealing = num(outgoing, "downedHealing");
     s.barrier = num(phase0(p.extBarrierStats, "outgoingBarrier"), "barrier");
+    const me = rawPlayers.indexOf(p);
+    const healed = healingTo(arr(p.extHealingStats, "outgoingHealingAllies"), "healing", rawPlayers, me);
+    const shielded = healingTo(arr(p.extBarrierStats, "outgoingBarrierAllies"), "barrier", rawPlayers, me);
+    s.healingSelf = healed.self;
+    s.healingGroup = healed.group;
+    s.barrierSelf = shielded.self;
+    s.barrierGroup = shielded.group;
 
     s.damageTaken = num(def, "damageTaken");
     s.barrierAbsorbed = num(def, "damageBarrier");
