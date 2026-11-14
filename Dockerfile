@@ -2,7 +2,7 @@
 # Build:  docker build -t gw2-clan-logs .
 # Rodar:  docker run -d -p 8080:8080 -v gw2logs-data:/data -e UPLOAD_KEY=senhadocla -e RETENTION_DAYS=30--restart unless-stopped gw2-clan-logs
 
-FROM node:20-bookworm-slim AS build
+FROM node:22-bookworm-slim AS build
 WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ && rm -rf /var/lib/apt/lists/*
 COPY package.json package-lock.json ./
