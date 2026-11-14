@@ -2,7 +2,7 @@ import { useNavigate } from "react-router-dom";
 import { ROUTES, type Fight } from "@gw2logs/shared";
 import { DataTable, type Column } from "../components/DataTable";
 import { FilterBar } from "../components/FilterBar";
-import { FightStatus, KillDeath, SquadVsEnemy, Won } from "../components/FightBits";
+import { FightStatus, fightKills, KillDeath, SquadVsEnemy, Won } from "../components/FightBits";
 import { Card, Empty, ErrorBox, Loading, PageHeader } from "../components/ui";
 import { useFights } from "../lib/api";
 import { useFilters } from "../lib/hooks";
@@ -31,7 +31,7 @@ const columns = (): Column<Fight>[] => [
   },
   { id: "dur", header: t("fights.col.duration"), align: "right", sort: (f) => f.durationMs, cell: (f) => duration(f.durationMs) },
   { id: "size", header: t("fights.col.size"), align: "right", sort: (f) => f.squadCount, cell: (f) => <SquadVsEnemy fight={f} /> },
-  { id: "kd", header: t("fights.col.kd"), align: "right", sort: (f) => (f.squadKills ?? 0) - (f.squadDeaths ?? 0), cell: (f) => <KillDeath kills={f.squadKills} deaths={f.squadDeaths} /> },
+  { id: "kd", header: t("fights.col.kd"), align: "right", sort: (f) => (fightKills(f) ?? 0) - (f.squadDeaths ?? 0), cell: (f) => <KillDeath kills={fightKills(f)} deaths={f.squadDeaths} /> },
   { id: "dmg", header: t("fights.col.damage"), align: "right", sort: (f) => f.squadDamage, cell: (f) => compact(f.squadDamage) },
   { id: "up", header: t("fights.col.uploader"), sort: (f) => f.uploader ?? "", cell: (f) => <span className="text-muted">{f.uploader ?? f.recordedBy ?? "—"}</span> },
 ];

@@ -4,7 +4,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { perSecond, ROUTES, topByRate, type RankingRow, type StatKey } from "@gw2logs/shared";
 import { DataTable, type Column } from "../components/DataTable";
 import { FilterBar } from "../components/FilterBar";
-import { FightStatus, KillDeath, SquadVsEnemy, Won } from "../components/FightBits";
+import { FightStatus, fightKills, KillDeath, SquadVsEnemy, Won } from "../components/FightBits";
 import { GuildTag, PlayerLink, Profession, ProfessionDot } from "../components/badges";
 import { Card, Empty, ErrorBox, Kpi, Loading, PageHeader, cx } from "../components/ui";
 import { useOverview, useRanking } from "../lib/api";
@@ -157,7 +157,7 @@ export function OverviewPage() {
                     <div className="hidden text-sm text-muted sm:block">{t("overview.damage", { value: compact(f.squadDamage) })}</div>
                     <div className="flex items-center gap-2">
                       <FightStatus fight={f} />
-                      <KillDeath kills={f.squadKills} deaths={f.squadDeaths} />
+                      <KillDeath kills={fightKills(f)} deaths={f.squadDeaths} />
                     </div>
                   </button>
                 </li>
