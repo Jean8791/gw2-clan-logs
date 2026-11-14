@@ -140,9 +140,18 @@ export function FightPage() {
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         <Kpi label={t("fight.kpi.squad")} value={int(f.squadCount)} hint={f.allyCount ? t("fight.kpi.allies", { n: f.allyCount }) : undefined} />
         <Kpi label={t("fight.kpi.enemies")} value={int(f.enemyCount)} />
-        <Kpi label={t("fight.kpi.kd")} value={<KillDeath kills={f.squadKills} deaths={f.squadDeaths} />} accent />
+        <Kpi
+          label={t("fight.kpi.kd")}
+          value={<KillDeath kills={f.squadKills} deaths={f.squadDeaths} />}
+          hint={f.enemyDeaths != null ? t("fight.kpi.enemyDeaths", { n: int(f.enemyDeaths) }) : undefined}
+          accent
+        />
         <Kpi label={t("fight.kpi.damage")} value={compact(f.squadDamage)} hint={durMin > 0 ? `${compact((f.squadDamage ?? 0) / durMin / 60)} DPS` : undefined} />
-        <Kpi label={t("fight.kpi.downs")} value={int(f.squadDowns)} />
+        <Kpi
+          label={t("fight.kpi.downs")}
+          value={int(f.squadDowns)}
+          hint={f.enemyDowns != null ? t("fight.kpi.enemyDowns", { n: int(f.enemyDowns) }) : undefined}
+        />
       </div>
 
       <Card className="mt-6" title={t("fight.chart.title")}>

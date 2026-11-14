@@ -20,6 +20,11 @@ describe("extractFight", () => {
     expect(f.squadKills).toBe(4);
   });
 
+  it("conta os inimigos caídos e mortos na luta toda, de quem for o crédito, sem NPCs", () => {
+    expect(f.enemyDowns).toBe(5);
+    expect(f.enemyDeaths).toBe(4);
+  });
+
   it("lê guilda, boons gerados (squadBuffVolumes) e cleanses", () => {
     const c = by("Comandante.1111");
     expect(c.guildId).toBe("GUILD-A");
