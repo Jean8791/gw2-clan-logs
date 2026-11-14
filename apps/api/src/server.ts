@@ -137,6 +137,16 @@ export async function buildApp(cfg: Config, opts: { logger?: boolean } = {}): Pr
     return results;
   });
 
+  // para o alerta de "fora do ar": só diz se o banco responde e quantos logs esperam (nada de dado de jogador)
+  server.get("/api/health", async (_req, reply) => {
+    try {
+      const count = (status: string) => (db.prepare("SELECT COUNT(*) AS n FROM fights WHERE status = ?").get(status) as { n: number }).n;
+      return { status: "ok", queue: { queued: count("queued"), parsing: count("parsing") } };
+    } catch {
+      return reply.code(503).send({ status: "error" });
+    }
+  });
+
   server.get("/api/config", async () => ({
     uploadKeyRequired: cfg.uploadKey !== "",
     adminKeyRequired: cfg.adminKey !== "",
