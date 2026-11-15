@@ -98,6 +98,11 @@ describe("uptimeValue", () => {
     expect(uptimeValue("mightStacks", 24000, 60000)).toBeCloseTo(0.4, 5);
   });
 
+  it("pct nunca passa de 100% (o EI às vezes devolve um pouco mais); pilhas não têm teto", () => {
+    expect(uptimeValue("stabUp", 60210, 60000)).toBe(100);
+    expect(uptimeValue("mightStacks", 900000, 60000)).toBe(15);
+  });
+
   it("sem tempo ativo, zero (sem dividir por zero)", () => {
     expect(uptimeValue("stabUp", 100, 0)).toBe(0);
   });
