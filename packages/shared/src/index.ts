@@ -193,11 +193,11 @@ export const STAT_GROUPS: { id: StatGroup; label: string }[] = [
 /** Métricas de uptime (pct ou avg): o valor guardado é tempo com o boon, e o mostrado depende do tempo ativo. */
 export const isUptimeStat = (k: StatKey): boolean => STAT_META[k].format === "pct" || STAT_META[k].format === "avg";
 
-/** Valor mostrado de uma métrica de uptime: % do tempo ativo (pct) ou média de pilhas (avg). */
+/** Valor mostrado de uma métrica de uptime: % do tempo ativo (pct, no máximo 100) ou média de pilhas (avg). */
 export function uptimeValue(k: StatKey, ms: number, activeMs: number): number {
   if (activeMs <= 0) return 0;
   const r = ms / activeMs;
-  return STAT_META[k].format === "pct" ? r * 100 : r;
+  return STAT_META[k].format === "pct" ? Math.min(r * 100, 100) : r;
 }
 
 /** Métricas de um grupo; na aba Boons, só as do alcance pedido (squad por padrão). */
