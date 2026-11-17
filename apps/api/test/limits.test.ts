@@ -213,11 +213,35 @@ describe("envio: limites de capacidade", () => {
   });
 });
 
+describe("envio: limites por usuário (um não esgota a cota dos outros)", () => {
+  const donoDe = (a: App, discordId: string) => (a.db.prepare("SELECT id FROM users WHERE discord_id = ?").get(discordId) as { id: number }).id;
+  const putOwned = (a: App, id: string, status: string, owner: number) =>
+    a.db.prepare("INSERT INTO fights (id, sha256, status, uploaded_at, owner_id) VALUES (?, ?, ?, ?, ?)").run(id, "sha-" + id, status, new Date().toISOString(), owner);
+
+  it("fila cheia de um usuário recusa só ele; o outro continua enviando", async () => {
+    const a = await start({ UPLOAD_MAX_QUEUE_USER: "1" });
+    const beto = criarUsuario(a, "2", "beto");
+    putOwned(a, "q1", "queued", donoDe(a, "1"));
+
+    expect((await upload(a, [{ name: "a.json", content: fightJson(1) }])).json()[0]).toMatchObject({ code: "queueFull" });
+    expect((await upload(a, [{ name: "b.json", content: fightJson(2) }], beto.token)).json()[0].status).toBe("queued");
+  });
+
+  it("limite por hora de um usuário recusa só ele", async () => {
+    const a = await start({ UPLOAD_MAX_PER_HOUR_USER: "1" });
+    const beto = criarUsuario(a, "2", "beto");
+    putOwned(a, "d1", "done", donoDe(a, "1"));
+
+    expect((await upload(a, [{ name: "a.json", content: fightJson(1) }])).json()[0]).toMatchObject({ code: "hourlyLimit" });
+    expect((await upload(a, [{ name: "b.json", content: fightJson(2) }], beto.token)).json()[0].status).toBe("queued");
+  });
+});
+
 describe("configuração dos limites", () => {
   it("valores padrão sensatos", () => {
     const c = loadConfig({});
 
-    expect(c.limits).toEqual({ maxFailedKeys: 5, blockMinutes: 15, maxQueue: 30, maxPerHour: 500, maxUploadsMb: 4096 });
+    expect(c.limits).toEqual({ maxFailedKeys: 5, blockMinutes: 15, maxQueue: 30, maxPerHour: 500, maxUploadsMb: 4096, maxQueuePerUser: 10, maxPerHourPerUser: 200 });
     expect(c.trustProxy).toBe(false);
   });
 

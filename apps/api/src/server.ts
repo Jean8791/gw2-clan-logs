@@ -7,7 +7,7 @@ import { Transform } from "node:stream";
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
 import multipart from "@fastify/multipart";
 import fastifyStatic from "@fastify/static";
-import { parseFilters, type Filters, type UploadResult } from "@gw2logs/shared";
+import { MAX_UPLOAD_MB, parseFilters, type Filters, type UploadResult } from "@gw2logs/shared";
 import { userByPublicId, type User } from "./auth.js";
 import { apiUser, registerAuthRoutes, sessionUser } from "./auth-routes.js";
 import { paths, type Config } from "./config.js";
@@ -19,7 +19,7 @@ import { MEDIA_KEY, MediaStore } from "./media.js";
 import * as q from "./queries.js";
 import { LogWorker } from "./worker.js";
 
-const MAX_UPLOAD = 80 * 1024 * 1024; // logs grandes de WvW passam fácil de 20 MB
+const MAX_UPLOAD = MAX_UPLOAD_MB * 1024 * 1024; // logs grandes de WvW passam fácil de 20 MB
 const LIMIT_MESSAGES = {
   queueFull: "The processing queue is full. Try again in a few minutes.",
   hourlyLimit: "Hourly upload limit reached. Try again later.",
@@ -94,11 +94,14 @@ export async function buildApp(cfg: Config, opts: { logger?: boolean; fetch?: ty
   };
 
   /** Por que um novo log não pode entrar agora (fila cheia, limite por hora ou disco cheio), ou null se pode. */
-  const uploadBlocker = async (): Promise<"queueFull" | "hourlyLimit" | "diskFull" | null> => {
+  const uploadBlocker = async (userId: number): Promise<"queueFull" | "hourlyLimit" | "diskFull" | null> => {
     const count = (sql: string, ...args: unknown[]) => (db.prepare(sql).get(...args) as { n: number }).n;
-    if (count("SELECT COUNT(*) AS n FROM fights WHERE status IN ('queued','parsing')") >= cfg.limits.maxQueue) return "queueFull";
+    const pending = "status IN ('queued','parsing')";
+    if (count(`SELECT COUNT(*) AS n FROM fights WHERE ${pending}`) >= cfg.limits.maxQueue) return "queueFull";
+    if (count(`SELECT COUNT(*) AS n FROM fights WHERE ${pending} AND owner_id = ?`, userId) >= cfg.limits.maxQueuePerUser) return "queueFull";
     const hourAgo = new Date(Date.now() - 3600_000).toISOString();
     if (count("SELECT COUNT(*) AS n FROM fights WHERE uploaded_at > ?", hourAgo) >= cfg.limits.maxPerHour) return "hourlyLimit";
+    if (count("SELECT COUNT(*) AS n FROM fights WHERE uploaded_at > ? AND owner_id = ?", hourAgo, userId) >= cfg.limits.maxPerHourPerUser) return "hourlyLimit";
     if ((await folderBytes(p.uploads)) >= cfg.limits.maxUploadsMb * 1024 * 1024) return "diskFull";
     return null;
   };
@@ -138,7 +141,7 @@ export async function buildApp(cfg: Config, opts: { logger?: boolean; fetch?: ty
         continue;
       }
       // os limites valem só para log novo: um duplicado é ignorado de qualquer jeito e não custa nada
-      const blocked = await uploadBlocker();
+      const blocked = await uploadBlocker(user.id);
       if (blocked) {
         await fs.rm(tmp, { force: true });
         results.push({ file: part.filename, error: LIMIT_MESSAGES[blocked], code: blocked });
@@ -202,6 +205,9 @@ export async function buildApp(cfg: Config, opts: { logger?: boolean; fetch?: ty
       });
       /** Filtros da query string mais o dono (que vem da URL, nunca da query). */
       const filtersOf = (req: FastifyRequest, qs: Record<string, string> = req.query as Record<string, string>): Filters => ({ ...parseFilters(qs), owner: req.owner.id });
+
+      // quem é o dono deste espaço (nome e avatar); nunca o id do Discord
+      scope.get("/", async (req) => ({ publicId: req.owner.publicId, name: req.owner.name, avatar: req.owner.avatar }));
 
       scope.get("/fights", async (req) => {
         const qs = req.query as Record<string, string>;

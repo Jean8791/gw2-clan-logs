@@ -31,13 +31,17 @@ export interface Config {
   limits: UploadLimits;
 }
 
-/** Travas contra abuso: tentativas de senha, fila de processamento, envios por hora e espaço em disco. */
+/** Travas contra abuso: tentativas de senha, fila de processamento, envios por hora (no total e por usuário) e espaço em disco. */
 export interface UploadLimits {
   maxFailedKeys: number;
   blockMinutes: number;
   maxQueue: number;
   maxPerHour: number;
   maxUploadsMb: number;
+  /** Logs de um mesmo usuário esperando ou em processamento. */
+  maxQueuePerUser: number;
+  /** Logs novos de um mesmo usuário por hora. */
+  maxPerHourPerUser: number;
 }
 
 /** Número positivo da variável de ambiente; vazio ou inválido usa o padrão. */
@@ -67,6 +71,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       maxQueue: positive(env.UPLOAD_MAX_QUEUE, 30),
       maxPerHour: positive(env.UPLOAD_MAX_PER_HOUR, 500),
       maxUploadsMb: positive(env.UPLOAD_MAX_DISK_MB, 4096),
+      maxQueuePerUser: positive(env.UPLOAD_MAX_QUEUE_USER, 10),
+      maxPerHourPerUser: positive(env.UPLOAD_MAX_PER_HOUR_USER, 200),
     },
   };
 }

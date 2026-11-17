@@ -1,10 +1,13 @@
-import { BarChart3, CalendarDays, GitCompareArrows, Home, Shield, Swords, UserRound } from "lucide-react";
+import { BarChart3, CalendarDays, GitCompareArrows, Home, Link2, LogIn, LogOut, Shield, Swords, Upload, UserRound } from "lucide-react";
+import { useState } from "react";
 import { ROUTES } from "@gw2logs/shared";
 import { NavLink, Outlet } from "react-router-dom";
+import { logout, useOwner, useViewer } from "../lib/api";
 import { useMe } from "../lib/hooks";
+import { spaceBase, spaceId } from "../lib/space";
 import { accountShort } from "../lib/format";
 import { setLang, useLang, useT } from "../lib/i18n";
-import { Segmented, cx } from "./ui";
+import { Empty, Segmented, cx } from "./ui";
 
 const NAV = [
   { to: ROUTES.overview, label: "nav.overview", icon: Home, end: true },
@@ -46,8 +49,47 @@ function Brand() {
   );
 }
 
+/** Dono do espaço, link para compartilhar e entrar/sair. */
+function SpaceBar() {
+  const t = useT();
+  const owner = useOwner();
+  const viewer = useViewer();
+  const [copied, setCopied] = useState(false);
+  const copy = () => {
+    void navigator.clipboard?.writeText(`${window.location.origin}${spaceBase}`).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+  const small = "flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs text-muted transition hover:bg-surface-2 hover:text-text";
+  return (
+    <div className="flex flex-col gap-0.5">
+      {owner.data && <div className="truncate px-3 pb-1 text-xs font-medium text-text">{t("space.of", { name: owner.data.name })}</div>}
+      <button onClick={copy} className={small}>
+        <Link2 className="size-3.5" /> {copied ? t("common.linkCopied") : t("common.copyLink")}
+      </button>
+      {viewer.data ? (
+        <button
+          onClick={() => void logout().then(() => window.location.assign("/"))}
+          className={small}
+        >
+          <LogOut className="size-3.5" /> {t("space.signOut")}
+        </button>
+      ) : (
+        <a href="/api/auth/login" className={small}>
+          <LogIn className="size-3.5" /> {t("space.signIn")}
+        </a>
+      )}
+    </div>
+  );
+}
+
 export function Layout() {
   const me = useMe();
+  const owner = useOwner();
+  const viewer = useViewer();
+  // só o dono, logado, importa logs no próprio espaço
+  const nav = viewer.data && viewer.data.publicId === spaceId ? [...NAV, { to: ROUTES.import, label: "nav.import", icon: Upload, end: false }] : NAV;
   const lang = useLang();
   const t = useT();
   const link = (active: boolean) =>
@@ -64,13 +106,14 @@ export function Layout() {
           <Brand />
         </div>
         <nav className="mt-8 flex flex-col gap-1">
-          {NAV.map(({ to, label, icon: Icon, end }) => (
+          {nav.map(({ to, label, icon: Icon, end }) => (
             <NavLink key={to} to={to} end={end} className={({ isActive }) => link(isActive)}>
               <Icon className="size-4" /> {t(label)}
             </NavLink>
           ))}
         </nav>
-        <div className="mt-auto flex flex-col gap-1">
+        <div className="mt-auto flex flex-col gap-3">
+          <SpaceBar />
           <NavLink to={ROUTES.me} className={({ isActive }) => link(isActive)}>
             <UserRound className="size-4" />
             <span className="truncate">{me ? accountShort(me) : t("nav.myProfile")}</span>
@@ -87,7 +130,7 @@ export function Layout() {
           </div>
         </div>
         <nav className="flex gap-1 overflow-x-auto px-3 pb-2">
-          {[...NAV, { to: ROUTES.me, label: "nav.me", icon: UserRound, end: false }].map(({ to, label, icon: Icon, end }) => (
+          {[...nav, { to: ROUTES.me, label: "nav.me", icon: UserRound, end: false }].map(({ to, label, icon: Icon, end }) => (
             <NavLink key={to} to={to} end={end} className={({ isActive }) => cx(link(isActive), "shrink-0 px-2.5 py-1.5 text-xs")}>
               <Icon className="size-3.5" /> {t(label)}
             </NavLink>
@@ -101,7 +144,7 @@ export function Layout() {
           <LangToggle />
         </div>
         {/* key: ao trocar o idioma a tela é refeita, e os textos e números saem no idioma novo */}
-        <Outlet key={lang} />
+        {owner.isError ? <Empty title={t("space.notFound")} /> : <Outlet key={lang} />}
       </main>
     </div>
   );

@@ -1,4 +1,4 @@
-import { DICT } from "@gw2logs/shared";
+import { DICT, MAX_UPLOAD_MB } from "@gw2logs/shared";
 import { t } from "./i18n";
 
 /** Erro de uma resposta da API: guarda o código estável (traduzido na hora de mostrar, no idioma da tela). */
@@ -34,3 +34,7 @@ export function fightErrorText(raw: string): string {
   const key = `fighterr.${code}`;
   return known(key) ? t(key, { detail: rest.join("|") }) : raw;
 }
+
+/** Texto de um código de erro da API (ou do envio); sem tradução, a mensagem original ou o próprio código. */
+export const codeText = (code?: string, message?: string): string =>
+  code && known(`api.${code}`) ? t(`api.${code}`, { max: MAX_UPLOAD_MB }) : (message ?? code ?? "");

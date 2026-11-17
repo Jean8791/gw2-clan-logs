@@ -9,6 +9,7 @@ export const ROUTES = {
   compare: "/compare",
   guilds: "/guilds",
   me: "/me",
+  import: "/import",
 } as const;
 
 // Primeiro trecho das rotas antigas (em português) e o que virou; os links já compartilhados continuam abrindo.

@@ -11,9 +11,11 @@ import {
   type PlayerProfile,
   type PlayerSkill,
   type RankingRow,
+  type UploadResult,
 } from "@gw2logs/shared";
 
-import { apiErrorFrom } from "./errors";
+import { ApiError, apiErrorFrom } from "./errors";
+import { spaceApi } from "./space";
 
 async function get<T>(url: string): Promise<T> {
   const res = await fetch(url);
@@ -38,44 +40,44 @@ export interface Meta {
 }
 
 export interface AppConfig {
-  uploadKeyRequired: boolean;
+  loginAvailable: boolean;
   adminKeyRequired: boolean;
   eliteInsights: boolean;
 }
 
 export const useConfig = () => useQuery({ queryKey: ["config"], queryFn: () => get<AppConfig>("/api/config"), staleTime: Infinity });
-export const useMeta = () => useQuery({ queryKey: ["meta"], queryFn: () => get<Meta>("/api/meta"), staleTime: 60_000 });
-export const useGuilds = () => useQuery({ queryKey: ["guilds"], queryFn: () => get<GuildSummary[]>("/api/guilds"), staleTime: 60_000 });
+export const useMeta = () => useQuery({ queryKey: ["meta"], queryFn: () => get<Meta>(`${spaceApi}/meta`), staleTime: 60_000 });
+export const useGuilds = () => useQuery({ queryKey: ["guilds"], queryFn: () => get<GuildSummary[]>(`${spaceApi}/guilds`), staleTime: 60_000 });
 
-export const useOverview = (f: Filters) => useQuery({ queryKey: ["overview", f], queryFn: () => get<Overview>(withFilters("/api/overview", f)) });
+export const useOverview = (f: Filters) => useQuery({ queryKey: ["overview", f], queryFn: () => get<Overview>(withFilters(`${spaceApi}/overview`, f)) });
 
 export const useDays = (f: Filters, enabled = true) =>
-  useQuery({ queryKey: ["days", f], queryFn: () => get<DaySummary[]>(withFilters("/api/days", f)), enabled });
+  useQuery({ queryKey: ["days", f], queryFn: () => get<DaySummary[]>(withFilters(`${spaceApi}/days`, f)), enabled });
 
 export const useFights = (f: Filters, limit = 100) =>
   useQuery({
     queryKey: ["fights", f, limit],
-    queryFn: () => get<Fight[]>(withFilters("/api/fights", f, { limit })),
+    queryFn: () => get<Fight[]>(withFilters(`${spaceApi}/fights`, f, { limit })),
     // enquanto houver luta na fila, atualiza sozinho
     refetchInterval: (q) => (q.state.data?.some((x) => x.status === "queued" || x.status === "parsing") ? 3000 : false),
   });
 
-export const useFight = (id: string) => useQuery({ queryKey: ["fight", id], queryFn: () => get<FightDetail>(`/api/fights/${encodeURIComponent(id)}`) });
+export const useFight = (id: string) => useQuery({ queryKey: ["fight", id], queryFn: () => get<FightDetail>(`${spaceApi}/fights/${encodeURIComponent(id)}`) });
 
 export const useRanking = (f: Filters) =>
-  useQuery({ queryKey: ["ranking", f], queryFn: () => get<{ rows: RankingRow[]; baseline: Aggregate }>(withFilters("/api/ranking", f)) });
+  useQuery({ queryKey: ["ranking", f], queryFn: () => get<{ rows: RankingRow[]; baseline: Aggregate }>(withFilters(`${spaceApi}/ranking`, f)) });
 
 export const usePlayer = (account: string, f: Filters) =>
-  useQuery({ queryKey: ["player", account, f], queryFn: () => get<PlayerProfile>(withFilters(`/api/players/${encodeURIComponent(account)}`, f)), retry: false });
+  useQuery({ queryKey: ["player", account, f], queryFn: () => get<PlayerProfile>(withFilters(`${spaceApi}/players/${encodeURIComponent(account)}`, f)), retry: false });
 
 export const usePlayerSkills = (account: string, f: Filters) =>
-  useQuery({ queryKey: ["player-skills", account, f], queryFn: () => get<PlayerSkill[]>(withFilters(`/api/players/${encodeURIComponent(account)}/skills`, f)) });
+  useQuery({ queryKey: ["player-skills", account, f], queryFn: () => get<PlayerSkill[]>(withFilters(`${spaceApi}/players/${encodeURIComponent(account)}/skills`, f)) });
 
 export const useCompare = (accounts: string[], f: Filters) =>
   useQuery({
     queryKey: ["compare", accounts, f],
     enabled: accounts.length > 0,
-    queryFn: () => get<{ players: PlayerProfile[]; baseline: Aggregate }>(withFilters("/api/compare", f, { accounts: accounts.join(",") })),
+    queryFn: () => get<{ players: PlayerProfile[]; baseline: Aggregate }>(withFilters(`${spaceApi}/compare`, f, { accounts: accounts.join(",") })),
   });
 
 export async function setGuildAlliance(id: string, inAlliance: boolean, key: string) {
@@ -85,4 +87,49 @@ export async function setGuildAlliance(id: string, inAlliance: boolean, key: str
     body: JSON.stringify({ inAlliance }),
   });
   if (!res.ok) throw apiErrorFrom(res.status, await res.json().catch(() => null));
+}
+
+export interface SpaceUser {
+  publicId: string;
+  name: string;
+  avatar: string | null;
+}
+
+/** Dono do espaço que está aberto. */
+export const useOwner = () => useQuery({ queryKey: ["owner"], queryFn: () => get<SpaceUser>(spaceApi), retry: false, staleTime: Infinity });
+
+/** Quem está logado neste navegador (null = ninguém). */
+export const useViewer = () =>
+  useQuery({
+    queryKey: ["viewer"],
+    queryFn: async (): Promise<SpaceUser | null> => {
+      const res = await fetch("/api/auth/me");
+      return res.ok ? ((await res.json()) as SpaceUser) : null;
+    },
+    staleTime: 60_000,
+  });
+
+export const logout = () => fetch("/api/auth/logout", { method: "POST" });
+
+/** Envia um log com o cookie da sessão. XHR para ter o progresso (logs de WvW são grandes). Erro HTTP vira ApiError. */
+export function uploadLog(file: File, onProgress: (pct: number) => void): Promise<UploadResult> {
+  const form = new FormData();
+  form.append("file", file, file.name);
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", "/api/upload");
+    xhr.upload.onprogress = (e) => e.lengthComputable && onProgress(Math.round((e.loaded / e.total) * 100));
+    xhr.onload = () => {
+      let body: any = null;
+      try {
+        body = JSON.parse(xhr.responseText);
+      } catch {
+        /* resposta vazia */
+      }
+      if (xhr.status >= 200 && xhr.status < 300 && Array.isArray(body) && body[0]) resolve(body[0] as UploadResult);
+      else reject(apiErrorFrom(xhr.status, body));
+    };
+    xhr.onerror = () => reject(new ApiError(0, "Network error", "network"));
+    xhr.send(form);
+  });
 }

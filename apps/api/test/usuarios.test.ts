@@ -182,3 +182,15 @@ describe("login com o Discord", () => {
 });
 
 const createWebSession = (userId: number) => createSession(app.db, userId, "web");
+
+describe("dono do espaço", () => {
+  it("o link mostra o nome do dono, sem login e sem expor o id do Discord", async () => {
+    const ana = criarUsuario(app, "987654321", "ana");
+
+    const res = await app.server.inject(`/api/u/${ana.publicId}`);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ publicId: ana.publicId, name: "ana", avatar: null });
+    expect(res.body).not.toContain("987654321");
+  });
+});

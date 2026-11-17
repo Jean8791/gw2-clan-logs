@@ -3,6 +3,7 @@
 export * from "./i18n.js";
 export * from "./routes.js";
 export * from "./boons.js";
+export * from "./upload.js";
 import { BOON_BASES, type ScopedKey } from "./boons.js";
 
 export type Mode = "wvw" | "pve";
