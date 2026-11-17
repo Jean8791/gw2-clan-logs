@@ -1,8 +1,7 @@
 // Fila em segundo plano: roda o Elite Insights em cada log enviado e grava as estatísticas.
 import fs from "node:fs/promises";
-import { createReadStream, createWriteStream, existsSync } from "node:fs";
+import { existsSync } from "node:fs";
 import path from "node:path";
-import { pipeline } from "node:stream/promises";
 import zlib from "node:zlib";
 import type { Config } from "./config.js";
 import { paths } from "./config.js";
@@ -121,10 +120,11 @@ export class LogWorker {
       if (html) await fs.rename(html, path.join(outDir, "report.html"));
       await ingestJson(this.db, this.api, this.media, id, json, existsSync(path.join(outDir, "report.html")));
 
-      // guarda o JSON completo: dá para criar estatísticas novas depois sem reenviar os logs
-      await pipeline(createReadStream(jsonFile), zlib.createGzip({ level: 9 }), createWriteStream(path.join(outDir, "ei.json.gz")));
+      // o que importa já está no banco: o log enviado não precisa ficar. Em caso de erro ele fica, para tentar de novo.
+      await fs.rm(src, { force: true });
     } finally {
       await fs.rm(work, { recursive: true, force: true });
+      await fs.rmdir(outDir).catch(() => {}); // só sai se ficou vazia (sobra o report.html quando ele é gerado)
     }
   }
 }

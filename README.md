@@ -26,8 +26,9 @@ ArcDPS (.zevtc) ──scripts/enviar-logs.sh──▶ API ──▶ fila ──�
 ```
 
 - **Não há tela de envio.** Os logs entram só pela API, com uma chave, usando o script `scripts/enviar-logs.sh` (veja [Enviar logs](#enviar-logs)).
-- O mesmo log enviado duas vezes é ignorado. O site também aceita o `.json` do Elite Insights ou do dps.report.
-- O JSON completo de cada luta fica em `data/fights/<id>/ei.json.gz`. Uma métrica nova pode ser calculada depois reprocessando as lutas guardadas, sem reenviar os logs: `npm run reingest` fora do Docker, ou `docker compose exec app node apps/api/dist/scripts/reingest.js` no servidor.
+- O mesmo log enviado duas vezes pelo mesmo usuário é ignorado enquanto a luta ainda está guardada; depois de apagada, pode ser importado de novo. O site também aceita o `.json` do Elite Insights ou do dps.report.
+- Depois de processar uma luta, o servidor guarda só o que foi para o banco (cerca de 0,2 MB por luta): o log enviado e o JSON do Elite Insights são apagados. Se o processamento falhar, o log enviado fica para diagnóstico. Por isso uma métrica nova só vale para as lutas enviadas depois dela; as antigas precisam ser enviadas de novo.
+- **O site não é um arquivo de logs:** ele só personaliza a visualização, e quem usa precisa guardar os originais em outro lugar. A tela de importação e a de entrada avisam isso, com o prazo em `RETENTION_DAYS`.
 - As lutas antigas são apagadas depois de `RETENTION_DAYS` dias, contados pela data da luta (no Docker Compose o padrão é 30; fora dele, 0 = guardar para sempre).
 
 | Parte | Tecnologia |
@@ -63,22 +64,40 @@ npm run dev
 npm test
 ```
 
-Com Docker: `docker build -t gw2-clan-logs .` e `docker run -p 8080:8080 -e UPLOAD_KEY=teste -v dados:/data gw2-clan-logs`.
+Com Docker: `docker build -t gw2-clan-logs .` e `docker run -p 8080:8080 -v dados:/data gw2-clan-logs`.
 
 ## Enviar logs
 
 O ArcDPS grava em `Documentos\Guild Wars 2\addons\arcdps\arcdps.cbtlogs\`. Para gravar **WvW**, no jogo use Alt+Shift+T, depois *Logging*, e ative a gravação de WvW. Cura e barreira só aparecem se quem gravou usa o addon **Healing Stats**.
 
-Para enviar, configure o endereço do site e a chave (a `UPLOAD_KEY` do servidor) e rode o script:
+Há duas formas de enviar, e as duas guardam os logs no seu espaço:
+
+1. **Pelo site**: entre com o Discord, abra *Importar logs* e arraste os arquivos. Eles vão um de cada vez; se o servidor encher, o envio espera sozinho, e ao bater um limite ele para e avisa.
+2. **Por script**, que usa a API e o seu token pessoal. Na página *Importar logs*, o cartão *Envio por script* gera o token (ele só aparece uma vez, e o anterior deixa de valer).
+
+No **Windows** (`scripts/enviar-logs.bat`, usa o `curl.exe` que já vem no Windows 10 e 11). Crie o arquivo `%APPDATA%\gw2logs\config.bat` com o endereço e o token:
+
+```bat
+set GW2LOGS_URL=https://seu-dominio
+set GW2LOGS_KEY=seu-token
+```
+
+e rode, com a pasta dos logs (ou arquivos):
+
+```bat
+enviar-logs.bat "%USERPROFILE%\Documents\Guild Wars 2\addons\arcdps\arcdps.cbtlogs"
+```
+
+No **Linux/macOS** (`scripts/enviar-logs.sh`):
 
 ```bash
-export GW2LOGS_URL=https://seu-dominio GW2LOGS_KEY=a-chave   # ou guarde em ~/.config/gw2logs/env (chmod 600)
+export GW2LOGS_URL=https://seu-dominio GW2LOGS_KEY=seu-token   # ou guarde em ~/.config/gw2logs/env (chmod 600)
 scripts/enviar-logs.sh ~/Documentos/Guild\ Wars\ 2/addons/arcdps/arcdps.cbtlogs   # arquivos ou pastas
 ```
 
-- Não reenvia o que já enviou (o registro é por servidor), espera quando a fila do servidor está cheia e para com aviso ao bater um limite.
-- A chave segue ao servidor por entrada padrão e não aparece em `ps`.
-- Quem tem a chave envia: trate-a como senha e troque a `UPLOAD_KEY` se ela vazar.
+- Não guarda registro do que já enviou: o servidor apaga os logs depois de um tempo, e o que sumiu pode ser enviado de novo (o que ainda está guardado é ignorado). Espera quando a fila do servidor está cheia e para com aviso ao bater um limite.
+- Nos dois scripts o token não vai na linha de comando (no `.sh` segue por entrada padrão; no `.bat` por um arquivo temporário seu, apagado no fim).
+- Quem tem o token envia logs no seu nome: trate-o como senha e gere outro no site se ele vazar (o anterior deixa de valer).
 
 ## Configuração
 
@@ -86,8 +105,9 @@ Variáveis de ambiente do servidor. No Docker Compose, as principais vêm do arq
 
 | Variável | Para quê | Padrão |
 |---|---|---|
-| `UPLOAD_KEY` | Chave para enviar logs. Vazio = qualquer um envia (nunca deixe vazio na internet) | vazio |
-| `ADMIN_KEY` | Senha para marcar as guildas da aliança | igual a `UPLOAD_KEY` |
+| `DISCORD_CLIENT_ID` / `DISCORD_CLIENT_SECRET` | Aplicativo do Discord do login (portal de desenvolvedores). Sem os dois, o login fica desligado. O secret vai só no servidor | vazio |
+| `PUBLIC_URL` | Endereço público do site (ex.: `https://logs.exemplo.com`): é o retorno do login do Discord (`/api/auth/callback`) e liga o cookie `Secure` quando é https | `http://localhost:5080` |
+| `ADMIN_KEY` | Senha para marcar as guildas da aliança. Vazio = qualquer um marca | vazio |
 | `DATA_DIR` | Banco SQLite, logs enviados e JSON das lutas | `./data` |
 | `RETENTION_DAYS` | Dias que as lutas ficam guardadas (0 = para sempre). No Compose o padrão é 30 | `0` |
 | `PORT` / `HOST` | Endereço do servidor | `5080` / `127.0.0.1` |
@@ -104,7 +124,7 @@ Variáveis de ambiente do servidor. No Docker Compose, as principais vêm do arq
 | `UPLOAD_MAX_FAILS` / `UPLOAD_BLOCK_MIN` | Erros de senha seguidos do mesmo IP até bloquear, e por quantos minutos | `5` / `15` |
 | `UPLOAD_MAX_QUEUE` | Logs esperando ou em processamento; acima disso o envio é recusado | `30` |
 | `UPLOAD_MAX_PER_HOUR` | Logs novos aceitos por hora | `500` |
-| `UPLOAD_MAX_DISK_MB` | Espaço máximo dos logs enviados | `4096` |
+| `UPLOAD_MAX_DISK_MB` | Espaço máximo dos logs enviados que ainda esperam processamento | `4096` |
 | `DOMINIO` (Compose) | Nome do site, usado pelo Caddy para o HTTPS | obrigatório |
 | `APP_MEM_LIMIT` (Compose) | Teto de memória do container; em VM de 1 GB use `800m` | `1500m` |
 
@@ -126,8 +146,8 @@ O site precisa de disco que não se perde e de ~1 GB de memória, então serviç
 
 ### Operação
 
-- **Atualizar:** na branch `release`, `git pull && docker compose up -d --build`. Se a extração mudou (`SCHEMA_VERSION` em `apps/api/src/db.ts`), reprocesse as lutas já importadas, a partir do JSON guardado, com `docker compose exec app node apps/api/dist/scripts/reingest.js` (com `sudo` se o seu usuário não estiver no grupo `docker`). Lutas novas já saem certas; só as antigas precisam disso.
-- **Backup diário:** `crontab -e` e `0 4 * * * cd ~/gw2-clan-logs && scripts/backup.sh`. Guarda as últimas 7 cópias do banco em `/data/backup`, dentro do mesmo disco: copie para fora se o histórico for importante. Cada luta ocupa cerca de 10 MB; confira o espaço do disco.
+- **Atualizar:** na branch `release`, `git pull && docker compose up -d --build`. Se a extração mudou (`SCHEMA_VERSION` em `apps/api/src/db.ts`), `reingest` só alcança as lutas que ainda têm o JSON guardado (`docker compose exec app node apps/api/dist/scripts/reingest.js`; o total impresso no fim mostra quantas foram). (com `sudo` se o seu usuário não estiver no grupo `docker`). Lutas novas já saem certas.
+- **Backup diário:** `crontab -e` e `0 4 * * * cd ~/gw2-clan-logs && scripts/backup.sh`. Guarda as últimas 7 cópias do banco em `/data/backup`, dentro do mesmo disco: copie para fora se o histórico for importante. Confira o espaço do disco de vez em quando.
 - **Acompanhar:** `docker compose logs -f app`, `docker stats`, e a tela Lutas mostra a fila e os erros de processamento.
 - **Alerta de fora do ar:** `GET /api/health` responde o estado e o tamanho da fila. O workflow `.github/workflows/uptime.yml` o consulta a cada 15 minutos e o GitHub avisa por e-mail se falhar; defina a variável `SITE_URL` do repositório (Settings, Secrets and variables, Variables).
 - **Segurança:** o SSH deve aceitar só chave (sem senha) e pode usar `fail2ban`. O site é de leitura aberta; enviar logs e marcar guildas exigem as chaves.

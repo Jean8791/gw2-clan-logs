@@ -6,9 +6,12 @@ import { parseFilters } from "@gw2logs/shared";
 import { loadConfig } from "../src/config.js";
 import { buildApp, type App } from "../src/server.js";
 import { wvwFixture } from "./fixture.js";
+import { criarUsuario } from "./usuarios.js";
 
 let app: App;
 let dir: string;
+let ana: ReturnType<typeof criarUsuario>;
+const u = (rota: string) => `/api/u/${ana.publicId}${rota}`;
 
 function multipart(files: { name: string; content: string }[], fields: Record<string, string> = {}) {
   const boundary = "----teste" + Math.random().toString(16).slice(2);
@@ -22,7 +25,8 @@ function multipart(files: { name: string; content: string }[], fields: Record<st
 
 beforeAll(async () => {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), "gw2logs-test-"));
-  app = await buildApp(loadConfig({ DATA_DIR: dir, UPLOAD_KEY: "segredo", GW2_API: "off", WEB_DIR: path.join(dir, "sem-site") }));
+  app = await buildApp(loadConfig({ DATA_DIR: dir, ADMIN_KEY: "segredo", GW2_API: "off", WEB_DIR: path.join(dir, "sem-site") }));
+  ana = criarUsuario(app, "1", "ana");
 });
 afterAll(async () => {
   await app.server.close();
@@ -39,15 +43,15 @@ describe("API", () => {
 
   it("aceita o JSON do EI, processa e ignora duplicado", async () => {
     const m = multipart([{ name: "luta.json", content: json }], { uploader: "Tester" });
-    const res = await app.server.inject({ method: "POST", url: "/api/upload", payload: m.payload, headers: { ...m.headers, "x-upload-key": "segredo" } });
+    const res = await app.server.inject({ method: "POST", url: "/api/upload", payload: m.payload, headers: { ...m.headers, "x-upload-key": ana.token } });
     expect(res.statusCode).toBe(200);
     expect(res.json()[0].status).toBe("queued");
     await app.worker.idle();
 
-    const dup = await app.server.inject({ method: "POST", url: "/api/upload", payload: m.payload, headers: { ...m.headers, "x-upload-key": "segredo" } });
+    const dup = await app.server.inject({ method: "POST", url: "/api/upload", payload: m.payload, headers: { ...m.headers, "x-upload-key": ana.token } });
     expect(dup.json()[0].duplicate).toBe(true);
 
-    const fights = (await app.server.inject("/api/fights")).json();
+    const fights = (await app.server.inject(u("/fights"))).json();
     expect(fights).toHaveLength(1);
     expect(fights[0].status).toBe("done");
     expect(fights[0].squadCount).toBe(3);
@@ -55,53 +59,53 @@ describe("API", () => {
 
   it("recusa extensão inválida", async () => {
     const m = multipart([{ name: "virus.exe", content: "x" }]);
-    const res = await app.server.inject({ method: "POST", url: "/api/upload", payload: m.payload, headers: { ...m.headers, "x-upload-key": "segredo" } });
+    const res = await app.server.inject({ method: "POST", url: "/api/upload", payload: m.payload, headers: { ...m.headers, "x-upload-key": ana.token } });
     expect(res.json()[0].error).toMatch(/Invalid format/);
   });
 
   it("ranking filtra por guilda, função e aliança", async () => {
-    const all = (await app.server.inject("/api/ranking")).json();
+    const all = (await app.server.inject(u("/ranking"))).json();
     expect(all.rows.map((r: any) => r.account)).toEqual(["Atacante.2222", "Outro.3333", "Comandante.1111"]);
     expect(all.baseline.fights).toBe(3);
 
-    const guildA = (await app.server.inject("/api/ranking?guild=GUILD-A")).json();
+    const guildA = (await app.server.inject(u("/ranking?guild=GUILD-A"))).json();
     expect(guildA.rows).toHaveLength(2);
 
-    const sup = (await app.server.inject("/api/ranking?role=support")).json();
+    const sup = (await app.server.inject(u("/ranking?role=support"))).json();
     expect(sup.rows.map((r: any) => r.account)).toEqual(["Comandante.1111"]);
 
     // nenhuma guilda marcada como aliança ainda
-    expect((await app.server.inject("/api/ranking?guild=alliance")).json().rows).toHaveLength(0);
+    expect((await app.server.inject(u("/ranking?guild=alliance"))).json().rows).toHaveLength(0);
 
     const denied = await app.server.inject({ method: "PUT", url: "/api/guilds/GUILD-B", payload: { inAlliance: true } });
     expect(denied.statusCode).toBe(401);
     const ok = await app.server.inject({ method: "PUT", url: "/api/guilds/GUILD-B", payload: { inAlliance: true }, headers: { "x-upload-key": "segredo" } });
     expect(ok.statusCode).toBe(200);
-    expect((await app.server.inject("/api/ranking?guild=alliance")).json().rows.map((r: any) => r.account)).toEqual(["Outro.3333"]);
+    expect((await app.server.inject(u("/ranking?guild=alliance"))).json().rows.map((r: any) => r.account)).toEqual(["Outro.3333"]);
   });
 
   it("perfil do jogador e comparação", async () => {
-    const p = (await app.server.inject("/api/players/Atacante.2222")).json();
+    const p = (await app.server.inject(u("/players/Atacante.2222"))).json();
     expect(p.history).toHaveLength(1);
     expect(p.totals.kills).toBe(3);
-    expect((await app.server.inject("/api/players/Ninguem.0000")).statusCode).toBe(404);
+    expect((await app.server.inject(u("/players/Ninguem.0000"))).statusCode).toBe(404);
 
-    const c = (await app.server.inject("/api/compare?accounts=Atacante.2222,Outro.3333")).json();
+    const c = (await app.server.inject(u("/compare?accounts=Atacante.2222,Outro.3333"))).json();
     expect(c.players).toHaveLength(2);
   });
 
   it("filtros de luta: mapa e tamanho do squad", async () => {
-    expect((await app.server.inject("/api/fights?minSquad=10")).json()).toHaveLength(0);
-    expect((await app.server.inject("/api/fights?map=38")).json()).toHaveLength(1);
-    expect((await app.server.inject("/api/fights?from=2026-11-14")).json()).toHaveLength(0);
-    expect((await app.server.inject("/api/fights?to=2026-11-13")).json()).toHaveLength(1);
+    expect((await app.server.inject(u("/fights?minSquad=10"))).json()).toHaveLength(0);
+    expect((await app.server.inject(u("/fights?map=38"))).json()).toHaveLength(1);
+    expect((await app.server.inject(u("/fights?from=2026-11-14"))).json()).toHaveLength(0);
+    expect((await app.server.inject(u("/fights?to=2026-11-13"))).json()).toHaveLength(1);
   });
 
   it("filtros De/Até com hora: a luta começou às 02:33:54Z", async () => {
-    expect((await app.server.inject("/api/fights?from=2026-11-13T02:33:00Z")).json()).toHaveLength(1);
-    expect((await app.server.inject("/api/fights?from=2026-11-13T02:34:00Z")).json()).toHaveLength(0);
-    expect((await app.server.inject("/api/fights?to=2026-11-13T02:33:00Z")).json()).toHaveLength(0);
-    expect((await app.server.inject("/api/fights?to=2026-11-13T02:34:00Z")).json()).toHaveLength(1);
+    expect((await app.server.inject(u("/fights?from=2026-11-13T02:33:00Z"))).json()).toHaveLength(1);
+    expect((await app.server.inject(u("/fights?from=2026-11-13T02:34:00Z"))).json()).toHaveLength(0);
+    expect((await app.server.inject(u("/fights?to=2026-11-13T02:33:00Z"))).json()).toHaveLength(0);
+    expect((await app.server.inject(u("/fights?to=2026-11-13T02:34:00Z"))).json()).toHaveLength(1);
   });
 });
 

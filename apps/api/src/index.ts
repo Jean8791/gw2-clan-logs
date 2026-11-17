@@ -1,4 +1,5 @@
 import { loadConfig, paths } from "./config.js";
+import { purgeExpiredSessions } from "./auth.js";
 import { eiAvailable } from "./elite-insights.js";
 import { purgeOldFights } from "./retention.js";
 import { buildApp } from "./server.js";
@@ -19,6 +20,8 @@ if (cfg.retentionDays > 0) {
   void purge();
   setInterval(purge, 60 * 60 * 1000).unref();
 }
+
+setInterval(() => purgeExpiredSessions(db), 60 * 60 * 1000).unref();
 
 for (const sig of ["SIGINT", "SIGTERM"] as const) process.once(sig, () => void server.close().then(() => process.exit(0)));
 

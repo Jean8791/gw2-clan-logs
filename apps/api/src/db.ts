@@ -25,9 +25,27 @@ export function openDb(file: string): DB {
 function migrate(db: DB) {
   const statCols = STAT_KEYS.map((k) => `${STAT_COL[k]} REAL NOT NULL DEFAULT 0`).join(",\n      ");
   db.exec(`
+    CREATE TABLE IF NOT EXISTS users (
+      id         INTEGER PRIMARY KEY,
+      public_id  TEXT NOT NULL UNIQUE,        -- vai na URL de compartilhar (não é o id do Discord)
+      discord_id TEXT NOT NULL UNIQUE,
+      name       TEXT NOT NULL,
+      avatar     TEXT,
+      created_at TEXT NOT NULL
+    );
+
+    -- kind: web (cookie do navegador, expira) | api (token pessoal do script de envio, um por usuário)
+    CREATE TABLE IF NOT EXISTS sessions (
+      token_hash TEXT PRIMARY KEY,
+      user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      kind       TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      expires_at TEXT
+    );
+
     CREATE TABLE IF NOT EXISTS fights (
       id            TEXT PRIMARY KEY,
-      sha256        TEXT NOT NULL UNIQUE,
+      sha256        TEXT NOT NULL,            -- único por dono (índice ux_fights_owner_sha), não no banco todo
       status        TEXT NOT NULL,            -- queued | parsing | done | error
       error         TEXT,
       uploaded_at   TEXT NOT NULL,
@@ -53,7 +71,6 @@ function migrate(db: DB) {
       ei_version    TEXT,
       has_report    INTEGER NOT NULL DEFAULT 0
     );
-    CREATE INDEX IF NOT EXISTS ix_fights_time ON fights(time_start);
 
     CREATE TABLE IF NOT EXISTS player_stats (
       fight_id      TEXT NOT NULL REFERENCES fights(id) ON DELETE CASCADE,
@@ -115,6 +132,38 @@ function migrate(db: DB) {
   const haveFights = new Set((db.pragma("table_info(fights)") as { name: string }[]).map((c) => c.name));
   for (const col of ["enemy_downs", "enemy_deaths"]) {
     if (!haveFights.has(col)) db.exec(`ALTER TABLE fights ADD COLUMN ${col} INTEGER`);
+  }
+  // dono da luta; as lutas anteriores ao login ficam sem dono até o primeiro usuário entrar
+  if (!haveFights.has("owner_id")) db.exec("ALTER TABLE fights ADD COLUMN owner_id INTEGER REFERENCES users(id)");
+  dropGlobalShaUnique(db);
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS ix_fights_time ON fights(time_start);
+    CREATE INDEX IF NOT EXISTS ix_fights_owner ON fights(owner_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS ux_fights_owner_sha ON fights(owner_id, sha256);
+  `);
+}
+
+/**
+ * Bancos antigos têm `sha256 UNIQUE` no banco todo: o log que um usuário enviou impedia os outros de enviar o mesmo.
+ * O SQLite não remove essa restrição com ALTER, então a tabela é refeita (roteiro oficial: sqlite.org/lang_altertable.html, item 7).
+ */
+function dropGlobalShaUnique(db: DB) {
+  const shaOnly = (db.pragma("index_list(fights)") as { name: string; unique: number; origin: string }[]).some(
+    (i) => i.unique && i.origin === "u" && (db.pragma(`index_info(${i.name})`) as unknown[]).length === 1,
+  );
+  if (!shaOnly) return;
+  const { sql } = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'fights'").get() as { sql: string };
+  db.pragma("foreign_keys = OFF");
+  try {
+    db.transaction(() => {
+      db.exec(sql.replace("CREATE TABLE fights", "CREATE TABLE fights_novo").replace(/(sha256\s+TEXT NOT NULL)\s+UNIQUE/, "$1"));
+      db.exec("INSERT INTO fights_novo SELECT * FROM fights");
+      db.exec("DROP TABLE fights");
+      db.exec("ALTER TABLE fights_novo RENAME TO fights");
+      if ((db.pragma("foreign_key_check") as unknown[]).length) throw new Error("Migração do índice de sha256 deixou referências quebradas.");
+    })();
+  } finally {
+    db.pragma("foreign_keys = ON");
   }
 }
 

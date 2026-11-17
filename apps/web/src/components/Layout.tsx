@@ -1,10 +1,11 @@
-import { BarChart3, CalendarDays, GitCompareArrows, Home, Shield, Swords, UserRound } from "lucide-react";
+import { BarChart3, CalendarDays, ChevronUp, GitCompareArrows, Home, Link2, LogIn, LogOut, Shield, Swords, Trash2, Upload, UserRound } from "lucide-react";
+import { useState } from "react";
 import { ROUTES } from "@gw2logs/shared";
 import { NavLink, Outlet } from "react-router-dom";
-import { useMe } from "../lib/hooks";
-import { accountShort } from "../lib/format";
+import { deleteAccount, logout, useOwner, useViewer } from "../lib/api";
+import { spaceBase, spaceId } from "../lib/space";
 import { setLang, useLang, useT } from "../lib/i18n";
-import { Segmented, cx } from "./ui";
+import { Button, Empty, Segmented, cx } from "./ui";
 
 const NAV = [
   { to: ROUTES.overview, label: "nav.overview", icon: Home, end: true },
@@ -13,6 +14,7 @@ const NAV = [
   { to: ROUTES.ranking, label: "nav.ranking", icon: BarChart3 },
   { to: ROUTES.compare, label: "nav.compare", icon: GitCompareArrows },
   { to: ROUTES.guilds, label: "nav.guilds", icon: Shield },
+  { to: ROUTES.me, label: "nav.myProfile", icon: UserRound },
 ];
 
 /** Botão PT | EN. A escolha fica salva no navegador, e a tela é refeita no idioma novo. */
@@ -33,6 +35,66 @@ function LangToggle() {
   );
 }
 
+/** Quem está logado: o nome abre o menu com sair e apagar conta. Sem login, o botão de entrar. */
+function AccountMenu() {
+  const t = useT();
+  const viewer = useViewer();
+  const [open, setOpen] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const item = "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted transition hover:bg-surface-2 hover:text-text";
+  if (!viewer.data) {
+    return (
+      <a href="/api/auth/login" className={item}>
+        <LogIn className="size-4" /> {t("space.signIn")}
+      </a>
+    );
+  }
+  const leave = (action: () => Promise<unknown>) => {
+    setBusy(true);
+    void action().then(() => window.location.assign("/"), () => setBusy(false));
+  };
+  return (
+    <div className="flex flex-col gap-1">
+      {open && (
+        <div className="rounded-lg border border-line bg-surface-2 p-1">
+          <button className={item} onClick={() => leave(logout)} disabled={busy}>
+            <LogOut className="size-4" /> {t("space.signOut")}
+          </button>
+          {confirming ? (
+            <div className="space-y-2 p-2 text-xs text-bad">
+              <p>{t("account.deleteWarn")}</p>
+              <div className="flex gap-2">
+                <Button size="sm" onClick={() => leave(deleteAccount)} disabled={busy}>
+                  {t("account.deleteConfirm")}
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setConfirming(false)} disabled={busy}>
+                  {t("account.cancel")}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <button className={cx(item, "hover:text-bad")} onClick={() => setConfirming(true)}>
+              <Trash2 className="size-4" /> {t("account.delete")}
+            </button>
+          )}
+        </div>
+      )}
+      <button
+        className={cx(item, "justify-between font-medium text-text")}
+        onClick={() => (setOpen(!open), setConfirming(false))}
+        aria-expanded={open}
+      >
+        <span className="flex min-w-0 items-center gap-2">
+          <UserRound className="size-4 shrink-0" />
+          <span className="truncate">{viewer.data.name}</span>
+        </span>
+        <ChevronUp className={cx("size-4 shrink-0 transition", !open && "rotate-180")} />
+      </button>
+    </div>
+  );
+}
+
 function Brand() {
   const t = useT();
   return (
@@ -46,8 +108,28 @@ function Brand() {
   );
 }
 
+/** Copia o endereço deste espaço, para compartilhar. */
+function CopyLink() {
+  const t = useT();
+  const [copied, setCopied] = useState(false);
+  const copy = () => {
+    void navigator.clipboard?.writeText(`${window.location.origin}${spaceBase}`).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+  return (
+    <Button size="sm" variant="ghost" onClick={copy}>
+      <Link2 className="size-3.5" /> {copied ? t("common.linkCopied") : t("common.copyLink")}
+    </Button>
+  );
+}
+
 export function Layout() {
-  const me = useMe();
+  const owner = useOwner();
+  const viewer = useViewer();
+  // só o dono, logado, importa logs no próprio espaço
+  const nav = viewer.data && viewer.data.publicId === spaceId ? [...NAV, { to: ROUTES.import, label: "nav.import", icon: Upload, end: false }] : NAV;
   const lang = useLang();
   const t = useT();
   const link = (active: boolean) =>
@@ -64,17 +146,14 @@ export function Layout() {
           <Brand />
         </div>
         <nav className="mt-8 flex flex-col gap-1">
-          {NAV.map(({ to, label, icon: Icon, end }) => (
+          {nav.map(({ to, label, icon: Icon, end }) => (
             <NavLink key={to} to={to} end={end} className={({ isActive }) => link(isActive)}>
               <Icon className="size-4" /> {t(label)}
             </NavLink>
           ))}
         </nav>
-        <div className="mt-auto flex flex-col gap-1">
-          <NavLink to={ROUTES.me} className={({ isActive }) => link(isActive)}>
-            <UserRound className="size-4" />
-            <span className="truncate">{me ? accountShort(me) : t("nav.myProfile")}</span>
-          </NavLink>
+        <div className="mt-auto">
+          <AccountMenu />
         </div>
       </aside>
 
@@ -83,11 +162,12 @@ export function Layout() {
         <div className="flex items-center justify-between px-4 py-3">
           <Brand />
           <div className="flex items-center gap-2">
+            <CopyLink />
             <LangToggle />
           </div>
         </div>
         <nav className="flex gap-1 overflow-x-auto px-3 pb-2">
-          {[...NAV, { to: ROUTES.me, label: "nav.me", icon: UserRound, end: false }].map(({ to, label, icon: Icon, end }) => (
+          {nav.map(({ to, label, icon: Icon, end }) => (
             <NavLink key={to} to={to} end={end} className={({ isActive }) => cx(link(isActive), "shrink-0 px-2.5 py-1.5 text-xs")}>
               <Icon className="size-3.5" /> {t(label)}
             </NavLink>
@@ -96,12 +176,13 @@ export function Layout() {
       </header>
 
       <main className="mx-auto w-full max-w-[1400px] min-w-0 px-4 pb-6 pt-6 sm:px-6 md:pt-4 lg:px-10 lg:pb-10 lg:pt-5">
-        {/* idioma: canto superior direito (no celular o botão fica no cabeçalho) */}
-        <div className="mb-3 hidden justify-end md:flex">
+        {/* link e idioma: canto superior direito (no celular ficam no cabeçalho) */}
+        <div className="mb-3 hidden items-center justify-end gap-2 md:flex">
+          <CopyLink />
           <LangToggle />
         </div>
         {/* key: ao trocar o idioma a tela é refeita, e os textos e números saem no idioma novo */}
-        <Outlet key={lang} />
+        {owner.isError ? <Empty title={t("space.notFound")} /> : <Outlet key={lang} />}
       </main>
     </div>
   );

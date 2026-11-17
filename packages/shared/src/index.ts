@@ -3,6 +3,7 @@
 export * from "./i18n.js";
 export * from "./routes.js";
 export * from "./boons.js";
+export * from "./upload.js";
 import { BOON_BASES, type ScopedKey } from "./boons.js";
 
 export type Mode = "wvw" | "pve";
@@ -352,6 +353,8 @@ export interface Filters {
   profession?: string;
   /** dias de batalha (AAAA-MM-DD, ver battleDay): vale a união dos dias escolhidos */
   day?: string[];
+  /** id do dono das lutas. Só o servidor preenche (vem da URL /u/:id), nunca da query string. */
+  owner?: number;
 }
 
 export const FILTER_KEYS = [

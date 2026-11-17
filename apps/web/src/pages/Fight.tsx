@@ -13,6 +13,7 @@ import { useFight } from "../lib/api";
 import { useMe } from "../lib/hooks";
 import { accountShort, axis, compact, dateTime, duration, int } from "../lib/format";
 import { t } from "../lib/i18n";
+import { spaceApi } from "../lib/space";
 
 interface GroupRow extends Stats {
   id: string;
@@ -128,7 +129,7 @@ export function FightPage() {
         subtitle={`${dateTime(f.timeStart)} · ${duration(f.durationMs)}${f.recordedBy ? ` · ${t("page.fight.recordedBy", { name: f.recordedBy })}` : ""}${f.uploader ? ` · ${t("page.fight.uploadedBy", { name: f.uploader })}` : ""}`}
         actions={
           f.hasReport && (
-            <a href={`/api/fights/${f.id}/report`} target="_blank" rel="noreferrer">
+            <a href={`${spaceApi}/fights/${f.id}/report`} target="_blank" rel="noreferrer">
               <Button>
                 {t("fight.report")} <ExternalLink className="size-3.5" />
               </Button>

@@ -7,6 +7,7 @@ import { loadConfig, paths } from "../src/config.js";
 import { openDb, type DB } from "../src/db.js";
 import * as q from "../src/queries.js";
 import { buildApp } from "../src/server.js";
+import { criarUsuario } from "./usuarios.js";
 
 // Horários em Brasília (UTC-3), escritos em UTC: 23:55 de 12/11 = 02:55Z de 13/11.
 const T = {
@@ -138,7 +139,8 @@ describe("GET /api/days", () => {
   it("devolve os dias de batalha", async () => {
     const app = await buildApp(loadConfig({ DATA_DIR: dir, GW2_API: "off", WEB_DIR: path.join(dir, "sem-site") }));
 
-    const res = await app.server.inject({ url: "/api/days?mode=wvw" });
+    const ana = criarUsuario(app, "1"); // o primeiro usuário recebe as lutas que já existiam sem dono
+    const res = await app.server.inject({ url: `/api/u/${ana.publicId}/days?mode=wvw` });
 
     expect(res.statusCode).toBe(200);
     expect(res.json().map((d: any) => d.day)).toEqual(["2026-11-13", "2026-11-12"]);
