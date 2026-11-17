@@ -1,5 +1,6 @@
 // Rotas de login (Discord), sessão e token pessoal de envio.
 import crypto from "node:crypto";
+import { ROUTES } from "@gw2logs/shared";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { paths, type Config } from "./config.js";
 import { cookieHeader, createSession, deleteSession, readCookie, upsertDiscordUser, userFromToken, type User } from "./auth.js";
@@ -55,9 +56,11 @@ export function registerAuthRoutes(server: FastifyInstance, db: DB, cfg: Config,
 
       const user = upsertDiscordUser(db, { id: me.id, username: me.global_name || me.username, avatar: me.avatar ?? null });
       const token = createSession(db, user.id, "web");
+      // quem ainda não tem luta nenhuma vai direto para a importação, que é o que ele precisa fazer
+      const hasFights = db.prepare("SELECT 1 FROM fights WHERE owner_id = ? LIMIT 1").get(user.id) !== undefined;
       return reply
         .header("set-cookie", [cookieHeader(WEB_COOKIE, token, { secure, maxAgeSec: WEB_COOKIE_SECONDS }), clear(STATE_COOKIE, "/api/auth")])
-        .redirect(`/u/${user.publicId}`);
+        .redirect(`/u/${user.publicId}${hasFights ? "" : ROUTES.import}`);
     } catch (e) {
       req.log.error({ err: e instanceof Error ? e.message : String(e) }, "falha no login com o Discord");
       return reply.code(502).send({ error: "Could not sign in with Discord. Try again.", code: "loginFailed" });
