@@ -68,10 +68,14 @@ export async function buildApp(cfg: Config, opts: { logger?: boolean; fetch?: ty
     return true;
   };
 
-  /** Confere a senha de administrador (sem senha configurada, libera). */
+  /** Confere a senha de administrador. Sem ADMIN_KEY configurada a administração fica desligada, nunca aberta. */
   const checkAdmin = (req: FastifyRequest, reply: FastifyReply): boolean => {
+    if (cfg.adminKey === "") {
+      reply.code(403).send({ error: "Administration is disabled: set ADMIN_KEY.", code: "adminDisabled" });
+      return false;
+    }
     if (ipBlocked(req, reply)) return false;
-    if (cfg.adminKey === "" || safeEqual(String(req.headers["x-upload-key"] ?? ""), cfg.adminKey)) {
+    if (safeEqual(String(req.headers["x-upload-key"] ?? ""), cfg.adminKey)) {
       attempts.reset(req.ip);
       return true;
     }
@@ -120,7 +124,7 @@ export async function buildApp(cfg: Config, opts: { logger?: boolean; fetch?: ty
         results.push({ file: part.filename, error: "Invalid format (use .zevtc, .evtc or the Elite Insights .json).", code: "badFormat" });
         continue;
       }
-      // grava num temporário calculando o hash: o mesmo log enviado duas vezes é ignorado
+      // grava num temporário calculando o hash: o mesmo log enviado duas vezes pelo mesmo usuário é ignorado
       const tmp = path.join(p.uploads, `tmp-${crypto.randomUUID()}`);
       const hash = crypto.createHash("sha256");
       await pipeline(
@@ -134,7 +138,7 @@ export async function buildApp(cfg: Config, opts: { logger?: boolean; fetch?: ty
         continue;
       }
       const sha = hash.digest("hex");
-      const existing = db.prepare("SELECT id, status FROM fights WHERE sha256 = ?").get(sha) as { id: string; status: any } | undefined;
+      const existing = db.prepare("SELECT id, status FROM fights WHERE sha256 = ? AND owner_id = ?").get(sha, user.id) as { id: string; status: any } | undefined;
       if (existing) {
         await fs.rm(tmp, { force: true });
         results.push({ file: part.filename, id: existing.id, status: existing.status, duplicate: true });
@@ -147,7 +151,7 @@ export async function buildApp(cfg: Config, opts: { logger?: boolean; fetch?: ty
         results.push({ file: part.filename, error: LIMIT_MESSAGES[blocked], code: blocked });
         continue;
       }
-      const id = `${new Date().toISOString().replace(/\D/g, "").slice(0, 14)}-${sha.slice(0, 8)}`;
+      const id = `${new Date().toISOString().replace(/\D/g, "").slice(0, 14)}-${sha.slice(0, 8)}-${user.id}`;
       await fs.rename(tmp, path.join(p.uploads, id + ext));
       db.prepare("INSERT INTO fights (id, sha256, status, uploaded_at, uploader, owner_id, file_name) VALUES (?, ?, 'queued', ?, ?, ?, ?)").run(
         id, sha, new Date().toISOString(), user.name, user.id, part.filename.slice(0, 200),
@@ -172,6 +176,7 @@ export async function buildApp(cfg: Config, opts: { logger?: boolean; fetch?: ty
     loginAvailable: cfg.discord.clientId !== "" && cfg.discord.clientSecret !== "",
     adminKeyRequired: cfg.adminKey !== "",
     eliteInsights: eiAvailable(cfg.eiDir),
+    retentionDays: cfg.retentionDays,
   }));
 
   registerAuthRoutes(server, db, cfg, opts.fetch ?? fetch);

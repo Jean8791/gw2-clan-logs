@@ -8,9 +8,10 @@ rem
 rem Configuracao: variaveis de ambiente ou o arquivo %APPDATA%\gw2logs\config.bat, com duas linhas:
 rem   set GW2LOGS_URL=https://endereco-do-site
 rem   set GW2LOGS_KEY=seu-token
+rem O config.bat e executado como script: so ponha nele as duas linhas acima.
 rem O token e gerado no site (Importar logs, "Envio por script"). Quem tem o token envia logs no seu nome: trate como senha.
 rem
-rem O que ja foi enviado fica em %LOCALAPPDATA%\gw2logs e nao e mandado de novo. Precisa do curl.exe (ja vem no Windows 10 e 11).
+rem Nao guarda registro do que ja enviou: o servidor apaga os logs depois de um tempo e o que sumiu pode ser enviado de novo. O que ainda esta guardado la e ignorado e conta como "ja enviado". Precisa do curl.exe (ja vem no Windows 10 e 11).
 setlocal EnableExtensions
 chcp 65001 >nul
 
@@ -34,19 +35,10 @@ if not defined GW2LOGS_URL goto semconfig
 if not defined GW2LOGS_KEY goto semconfig
 if "%GW2LOGS_URL:~-1%"=="/" set "GW2LOGS_URL=%GW2LOGS_URL:~0,-1%"
 
-rem um registro por servidor: testar no local nao faz o de producao pular os logs
-set "ID=%GW2LOGS_URL::=_%"
-set "ID=%ID:/=_%"
-set "STATE_DIR=%LOCALAPPDATA%\gw2logs"
-set "STATE=%STATE_DIR%\enviados-%ID%.txt"
-if not exist "%STATE_DIR%" mkdir "%STATE_DIR%"
-if not exist "%STATE%" type nul >"%STATE%"
-
-rem o token vai ao curl por um arquivo temporario seu (apagado no fim), nunca na linha de comando
+rem o token vai ao curl por um arquivo temporario seu, nunca na linha de comando; ele existe so durante cada envio (Ctrl+C no meio de um envio e a unica chance de sobrar um)
 set "CFG=%TEMP%\gw2logs-%RANDOM%.cfg"
 set "RESP=%TEMP%\gw2logs-%RANDOM%.resp"
 set "CODE=%TEMP%\gw2logs-%RANDOM%.code"
->"%CFG%" echo header = "X-Upload-Key: %GW2LOGS_KEY%"
 
 set SENT=0
 set KNOWN=0
@@ -68,20 +60,15 @@ goto proximo
 :enviar
 if defined STOP exit /b 0
 set "TRY=0"
-set "REGISTRO=%~f1?%~z1"
-set "REGISTRO=%REGISTRO:\=/%"
-findstr /x /c:"%REGISTRO%" "%STATE%" >nul 2>&1
-if not errorlevel 1 (
-  set /a KNOWN+=1
-  exit /b 0
-)
 set "CAMINHO=%~f1"
 set "CAMINHO=%CAMINHO:\=/%"
 
 :tentar
 set "HTTP="
 del "%RESP%" "%CODE%" >nul 2>&1
+>"%CFG%" echo header = "X-Upload-Key: %GW2LOGS_KEY%"
 curl.exe -sS -m 900 --config "%CFG%" -o "%RESP%" -w "%%{http_code}" -F "file=@\"%CAMINHO%\"" "%GW2LOGS_URL%/api/upload" >"%CODE%" 2>nul
+del "%CFG%" >nul 2>&1
 if exist "%CODE%" set /p HTTP=<"%CODE%"
 if not defined HTTP goto semrede
 if "%HTTP%"=="401" goto semtoken
@@ -103,13 +90,11 @@ findstr /r /c:"error.:." "%RESP%" >nul 2>&1
 if not errorlevel 1 goto recusado
 findstr /r /c:"duplicate.:true" "%RESP%" >nul 2>&1
 if not errorlevel 1 goto jaenviado
->>"%STATE%" echo %REGISTRO%
 set /a SENT+=1
 echo Enviado: %~f1
 exit /b 0
 
 :jaenviado
->>"%STATE%" echo %REGISTRO%
 set /a KNOWN+=1
 exit /b 0
 

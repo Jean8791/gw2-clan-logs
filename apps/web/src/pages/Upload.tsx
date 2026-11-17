@@ -3,6 +3,7 @@ import { CheckCircle2, CircleDashed, FileUp, Info, KeyRound, Loader2, PauseCircl
 import { useRef, useState, type DragEvent } from "react";
 import { Link } from "react-router-dom";
 import { MAX_UPLOAD_MB, ROUTES, sendInOrder, type ItemState } from "@gw2logs/shared";
+import { RetentionNotice } from "../components/RetentionNotice";
 import { Button, Card, ErrorBox, PageHeader, Rich, cx } from "../components/ui";
 import { createToken, uploadLog, useConfig, useFights } from "../lib/api";
 import { codeText, fightErrorText } from "../lib/errors";
@@ -30,42 +31,43 @@ export function UploadPage() {
   const fights = useFights({}, 100);
   const fightOf = (id?: string) => fights.data?.find((f) => f.id === id);
 
-  const add = (list: FileList | null) => {
-    if (!list || running) return;
-    const ok = [...list].filter((f) => ACCEPT.some((e) => f.name.toLowerCase().endsWith(e)));
-    setItems((cur) => [
-      ...cur,
-      ...ok
-        .filter((f) => !cur.some((c) => c.file.name === f.name && c.file.size === f.size))
-        .map((file): Item => ({ file, state: file.size > MAX_UPLOAD_MB * 1024 * 1024 ? { kind: "error", code: "tooBig" } : { kind: "pending" } })),
-    ]);
-  };
-
-  const onDrop = (e: DragEvent) => {
-    e.preventDefault();
-    setDrag(false);
-    add(e.dataTransfer.files);
-  };
-
-  const start = async () => {
-    const todo = items.map((it, index) => ({ it, index })).filter(({ it }) => it.state.kind === "pending" || it.state.kind === "skipped");
+  const send = async (batch: Item[]) => {
+    const todo = batch.filter((it) => it.state.kind === "pending" || it.state.kind === "skipped");
     if (!todo.length) return;
     stop.current = false;
     setRunning(true);
     try {
       await sendInOrder(todo, {
-        send: ({ it }) => uploadLog(it.file, setPct),
+        send: (it) => uploadLog(it.file, setPct),
         wait: sleep,
         shouldStop: () => stop.current,
         onState: (i, state) => {
           setPct(0);
-          setItems((cur) => cur.map((it, k) => (k === todo[i]!.index ? { ...it, state } : it)));
+          setItems((cur) => cur.map((it) => (it.file === todo[i]!.file ? { ...it, state } : it)));
         },
       });
     } finally {
       setRunning(false);
       await qc.invalidateQueries({ queryKey: ["fights"] });
     }
+  };
+
+  /** Escolher ou soltar os arquivos já valida e começa a importar. */
+  const add = (list: FileList | null) => {
+    if (!list || running) return;
+    const fresh = [...list]
+      .filter((f) => ACCEPT.some((e) => f.name.toLowerCase().endsWith(e)))
+      .filter((f) => !items.some((c) => c.file.name === f.name && c.file.size === f.size))
+      .map((file): Item => ({ file, state: file.size > MAX_UPLOAD_MB * 1024 * 1024 ? { kind: "error", code: "tooBig" } : { kind: "pending" } }));
+    if (!fresh.length) return;
+    setItems((cur) => [...cur, ...fresh]);
+    void send(fresh);
+  };
+
+  const onDrop = (e: DragEvent) => {
+    e.preventDefault();
+    setDrag(false);
+    add(e.dataTransfer.files);
   };
 
   const waiting = items.filter((i) => i.state.kind === "pending" || i.state.kind === "skipped").length;
@@ -109,6 +111,7 @@ export function UploadPage() {
 
       <div className="grid gap-6 lg:grid-cols-[1fr_340px]">
         <div className="flex flex-col gap-4">
+          <RetentionNotice />
           <div
             onDragOver={(e) => {
               e.preventDefault();
@@ -129,17 +132,25 @@ export function UploadPage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
-            <Button variant="primary" disabled={!waiting || running} onClick={start}>
-              {running ? <Loader2 className="size-4 animate-spin" /> : <FileUp className="size-4" />}
-              {t("upload.send")}
-            </Button>
-            {running && <Button onClick={() => (stop.current = true)}>{t("upload.stop")}</Button>}
+            {running ? (
+              <>
+                <Loader2 className="size-4 animate-spin text-info" />
+                <Button onClick={() => (stop.current = true)}>{t("upload.stop")}</Button>
+              </>
+            ) : (
+              waiting > 0 && (
+                <Button variant="primary" onClick={() => void send(items)}>
+                  <FileUp className="size-4" />
+                  {t("upload.send")}
+                </Button>
+              )
+            )}
             {!running && items.length > 0 && (
               <Button variant="ghost" size="sm" onClick={() => setItems([])}>
                 {t("common.clear")}
               </Button>
             )}
-            <span className="text-sm text-muted">{t("upload.filesToSend", { n: waiting })}</span>
+            {waiting > 0 && <span className="text-sm text-muted">{t("upload.filesToSend", { n: waiting })}</span>}
           </div>
           <p className="text-xs text-faint">{t("upload.safety")}</p>
 
@@ -160,7 +171,6 @@ export function UploadPage() {
         </div>
 
         <div className="flex flex-col gap-4">
-        <ScriptCard />
         <Card title={<span className="inline-flex items-center gap-2"><Info className="size-4 text-gold" /> {t("upload.help.title")}</span>}>
           <div className="space-y-3 px-5 py-4 text-sm text-muted">
             <p>
@@ -187,7 +197,7 @@ export function UploadPage() {
 
 
 /** Gera o token do script de envio e mostra, uma vez só, as duas linhas de configuração. */
-function ScriptCard() {
+export function ScriptCard() {
   const [token, setToken] = useState<string | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [copied, setCopied] = useState(false);

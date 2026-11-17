@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createSession } from "../src/auth.js";
+import { createSession, purgeExpiredSessions } from "../src/auth.js";
 import { loadConfig } from "../src/config.js";
 import { buildApp, type App } from "../src/server.js";
 import { wvwFixture } from "./fixture.js";
@@ -155,6 +155,18 @@ describe("login com o Discord", () => {
     expect((await app.server.inject("/api/auth/callback?code=abc&state=outro")).statusCode).toBe(400);
   });
 
+  it("cancelar na tela do Discord volta para a entrada, sem sessão e sem erro", async () => {
+    const ida = await app.server.inject("/api/auth/login");
+    const state = new URL(String(ida.headers.location)).searchParams.get("state");
+
+    const res = await app.server.inject({ url: `/api/auth/callback?error=access_denied&error_description=The+resource+owner+denied&state=${state}`, headers: { cookie: cookieDe(ida, "oauth_state")!.split(";")[0]! } });
+
+    expect(res.statusCode).toBe(302);
+    expect(res.headers.location).toBe("/");
+    expect(cookieDe(res, "oauth_state")).toContain("Max-Age=0");
+    expect(cookieDe(res, "session")).toBeUndefined();
+  });
+
   it("sair apaga a sessão", async () => {
     const ana = criarUsuario(app, "1", "ana");
     const cookie = `session=${createWebSession(ana.id)}`;
@@ -192,5 +204,109 @@ describe("dono do espaço", () => {
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({ publicId: ana.publicId, name: "ana", avatar: null });
     expect(res.body).not.toContain("987654321");
+  });
+});
+
+describe("o mesmo log enviado por usuários diferentes", () => {
+  it("cada um fica com a própria luta; o repetido do mesmo usuário continua sendo ignorado", async () => {
+    const ana = criarUsuario(app, "1", "ana");
+    const beto = criarUsuario(app, "2", "beto");
+
+    const daAna = (await enviar(ana.token)).json()[0];
+    const doBeto = (await enviar(beto.token)).json()[0];
+    const repetido = (await enviar(ana.token)).json()[0];
+    await app.worker.idle();
+
+    expect(daAna.duplicate).toBeUndefined();
+    expect(doBeto).toMatchObject({ status: "queued" });
+    expect(doBeto.duplicate).toBeUndefined();
+    expect(doBeto.id).not.toBe(daAna.id);
+    expect(repetido).toMatchObject({ id: daAna.id, duplicate: true });
+    expect((await app.server.inject(`/api/u/${beto.publicId}/fights`)).json()).toHaveLength(1);
+    expect((await app.server.inject(`/api/u/${ana.publicId}/fights`)).json()).toHaveLength(1);
+  });
+});
+
+describe("administração e sessões", () => {
+  it("sem ADMIN_KEY a administração fica desligada, mesmo com uma chave qualquer", async () => {
+    const res = await app.server.inject({ method: "PUT", url: "/api/guilds/x", payload: { inAlliance: true }, headers: { "x-upload-key": "" } });
+    expect(res.statusCode).toBe(403);
+    expect(res.json().code).toBe("adminDisabled");
+    expect((await app.server.inject({ method: "PUT", url: "/api/guilds/x", payload: { inAlliance: true } })).statusCode).toBe(403);
+  });
+
+  it("apaga só as sessões web expiradas e mantém o token pessoal", () => {
+    const ana = criarUsuario(app, "1", "ana");
+    const agora = new Date();
+    const velha = createSession(app.db, ana.id, "web", new Date(agora.getTime() - 400 * 86_400_000));
+    const nova = createSession(app.db, ana.id, "web", agora);
+
+    expect(purgeExpiredSessions(app.db, agora)).toBe(1);
+    const restam = (app.db.prepare("SELECT COUNT(*) AS n FROM sessions WHERE kind = 'web'").get() as { n: number }).n;
+    expect(restam).toBe(1);
+    expect(velha).not.toBe(nova);
+    expect((app.db.prepare("SELECT COUNT(*) AS n FROM sessions WHERE kind = 'api'").get() as { n: number }).n).toBe(1);
+  });
+});
+
+describe("apagar a conta", () => {
+  it("zera as lutas e os arquivos do usuário, tira o acesso dele e não toca no outro", async () => {
+    const ana = criarUsuario(app, "1", "ana");
+    const beto = criarUsuario(app, "2", "beto");
+    const idAna = (await enviar(ana.token)).json()[0].id;
+    const idBeto = (await enviar(beto.token)).json()[0].id;
+    await app.worker.idle();
+    // o servidor já não guarda o original nem o JSON; planta o que ainda pode existir (relatório e log de uma luta que falhou)
+    const pastaAna = path.join(dir, "fights", idAna);
+    fs.mkdirSync(pastaAna, { recursive: true });
+    fs.writeFileSync(path.join(pastaAna, "report.html"), "<html></html>");
+    fs.writeFileSync(path.join(dir, "uploads", idAna + ".zevtc"), "x");
+
+    const cookie = `session=${createSession(app.db, ana.id, "web")}`;
+    expect((await app.server.inject({ method: "DELETE", url: "/api/auth/account", headers: { "x-upload-key": ana.token } })).statusCode).toBe(401);
+    const res = await app.server.inject({ method: "DELETE", url: "/api/auth/account", headers: { cookie } });
+
+    expect(res.statusCode).toBe(200);
+    expect(cookieDe(res, "session")).toContain("Max-Age=0");
+    expect(fs.existsSync(pastaAna)).toBe(false);
+    expect(fs.readdirSync(path.join(dir, "uploads")).some((f) => f.startsWith(idAna + "."))).toBe(false);
+    expect((await app.server.inject({ url: "/api/auth/me", headers: { cookie } })).statusCode).toBe(401);
+    expect((await enviar(ana.token)).statusCode).toBe(401);
+    expect((await app.server.inject(`/api/u/${ana.publicId}/fights`)).statusCode).toBe(404);
+    const restam = (await app.server.inject(`/api/u/${beto.publicId}/fights`)).json();
+    expect(restam.map((f: { id: string }) => f.id)).toEqual([idBeto]);
+  });
+});
+
+describe("o que fica guardado depois de processar", () => {
+  const arquivos = (pasta: string) => (fs.existsSync(path.join(dir, pasta)) ? fs.readdirSync(path.join(dir, pasta)) : []);
+
+  it("luta processada: só o banco guarda (sem o log enviado, sem o JSON, sem pasta vazia)", async () => {
+    const ana = criarUsuario(app, "1", "ana");
+    const id = (await enviar(ana.token)).json()[0].id;
+    await app.worker.idle();
+
+    expect((await app.server.inject(`/api/u/${ana.publicId}/fights/${id}`)).statusCode).toBe(200);
+    expect(arquivos("uploads")).toEqual([]);
+    expect(arquivos("fights")).toEqual([]);
+  });
+
+  it("luta com erro: o log enviado fica, para diagnóstico", async () => {
+    const ana = criarUsuario(app, "1", "ana");
+    const id = (await enviar(ana.token, "quebrado.json", "isto não é json")).json()[0].id;
+    await app.worker.idle();
+
+    const luta = (await app.server.inject(`/api/u/${ana.publicId}/fights`)).json().find((f: { id: string }) => f.id === id);
+    expect(luta.status).toBe("error");
+    expect(arquivos("uploads")).toEqual([id + ".json"]);
+  });
+});
+
+describe("aviso de retenção", () => {
+  it("a configuração informa por quantos dias os logs ficam, para a tela avisar o usuário", async () => {
+    await app.server.close();
+    await start({ RETENTION_DAYS: "30" });
+
+    expect((await app.server.inject("/api/config")).json().retentionDays).toBe(30);
   });
 });

@@ -43,6 +43,7 @@ export interface AppConfig {
   loginAvailable: boolean;
   adminKeyRequired: boolean;
   eliteInsights: boolean;
+  retentionDays: number;
 }
 
 export const useConfig = () => useQuery({ queryKey: ["config"], queryFn: () => get<AppConfig>("/api/config"), staleTime: Infinity });
@@ -110,6 +111,12 @@ export const useViewer = () =>
   });
 
 export const logout = () => fetch("/api/auth/logout", { method: "POST" });
+
+/** Apaga a conta do usuário logado e todos os logs dele. */
+export async function deleteAccount(): Promise<void> {
+  const res = await fetch("/api/auth/account", { method: "DELETE" });
+  if (!res.ok) throw apiErrorFrom(res.status, await res.json().catch(() => null));
+}
 
 /** Envia um log com o cookie da sessão. XHR para ter o progresso (logs de WvW são grandes). Erro HTTP vira ApiError. */
 export function uploadLog(file: File, onProgress: (pct: number) => void): Promise<UploadResult> {

@@ -7,12 +7,12 @@
 #   GW2LOGS_KEY        token pessoal de envio (gerado no site, depois de entrar com o Discord)
 #   GW2LOGS_UPLOADER   nome que aparece em "Enviado por" (opcional)
 #
-# O que já foi enviado fica registrado em ~/.local/state/gw2logs (um registro por servidor) e não é mandado de novo.
+# Não guarda registro do que já enviou: o servidor apaga os logs depois de um tempo, e o que sumiu precisa poder ser enviado de novo.
+# O que ainda está guardado lá é ignorado pelo servidor e conta como "já enviado" no resumo.
 # A chave nunca vai na linha de comando (aparece em `ps`): ela segue para o curl por entrada padrão.
 set -uo pipefail
 
 CONFIG_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/gw2logs/env"
-STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/gw2logs"
 RETRY_QUEUE_FULL=10 # fila cheia: espera 1 min e tenta de novo, até 10 vezes
 QUEUE_WAIT=${GW2LOGS_QUEUE_WAIT:-60}
 
@@ -35,12 +35,8 @@ if [ $# -eq 0 ]; then
   exit 2
 fi
 command -v curl >/dev/null || { erro "curl não encontrado."; exit 2; }
-command -v sha256sum >/dev/null || { erro "sha256sum não encontrado."; exit 2; }
 
 URL="${GW2LOGS_URL%/}"
-# um registro por servidor: testar no local não faz o de produção pular os logs
-STATE_FILE="$STATE_DIR/enviados-$(printf %s "$URL" | sha256sum | cut -c1-12)"
-mkdir -p "$STATE_DIR" && touch "$STATE_FILE"
 
 # arquivos de log das entradas (pastas são percorridas por inteiro), na ordem do nome
 files=()
@@ -72,12 +68,6 @@ post() {
 }
 
 for f in "${files[@]}"; do
-  sha=$(sha256sum -- "$f" | cut -d' ' -f1)
-  if grep -qx "$sha" "$STATE_FILE"; then
-    known=$((known + 1))
-    continue
-  fi
-
   tentativa=0
   while true; do
     http="" body=""
@@ -109,10 +99,8 @@ for f in "${files[@]}"; do
       erro "$f: $(grep -o '"error":"[^"]*"' <<<"$body" | head -1)"
       failed=$((failed + 1))
     elif [[ "$body" == *'"duplicate":true'* ]]; then
-      echo "$sha" >>"$STATE_FILE"
       known=$((known + 1))
     else
-      echo "$sha" >>"$STATE_FILE"
       sent=$((sent + 1))
       echo "Enviado: $f"
     fi

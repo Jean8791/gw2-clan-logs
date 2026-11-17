@@ -1,10 +1,11 @@
 // Rotas de login (Discord), sessão e token pessoal de envio.
 import crypto from "node:crypto";
 import type { FastifyInstance, FastifyRequest } from "fastify";
+import { paths, type Config } from "./config.js";
 import { cookieHeader, createSession, deleteSession, readCookie, upsertDiscordUser, userFromToken, type User } from "./auth.js";
-import type { Config } from "./config.js";
 import type { DB } from "./db.js";
 import { safeEqual } from "./guards.js";
+import { removeFights } from "./retention.js";
 
 const DISCORD = "https://discord.com";
 const WEB_COOKIE = "session";
@@ -32,8 +33,10 @@ export function registerAuthRoutes(server: FastifyInstance, db: DB, cfg: Config,
     return reply.header("set-cookie", cookieHeader(STATE_COOKIE, state, { secure, maxAgeSec: STATE_MINUTES * 60, path: "/api/auth" })).redirect(url.toString());
   });
 
-  server.get<{ Querystring: { code?: string; state?: string } }>("/api/auth/callback", async (req, reply) => {
-    const { code, state } = req.query;
+  server.get<{ Querystring: { code?: string; state?: string; error?: string } }>("/api/auth/callback", async (req, reply) => {
+    const { code, state, error } = req.query;
+    // quem cancela na tela do Discord volta sem código (error=access_denied): é só voltar para a entrada, sem sessão
+    if (error) return reply.header("set-cookie", clear(STATE_COOKIE, "/api/auth")).redirect("/");
     const expected = readCookie(req.headers.cookie, STATE_COOKIE);
     if (!enabled || !code || !state || !expected || !safeEqual(state, expected)) {
       return reply.code(400).send({ error: "Invalid login attempt. Try again.", code: "badState" });
@@ -68,6 +71,16 @@ export function registerAuthRoutes(server: FastifyInstance, db: DB, cfg: Config,
 
   server.post("/api/auth/logout", async (req, reply) => {
     deleteSession(db, readCookie(req.headers.cookie, WEB_COOKIE));
+    return reply.header("set-cookie", clear(WEB_COOKIE)).send({ ok: true });
+  });
+
+  // apagar a conta zera tudo do usuário: lutas (com os arquivos), sessões e o próprio cadastro. Só pela sessão do navegador.
+  server.delete("/api/auth/account", async (req, reply) => {
+    const user = sessionUser(db, req);
+    if (!user) return reply.code(401).send({ error: "Not signed in.", code: "notSignedIn" });
+    const ids = (db.prepare("SELECT id FROM fights WHERE owner_id = ?").all(user.id) as { id: string }[]).map((f) => f.id);
+    await removeFights(db, paths(cfg.dataDir), ids);
+    db.prepare("DELETE FROM users WHERE id = ?").run(user.id);
     return reply.header("set-cookie", clear(WEB_COOKIE)).send({ ok: true });
   });
 

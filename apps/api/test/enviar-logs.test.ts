@@ -67,16 +67,31 @@ describe("scripts/enviar-logs.sh", () => {
     expect((await app.server.inject(`/api/u/${usuario.publicId}/fights`)).json()).toHaveLength(2);
   });
 
-  it("não reenvia o que já foi enviado (guarda o que já mandou)", async () => {
+  it("o que o servidor ainda guarda é ignorado e conta como já enviado", async () => {
     await start();
     const a = logFile("a.json", 1);
     await enviar([a]);
+    await app.worker.idle();
 
     const again = await enviar([a]);
 
     expect(again.code).toBe(0);
     expect(again.out).toMatch(/0 enviado/);
     expect(again.out).toMatch(/1 já enviado/);
+  });
+
+  it("depois de o servidor apagar a luta, o mesmo log é enviado de novo (o script não guarda registro)", async () => {
+    await start();
+    const a = logFile("a.json", 1);
+    await enviar([a]);
+    await app.worker.idle();
+    app.db.prepare("DELETE FROM fights").run();
+
+    const again = await enviar([a]);
+    await app.worker.idle();
+
+    expect(again.out).toMatch(/1 enviado/);
+    expect((await app.server.inject(`/api/u/${usuario.publicId}/fights`)).json()).toHaveLength(1);
   });
 
   it("chave errada: para com erro e não vaza a chave na saída", async () => {
@@ -117,24 +132,6 @@ describe("scripts/enviar-logs.sh", () => {
 
     expect(r.code).not.toBe(0);
     expect(r.out).toMatch(/GW2LOGS_URL/);
-  });
-});
-
-describe("scripts/enviar-logs.sh: registro do que já foi enviado", () => {
-  it("é separado por servidor: o que foi enviado a um endereço é enviado ao outro", async () => {
-    await start();
-    const a = logFile("a.json", 1);
-    await enviar([a]);
-    const outro = await buildApp(loadConfig({ DATA_DIR: fs.mkdtempSync(path.join(os.tmpdir(), "gw2logs-env2-")), GW2_API: "off" }));
-    await outro.server.listen({ port: 0, host: "127.0.0.1" });
-    const urlOutro = `http://127.0.0.1:${(outro.server.server.address() as { port: number }).port}`;
-
-    const env = { PATH: process.env.PATH, HOME: home, GW2LOGS_URL: urlOutro, GW2LOGS_KEY: criarUsuario(outro, "1").token };
-    const r = await run("bash", [script, a], { env });
-    await outro.worker.idle();
-    await outro.server.close();
-
-    expect(r.stdout).toMatch(/1 enviado/);
   });
 });
 

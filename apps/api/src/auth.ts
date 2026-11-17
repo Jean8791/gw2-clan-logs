@@ -75,6 +75,11 @@ export function deleteSession(db: DB, token: string | undefined) {
   if (token) db.prepare("DELETE FROM sessions WHERE token_hash = ?").run(sha256(token));
 }
 
+/** Apaga as sessões que já expiraram (o token pessoal não expira e fica). Devolve quantas saíram. */
+export function purgeExpiredSessions(db: DB, now = new Date()): number {
+  return db.prepare("DELETE FROM sessions WHERE expires_at IS NOT NULL AND expires_at <= ?").run(now.toISOString()).changes;
+}
+
 export function userByPublicId(db: DB, publicId: string): User | null {
   const row = db.prepare("SELECT * FROM users WHERE public_id = ?").get(publicId) as any;
   return row ? toUser(row) : null;
