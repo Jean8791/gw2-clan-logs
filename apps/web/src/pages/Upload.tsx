@@ -1,10 +1,10 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, CircleDashed, FileUp, Info, Loader2, PauseCircle, XCircle } from "lucide-react";
+import { CheckCircle2, CircleDashed, FileUp, Info, KeyRound, Loader2, PauseCircle, XCircle } from "lucide-react";
 import { useRef, useState, type DragEvent } from "react";
 import { Link } from "react-router-dom";
 import { MAX_UPLOAD_MB, ROUTES, sendInOrder, type ItemState } from "@gw2logs/shared";
-import { Button, Card, PageHeader, Rich, cx } from "../components/ui";
-import { uploadLog, useConfig, useFights } from "../lib/api";
+import { Button, Card, ErrorBox, PageHeader, Rich, cx } from "../components/ui";
+import { createToken, uploadLog, useConfig, useFights } from "../lib/api";
 import { codeText, fightErrorText } from "../lib/errors";
 import { t } from "../lib/i18n";
 
@@ -159,6 +159,8 @@ export function UploadPage() {
           )}
         </div>
 
+        <div className="flex flex-col gap-4">
+        <ScriptCard />
         <Card title={<span className="inline-flex items-center gap-2"><Info className="size-4 text-gold" /> {t("upload.help.title")}</span>}>
           <div className="space-y-3 px-5 py-4 text-sm text-muted">
             <p>
@@ -177,8 +179,51 @@ export function UploadPage() {
             )}
           </div>
         </Card>
+        </div>
       </div>
     </>
   );
 }
 
+
+/** Gera o token do script de envio e mostra, uma vez só, as duas linhas de configuração. */
+function ScriptCard() {
+  const [token, setToken] = useState<string | null>(null);
+  const [error, setError] = useState<unknown>(null);
+  const [copied, setCopied] = useState(false);
+  const config = token ? `GW2LOGS_URL=${window.location.origin}\nGW2LOGS_KEY=${token}` : "";
+
+  const generate = () => {
+    setError(null);
+    createToken().then(setToken, setError);
+  };
+  const copy = () => {
+    void navigator.clipboard?.writeText(config).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
+  return (
+    <Card title={<span className="inline-flex items-center gap-2"><KeyRound className="size-4 text-gold" /> {t("upload.script.title")}</span>}>
+      <div className="space-y-3 px-5 py-4 text-sm text-muted">
+        <p>{t("upload.script.help")}</p>
+        {token && (
+          <>
+            <pre className="overflow-x-auto rounded-lg bg-surface-3 p-3 text-xs text-text">{config}</pre>
+            <p className="text-gold">{t("upload.script.once")}</p>
+            <Button size="sm" onClick={copy}>
+              {copied ? t("upload.script.copied") : t("upload.script.copy")}
+            </Button>
+          </>
+        )}
+        {error != null && <ErrorBox error={error} />}
+        <div>
+          <Button size="sm" variant={token ? "outline" : "primary"} onClick={generate}>
+            {token ? t("upload.script.regenerate") : t("upload.script.generate")}
+          </Button>
+        </div>
+      </div>
+    </Card>
+  );
+}

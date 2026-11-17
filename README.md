@@ -69,7 +69,25 @@ Com Docker: `docker build -t gw2-clan-logs .` e `docker run -p 8080:8080 -v dado
 
 O ArcDPS grava em `Documentos\Guild Wars 2\addons\arcdps\arcdps.cbtlogs\`. Para gravar **WvW**, no jogo use Alt+Shift+T, depois *Logging*, e ative a gravação de WvW. Cura e barreira só aparecem se quem gravou usa o addon **Healing Stats**.
 
-Para enviar, entre no site com o Discord, gere o seu token pessoal e rode o script com o endereço do site e esse token:
+Há duas formas de enviar, e as duas guardam os logs no seu espaço:
+
+1. **Pelo site**: entre com o Discord, abra *Importar logs* e arraste os arquivos. Eles vão um de cada vez; se o servidor encher, o envio espera sozinho, e ao bater um limite ele para e avisa.
+2. **Por script**, que usa a API e o seu token pessoal. Na página *Importar logs*, o cartão *Envio por script* gera o token (ele só aparece uma vez, e o anterior deixa de valer).
+
+No **Windows** (`scripts/enviar-logs.bat`, usa o `curl.exe` que já vem no Windows 10 e 11). Crie o arquivo `%APPDATA%\gw2logs\config.bat` com o endereço e o token:
+
+```bat
+set GW2LOGS_URL=https://seu-dominio
+set GW2LOGS_KEY=seu-token
+```
+
+e rode, com a pasta dos logs (ou arquivos):
+
+```bat
+enviar-logs.bat "%USERPROFILE%\Documents\Guild Wars 2\addons\arcdps\arcdps.cbtlogs"
+```
+
+No **Linux/macOS** (`scripts/enviar-logs.sh`):
 
 ```bash
 export GW2LOGS_URL=https://seu-dominio GW2LOGS_KEY=seu-token   # ou guarde em ~/.config/gw2logs/env (chmod 600)
@@ -77,7 +95,7 @@ scripts/enviar-logs.sh ~/Documentos/Guild\ Wars\ 2/addons/arcdps/arcdps.cbtlogs 
 ```
 
 - Não reenvia o que já enviou (o registro é por servidor), espera quando a fila do servidor está cheia e para com aviso ao bater um limite.
-- O token segue ao servidor por entrada padrão e não aparece em `ps`.
+- Nos dois scripts o token não vai na linha de comando (no `.sh` segue por entrada padrão; no `.bat` por um arquivo temporário seu, apagado no fim).
 - Quem tem o token envia logs no seu nome: trate-o como senha e gere outro no site se ele vazar (o anterior deixa de valer).
 
 ## Configuração

@@ -133,3 +133,10 @@ export function uploadLog(file: File, onProgress: (pct: number) => void): Promis
     xhr.send(form);
   });
 }
+
+/** Gera o token pessoal do script de envio (o anterior deixa de valer). O valor só aparece nesta resposta. */
+export async function createToken(): Promise<string> {
+  const res = await fetch("/api/auth/token", { method: "POST" });
+  if (!res.ok) throw apiErrorFrom(res.status, await res.json().catch(() => null));
+  return ((await res.json()) as { token: string }).token;
+}
