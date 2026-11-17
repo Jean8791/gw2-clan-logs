@@ -25,6 +25,24 @@ export function openDb(file: string): DB {
 function migrate(db: DB) {
   const statCols = STAT_KEYS.map((k) => `${STAT_COL[k]} REAL NOT NULL DEFAULT 0`).join(",\n      ");
   db.exec(`
+    CREATE TABLE IF NOT EXISTS users (
+      id         INTEGER PRIMARY KEY,
+      public_id  TEXT NOT NULL UNIQUE,        -- vai na URL de compartilhar (não é o id do Discord)
+      discord_id TEXT NOT NULL UNIQUE,
+      name       TEXT NOT NULL,
+      avatar     TEXT,
+      created_at TEXT NOT NULL
+    );
+
+    -- kind: web (cookie do navegador, expira) | api (token pessoal do script de envio, um por usuário)
+    CREATE TABLE IF NOT EXISTS sessions (
+      token_hash TEXT PRIMARY KEY,
+      user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      kind       TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      expires_at TEXT
+    );
+
     CREATE TABLE IF NOT EXISTS fights (
       id            TEXT PRIMARY KEY,
       sha256        TEXT NOT NULL UNIQUE,
@@ -116,6 +134,9 @@ function migrate(db: DB) {
   for (const col of ["enemy_downs", "enemy_deaths"]) {
     if (!haveFights.has(col)) db.exec(`ALTER TABLE fights ADD COLUMN ${col} INTEGER`);
   }
+  // dono da luta; as lutas anteriores ao login ficam sem dono até o primeiro usuário entrar
+  if (!haveFights.has("owner_id")) db.exec("ALTER TABLE fights ADD COLUMN owner_id INTEGER REFERENCES users(id)");
+  db.exec("CREATE INDEX IF NOT EXISTS ix_fights_owner ON fights(owner_id)");
 }
 
 export const schemaVersion = (db: DB): number => db.pragma("user_version", { simple: true }) as number;

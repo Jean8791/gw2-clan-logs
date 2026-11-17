@@ -4,7 +4,7 @@
 #
 # Configuração (variáveis de ambiente ou o arquivo ~/.config/gw2logs/env, com linhas CHAVE=valor; use chmod 600):
 #   GW2LOGS_URL        endereço do site, ex.: https://logs.exemplo.com
-#   GW2LOGS_KEY        chave de envio (a UPLOAD_KEY do servidor)
+#   GW2LOGS_KEY        token pessoal de envio (gerado no site, depois de entrar com o Discord)
 #   GW2LOGS_UPLOADER   nome que aparece em "Enviado por" (opcional)
 #
 # O que já foi enviado fica registrado em ~/.local/state/gw2logs (um registro por servidor) e não é mandado de novo.
@@ -87,7 +87,7 @@ for f in "${files[@]}"; do
       exit 1
     fi
     case "$http" in
-      401) erro "senha de envio incorreta: confira GW2LOGS_KEY."; exit 1 ;;
+      401) erro "token de envio incorreto: gere outro no site e confira GW2LOGS_KEY."; exit 1 ;;
       429) erro "muitas senhas erradas: este IP foi bloqueado por um tempo. Tente de novo mais tarde."; exit 1 ;;
       200) ;;
       *) erro "o servidor respondeu $http para $f."; failed=$((failed + 1)); break ;;

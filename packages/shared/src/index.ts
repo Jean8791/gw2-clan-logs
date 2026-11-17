@@ -352,6 +352,8 @@ export interface Filters {
   profession?: string;
   /** dias de batalha (AAAA-MM-DD, ver battleDay): vale a união dos dias escolhidos */
   day?: string[];
+  /** id do dono das lutas. Só o servidor preenche (vem da URL /u/:id), nunca da query string. */
+  owner?: number;
 }
 
 export const FILTER_KEYS = [

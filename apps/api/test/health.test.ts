@@ -14,7 +14,7 @@ afterEach(async () => {
 });
 const start = async () => {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), "gw2logs-health-"));
-  app = await buildApp(loadConfig({ DATA_DIR: dir, UPLOAD_KEY: "segredo", GW2_API: "off", WEB_DIR: path.join(dir, "sem-site") }));
+  app = await buildApp(loadConfig({ DATA_DIR: dir, ADMIN_KEY: "segredo", GW2_API: "off", WEB_DIR: path.join(dir, "sem-site") }));
   return app;
 };
 

@@ -63,22 +63,22 @@ npm run dev
 npm test
 ```
 
-Com Docker: `docker build -t gw2-clan-logs .` e `docker run -p 8080:8080 -e UPLOAD_KEY=teste -v dados:/data gw2-clan-logs`.
+Com Docker: `docker build -t gw2-clan-logs .` e `docker run -p 8080:8080 -v dados:/data gw2-clan-logs`.
 
 ## Enviar logs
 
 O ArcDPS grava em `Documentos\Guild Wars 2\addons\arcdps\arcdps.cbtlogs\`. Para gravar **WvW**, no jogo use Alt+Shift+T, depois *Logging*, e ative a gravação de WvW. Cura e barreira só aparecem se quem gravou usa o addon **Healing Stats**.
 
-Para enviar, configure o endereço do site e a chave (a `UPLOAD_KEY` do servidor) e rode o script:
+Para enviar, entre no site com o Discord, gere o seu token pessoal e rode o script com o endereço do site e esse token:
 
 ```bash
-export GW2LOGS_URL=https://seu-dominio GW2LOGS_KEY=a-chave   # ou guarde em ~/.config/gw2logs/env (chmod 600)
+export GW2LOGS_URL=https://seu-dominio GW2LOGS_KEY=seu-token   # ou guarde em ~/.config/gw2logs/env (chmod 600)
 scripts/enviar-logs.sh ~/Documentos/Guild\ Wars\ 2/addons/arcdps/arcdps.cbtlogs   # arquivos ou pastas
 ```
 
 - Não reenvia o que já enviou (o registro é por servidor), espera quando a fila do servidor está cheia e para com aviso ao bater um limite.
-- A chave segue ao servidor por entrada padrão e não aparece em `ps`.
-- Quem tem a chave envia: trate-a como senha e troque a `UPLOAD_KEY` se ela vazar.
+- O token segue ao servidor por entrada padrão e não aparece em `ps`.
+- Quem tem o token envia logs no seu nome: trate-o como senha e gere outro no site se ele vazar (o anterior deixa de valer).
 
 ## Configuração
 
@@ -86,8 +86,9 @@ Variáveis de ambiente do servidor. No Docker Compose, as principais vêm do arq
 
 | Variável | Para quê | Padrão |
 |---|---|---|
-| `UPLOAD_KEY` | Chave para enviar logs. Vazio = qualquer um envia (nunca deixe vazio na internet) | vazio |
-| `ADMIN_KEY` | Senha para marcar as guildas da aliança | igual a `UPLOAD_KEY` |
+| `DISCORD_CLIENT_ID` / `DISCORD_CLIENT_SECRET` | Aplicativo do Discord do login (portal de desenvolvedores). Sem os dois, o login fica desligado. O secret vai só no servidor | vazio |
+| `PUBLIC_URL` | Endereço público do site (ex.: `https://logs.exemplo.com`): é o retorno do login do Discord (`/api/auth/callback`) e liga o cookie `Secure` quando é https | `http://localhost:5080` |
+| `ADMIN_KEY` | Senha para marcar as guildas da aliança. Vazio = qualquer um marca | vazio |
 | `DATA_DIR` | Banco SQLite, logs enviados e JSON das lutas | `./data` |
 | `RETENTION_DAYS` | Dias que as lutas ficam guardadas (0 = para sempre). No Compose o padrão é 30 | `0` |
 | `PORT` / `HOST` | Endereço do servidor | `5080` / `127.0.0.1` |

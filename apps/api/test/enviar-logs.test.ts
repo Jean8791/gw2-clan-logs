@@ -7,17 +7,20 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { loadConfig } from "../src/config.js";
 import { buildApp, type App } from "../src/server.js";
 import { wvwFixture } from "./fixture.js";
+import { criarUsuario } from "./usuarios.js";
 
 const run = promisify(execFile);
 const script = path.resolve(import.meta.dirname, "../../../scripts/enviar-logs.sh");
 
 let app: App;
+let usuario: ReturnType<typeof criarUsuario>;
 let dir: string;
 let home: string;
 let url: string;
 
 const start = async (env: Record<string, string> = {}) => {
-  app = await buildApp(loadConfig({ DATA_DIR: dir, UPLOAD_KEY: "chave-certa", GW2_API: "off", WEB_DIR: path.join(dir, "sem-site"), ...env }));
+  app = await buildApp(loadConfig({ DATA_DIR: dir, GW2_API: "off", WEB_DIR: path.join(dir, "sem-site"), ...env }));
+  usuario = criarUsuario(app, "1");
   await app.server.listen({ port: 0, host: "127.0.0.1" });
   url = `http://127.0.0.1:${(app.server.server.address() as { port: number }).port}`;
 };
@@ -27,7 +30,7 @@ const logFile = (name: string, n: number) => {
   return f;
 };
 /** Roda o script e devolve saída e código de saída (não lança quando o código não é 0). */
-const enviar = async (args: string[], key = "chave-certa", extraEnv: Record<string, string> = {}) => {
+const enviar = async (args: string[], key = usuario.token, extraEnv: Record<string, string> = {}) => {
   const env = { PATH: process.env.PATH, HOME: home, GW2LOGS_URL: url, GW2LOGS_KEY: key, ...extraEnv };
   try {
     const r = await run("bash", [script, ...args], { env });
@@ -61,7 +64,7 @@ describe("scripts/enviar-logs.sh", () => {
 
     expect(r.code).toBe(0);
     expect(r.out).toMatch(/2 enviado/);
-    expect((await app.server.inject("/api/fights")).json()).toHaveLength(2);
+    expect((await app.server.inject(`/api/u/${usuario.publicId}/fights`)).json()).toHaveLength(2);
   });
 
   it("não reenvia o que já foi enviado (guarda o que já mandou)", async () => {
@@ -81,9 +84,9 @@ describe("scripts/enviar-logs.sh", () => {
     const r = await enviar([logFile("a.json", 1)], "chave-errada");
 
     expect(r.code).not.toBe(0);
-    expect(r.out).toMatch(/senha|chave/i);
+    expect(r.out).toMatch(/token de envio incorreto/i);
     expect(r.out).not.toContain("chave-errada");
-    expect((await app.server.inject("/api/fights")).json()).toHaveLength(0);
+    expect((await app.server.inject(`/api/u/${usuario.publicId}/fights`)).json()).toHaveLength(0);
   });
 
   it("bloqueado por senhas erradas (429): para e avisa para tentar mais tarde", async () => {
@@ -122,11 +125,11 @@ describe("scripts/enviar-logs.sh: registro do que já foi enviado", () => {
     await start();
     const a = logFile("a.json", 1);
     await enviar([a]);
-    const outro = await buildApp(loadConfig({ DATA_DIR: fs.mkdtempSync(path.join(os.tmpdir(), "gw2logs-env2-")), UPLOAD_KEY: "chave-certa", GW2_API: "off" }));
+    const outro = await buildApp(loadConfig({ DATA_DIR: fs.mkdtempSync(path.join(os.tmpdir(), "gw2logs-env2-")), GW2_API: "off" }));
     await outro.server.listen({ port: 0, host: "127.0.0.1" });
     const urlOutro = `http://127.0.0.1:${(outro.server.server.address() as { port: number }).port}`;
 
-    const env = { PATH: process.env.PATH, HOME: home, GW2LOGS_URL: urlOutro, GW2LOGS_KEY: "chave-certa" };
+    const env = { PATH: process.env.PATH, HOME: home, GW2LOGS_URL: urlOutro, GW2LOGS_KEY: criarUsuario(outro, "1").token };
     const r = await run("bash", [script, a], { env });
     await outro.worker.idle();
     await outro.server.close();
@@ -140,7 +143,7 @@ describe("scripts/enviar-logs.sh: casos de borda", () => {
     await start();
     const conf = path.join(home, ".config", "gw2logs");
     fs.mkdirSync(conf, { recursive: true });
-    fs.writeFileSync(path.join(conf, "env"), `GW2LOGS_URL=${url}\r\nGW2LOGS_KEY=chave-certa`);
+    fs.writeFileSync(path.join(conf, "env"), `GW2LOGS_URL=${url}\r\nGW2LOGS_KEY=${usuario.token}`);
     const a = logFile("a.json", 1);
 
     const r = await run("bash", [script, a], { env: { PATH: process.env.PATH, HOME: home } });
@@ -167,7 +170,7 @@ describe("scripts/enviar-logs.sh: casos de borda", () => {
 
     expect(r.out).toMatch(/1 enviado/);
     // o curl codifica as aspas do nome (%22), como todo multipart; o importante é o arquivo entrar inteiro
-    expect((await app.server.inject("/api/fights")).json()[0].fileName).toMatch(/^log; .*estranho.*, 1\.json$/);
+    expect((await app.server.inject(`/api/u/${usuario.publicId}/fights`)).json()[0].fileName).toMatch(/^log; .*estranho.*, 1\.json$/);
   });
 
   it("fila cheia: espera e tenta de novo até caber", async () => {
@@ -175,7 +178,7 @@ describe("scripts/enviar-logs.sh: casos de borda", () => {
     app.db.prepare("INSERT INTO fights (id, sha256, status, uploaded_at) VALUES ('preso', 'sha-preso', 'queued', ?)").run(new Date().toISOString());
     setTimeout(() => app.db.prepare("UPDATE fights SET status = 'done' WHERE id = 'preso'").run(), 700);
 
-    const r = await enviar([logFile("a.json", 1)], "chave-certa", { GW2LOGS_QUEUE_WAIT: "1" });
+    const r = await enviar([logFile("a.json", 1)], usuario.token, { GW2LOGS_QUEUE_WAIT: "1" });
 
     expect(r.code).toBe(0);
     expect(r.out).toMatch(/Fila do servidor cheia/);

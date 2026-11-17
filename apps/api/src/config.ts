@@ -12,10 +12,12 @@ export interface Config {
   eiDir: string;
   /** Comando que roda o Elite Insights (dll .NET). */
   dotnet: string;
-  /** Senha para enviar logs. Vazio = qualquer um envia. */
-  uploadKey: string;
-  /** Senha para administrar (marcar guildas da aliança). Padrão: a mesma do envio. */
+  /** Senha para administrar (marcar guildas da aliança). Vazio = qualquer um administra. */
   adminKey: string;
+  /** Endereço público do site (ex.: https://logs.exemplo.com): vira o retorno do login e decide o cookie Secure. */
+  publicUrl: string;
+  /** Aplicativo do Discord para o login. Sem os dois valores o login fica desligado. */
+  discord: { clientId: string; clientSecret: string };
   /** Pasta com o site compilado (apps/web/dist). */
   webDir: string;
   /** Dias que as lutas ficam guardadas. 0 = guardar para sempre. */
@@ -45,15 +47,15 @@ const positive = (raw: string | undefined, fallback: number) => {
 };
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
-  const uploadKey = env.UPLOAD_KEY ?? "";
   return {
     port: Number(env.PORT ?? 5080),
     host: env.HOST ?? "127.0.0.1",
     dataDir: path.resolve(env.DATA_DIR ?? path.join(repoRoot, "data")),
     eiDir: path.resolve(env.EI_DIR ?? path.join(repoRoot, "tools", "GW2EICLI")),
     dotnet: env.DOTNET ?? "dotnet",
-    uploadKey,
-    adminKey: env.ADMIN_KEY ?? uploadKey,
+    adminKey: env.ADMIN_KEY ?? "",
+    publicUrl: (env.PUBLIC_URL ?? `http://localhost:${env.PORT ?? 5080}`).replace(/\/+$/, ""),
+    discord: { clientId: env.DISCORD_CLIENT_ID ?? "", clientSecret: env.DISCORD_CLIENT_SECRET ?? "" },
     webDir: path.resolve(env.WEB_DIR ?? path.join(repoRoot, "apps", "web", "dist")),
     retentionDays: Number(env.RETENTION_DAYS ?? 0),
     gw2Api: env.GW2_API !== "off",

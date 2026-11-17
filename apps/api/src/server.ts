@@ -7,12 +7,14 @@ import { Transform } from "node:stream";
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
 import multipart from "@fastify/multipart";
 import fastifyStatic from "@fastify/static";
-import { parseFilters, type UploadResult } from "@gw2logs/shared";
+import { parseFilters, type Filters, type UploadResult } from "@gw2logs/shared";
+import { userByPublicId, type User } from "./auth.js";
+import { apiUser, registerAuthRoutes, sessionUser } from "./auth-routes.js";
 import { paths, type Config } from "./config.js";
 import { openDb, type DB } from "./db.js";
 import { eiAvailable } from "./elite-insights.js";
 import { Gw2Api } from "./gw2api.js";
-import { AttemptLimiter, folderBytes } from "./guards.js";
+import { AttemptLimiter, folderBytes, safeEqual } from "./guards.js";
 import { MEDIA_KEY, MediaStore } from "./media.js";
 import * as q from "./queries.js";
 import { LogWorker } from "./worker.js";
@@ -31,13 +33,15 @@ export interface App {
   worker: LogWorker;
 }
 
-const safeEqual = (a: string, b: string) => {
-  const x = Buffer.from(a);
-  const y = Buffer.from(b);
-  return x.length === y.length && crypto.timingSafeEqual(x, y);
-};
+declare module "fastify" {
+  interface FastifyRequest {
+    /** Dono do espaço /u/:uid (preenchido só nas rotas de leitura). */
+    owner: User;
+  }
+}
 
-export async function buildApp(cfg: Config, opts: { logger?: boolean } = {}): Promise<App> {
+/** `fetch` é trocável para os testes não falarem com o Discord de verdade. */
+export async function buildApp(cfg: Config, opts: { logger?: boolean; fetch?: typeof fetch } = {}): Promise<App> {
   const p = paths(cfg.dataDir);
   await fs.mkdir(p.uploads, { recursive: true });
   await fs.mkdir(p.fights, { recursive: true });
@@ -56,20 +60,37 @@ export async function buildApp(cfg: Config, opts: { logger?: boolean } = {}): Pr
 
   const attempts = new AttemptLimiter(cfg.limits.maxFailedKeys, cfg.limits.blockMinutes * 60_000);
 
-  /** Confere a chave; erros seguidos do mesmo IP o bloqueiam (responde 429 e devolve false). Sem chave configurada, libera. */
-  const checkKey = (req: FastifyRequest, reply: FastifyReply, key: string, code: "uploadKey" | "adminKey"): boolean => {
+  /** Responde 429 e devolve true se o IP está bloqueado por erros seguidos de senha ou token. */
+  const ipBlocked = (req: FastifyRequest, reply: FastifyReply): boolean => {
     const wait = attempts.blockedFor(req.ip);
-    if (wait > 0) {
-      reply.header("retry-after", Math.ceil(wait / 1000)).code(429).send({ error: "Too many wrong passwords. Try again later.", code: "tooManyAttempts" });
-      return false;
-    }
-    if (key === "" || safeEqual(String(req.headers["x-upload-key"] ?? ""), key)) {
+    if (wait <= 0) return false;
+    reply.header("retry-after", Math.ceil(wait / 1000)).code(429).send({ error: "Too many wrong passwords. Try again later.", code: "tooManyAttempts" });
+    return true;
+  };
+
+  /** Confere a senha de administrador (sem senha configurada, libera). */
+  const checkAdmin = (req: FastifyRequest, reply: FastifyReply): boolean => {
+    if (ipBlocked(req, reply)) return false;
+    if (cfg.adminKey === "" || safeEqual(String(req.headers["x-upload-key"] ?? ""), cfg.adminKey)) {
       attempts.reset(req.ip);
       return true;
     }
     attempts.fail(req.ip);
-    reply.code(401).send(code === "uploadKey" ? { error: "Wrong upload password.", code } : { error: "Wrong admin password.", code });
+    reply.code(401).send({ error: "Wrong admin password.", code: "adminKey" });
     return false;
+  };
+
+  /** Quem está enviando: a sessão do navegador ou o token pessoal. Token errado conta como tentativa falha. */
+  const uploadUser = (req: FastifyRequest, reply: FastifyReply): User | null => {
+    if (ipBlocked(req, reply)) return null;
+    const user = sessionUser(db, req) ?? apiUser(db, req);
+    if (user) {
+      attempts.reset(req.ip);
+      return user;
+    }
+    if (req.headers["x-upload-key"]) attempts.fail(req.ip);
+    reply.code(401).send({ error: "Sign in or use your personal token to send logs.", code: "uploadKey" });
+    return null;
   };
 
   /** Por que um novo log não pode entrar agora (fila cheia, limite por hora ou disco cheio), ou null se pode. */
@@ -84,15 +105,12 @@ export async function buildApp(cfg: Config, opts: { logger?: boolean } = {}): Pr
 
   // ---------- Envio de logs ----------
   server.post("/api/upload", async (req, reply) => {
-    if (!checkKey(req, reply, cfg.uploadKey, "uploadKey")) return reply;
+    const user = uploadUser(req, reply);
+    if (!user) return reply;
 
     const results: UploadResult[] = [];
-    let uploader: string | null = null;
     for await (const part of req.parts()) {
-      if (part.type === "field") {
-        if (part.fieldname === "uploader") uploader = String(part.value ?? "").trim().slice(0, 60) || null;
-        continue;
-      }
+      if (part.type === "field") continue;
       const ext = path.extname(part.filename).toLowerCase();
       if (!ALLOWED_EXT.includes(ext)) {
         part.file.resume();
@@ -128,8 +146,8 @@ export async function buildApp(cfg: Config, opts: { logger?: boolean } = {}): Pr
       }
       const id = `${new Date().toISOString().replace(/\D/g, "").slice(0, 14)}-${sha.slice(0, 8)}`;
       await fs.rename(tmp, path.join(p.uploads, id + ext));
-      db.prepare("INSERT INTO fights (id, sha256, status, uploaded_at, uploader, file_name) VALUES (?, ?, 'queued', ?, ?, ?)").run(
-        id, sha, new Date().toISOString(), uploader, part.filename.slice(0, 200),
+      db.prepare("INSERT INTO fights (id, sha256, status, uploaded_at, uploader, owner_id, file_name) VALUES (?, ?, 'queued', ?, ?, ?, ?)").run(
+        id, sha, new Date().toISOString(), user.name, user.id, part.filename.slice(0, 200),
       );
       worker.enqueue(id);
       results.push({ file: part.filename, id, status: "queued" });
@@ -148,32 +166,12 @@ export async function buildApp(cfg: Config, opts: { logger?: boolean } = {}): Pr
   });
 
   server.get("/api/config", async () => ({
-    uploadKeyRequired: cfg.uploadKey !== "",
+    loginAvailable: cfg.discord.clientId !== "" && cfg.discord.clientSecret !== "",
     adminKeyRequired: cfg.adminKey !== "",
     eliteInsights: eiAvailable(cfg.eiDir),
   }));
 
-  // ---------- Lutas ----------
-  server.get("/api/fights", async (req) => {
-    const qs = req.query as Record<string, string>;
-    const limit = Math.min(Math.max(Number(qs.limit) || 50, 1), 500);
-    const offset = Math.max(Number(qs.offset) || 0, 0);
-    return q.listFights(db, parseFilters(qs), limit, offset);
-  });
-
-  server.get<{ Params: { id: string } }>("/api/fights/:id", async (req, reply) => {
-    const d = q.fightDetail(db, req.params.id);
-    return d ?? reply.code(404).send({ error: "Fight not found.", code: "fightNotFound" });
-  });
-
-  // relatório HTML completo do Elite Insights (rotação, linha do tempo, replay)
-  server.get<{ Params: { id: string } }>("/api/fights/:id/report", async (req, reply) => {
-    const id = req.params.id;
-    if (!/^[\w-]+$/.test(id)) return reply.code(400).send();
-    const file = path.join(p.fightDir(id), "report.html");
-    if (!existsSync(file)) return reply.code(404).send({ error: "Report not available for this fight.", code: "noReport" });
-    return reply.type("text/html; charset=utf-8").send(await fs.readFile(file));
-  });
+  registerAuthRoutes(server, db, cfg, opts.fetch ?? fetch);
 
   // ícones guardados no banco: o navegador nunca fala direto com a ArenaNet
   server.get<{ Params: { key: string } }>("/api/media/:key", async (req, reply) => {
@@ -187,43 +185,74 @@ export async function buildApp(cfg: Config, opts: { logger?: boolean } = {}): Pr
     return reply.type(m.contentType).send(m.bytes);
   });
 
-  // ---------- Jogadores, ranking, comparação ----------
-  server.get("/api/ranking", async (req) => {
-    const fl = parseFilters(req.query as Record<string, string>);
-    return { rows: q.ranking(db, fl), baseline: q.baseline(db, fl) };
-  });
-
-  server.get<{ Params: { account: string } }>("/api/players/:account", async (req, reply) => {
-    const prof = q.playerProfile(db, req.params.account, parseFilters(req.query as Record<string, string>));
-    return prof ?? reply.code(404).send({ error: "Player not found.", code: "playerNotFound" });
-  });
-
-  server.get<{ Params: { account: string } }>("/api/players/:account/skills", async (req) =>
-    q.playerSkills(db, req.params.account, parseFilters(req.query as Record<string, string>)),
-  );
-
-  server.get("/api/compare", async (req, reply) => {
-    const qs = req.query as Record<string, string>;
-    const accounts = String(qs.accounts ?? "").split(",").map((s) => s.trim()).filter(Boolean).slice(0, 6);
-    if (!accounts.length) return reply.code(400).send({ error: "Pass the accounts in ?accounts=a,b", code: "needAccounts" });
-    const fl = parseFilters(qs);
-    const players = accounts.map((a) => q.playerProfile(db, a, fl)).filter((x) => x !== null);
-    return { players, baseline: q.baseline(db, fl) };
-  });
-
-  // ---------- Guildas ----------
-  server.get("/api/guilds", async () => q.guildSummaries(db));
-
   server.put<{ Params: { id: string }; Body: { inAlliance?: boolean } }>("/api/guilds/:id", async (req, reply) => {
-    if (!checkKey(req, reply, cfg.adminKey, "adminKey")) return reply;
+    if (!checkAdmin(req, reply)) return reply;
     if (typeof req.body?.inAlliance !== "boolean") return reply.code(400).send({ error: "Pass inAlliance (true/false).", code: "needInAlliance" });
     return q.setGuildAlliance(db, req.params.id, req.body.inAlliance) ? { ok: true } : reply.code(404).send({ error: "Guild not found.", code: "guildNotFound" });
   });
 
-  // ---------- Visão geral ----------
-  server.get("/api/days", async (req) => q.battleDays(db, parseFilters(req.query as Record<string, string>)));
-  server.get("/api/overview", async (req) => q.overview(db, parseFilters(req.query as Record<string, string>)));
-  server.get("/api/meta", async () => q.meta(db));
+  // ---------- Espaço de cada usuário (/api/u/:uid): leitura aberta a quem tem o link, sempre só das lutas do dono ----------
+  await server.register(
+    async (scope) => {
+      scope.decorateRequest("owner", undefined as unknown as User);
+      scope.addHook("onRequest", async (req, reply) => {
+        const owner = userByPublicId(db, (req.params as { uid: string }).uid);
+        if (!owner) return reply.code(404).send({ error: "User not found.", code: "userNotFound" });
+        req.owner = owner;
+      });
+      /** Filtros da query string mais o dono (que vem da URL, nunca da query). */
+      const filtersOf = (req: FastifyRequest, qs: Record<string, string> = req.query as Record<string, string>): Filters => ({ ...parseFilters(qs), owner: req.owner.id });
+
+      scope.get("/fights", async (req) => {
+        const qs = req.query as Record<string, string>;
+        const limit = Math.min(Math.max(Number(qs.limit) || 50, 1), 500);
+        const offset = Math.max(Number(qs.offset) || 0, 0);
+        return q.listFights(db, filtersOf(req), limit, offset);
+      });
+
+      scope.get<{ Params: { id: string } }>("/fights/:id", async (req, reply) => {
+        const d = q.fightDetail(db, req.params.id, req.owner.id);
+        return d ?? reply.code(404).send({ error: "Fight not found.", code: "fightNotFound" });
+      });
+
+      // relatório HTML completo do Elite Insights (rotação, linha do tempo, replay)
+      scope.get<{ Params: { id: string } }>("/fights/:id/report", async (req, reply) => {
+        const id = req.params.id;
+        if (!/^[\w-]+$/.test(id)) return reply.code(400).send();
+        const mine = db.prepare("SELECT 1 FROM fights WHERE id = ? AND owner_id = ?").get(id, req.owner.id);
+        const file = path.join(p.fightDir(id), "report.html");
+        if (!mine || !existsSync(file)) return reply.code(404).send({ error: "Report not available for this fight.", code: "noReport" });
+        return reply.type("text/html; charset=utf-8").send(await fs.readFile(file));
+      });
+
+      scope.get("/ranking", async (req) => {
+        const fl = filtersOf(req);
+        return { rows: q.ranking(db, fl), baseline: q.baseline(db, fl) };
+      });
+
+      scope.get<{ Params: { account: string } }>("/players/:account", async (req, reply) => {
+        const prof = q.playerProfile(db, req.params.account, filtersOf(req));
+        return prof ?? reply.code(404).send({ error: "Player not found.", code: "playerNotFound" });
+      });
+
+      scope.get<{ Params: { account: string } }>("/players/:account/skills", async (req) => q.playerSkills(db, req.params.account, filtersOf(req)));
+
+      scope.get("/compare", async (req, reply) => {
+        const qs = req.query as Record<string, string>;
+        const accounts = String(qs.accounts ?? "").split(",").map((s) => s.trim()).filter(Boolean).slice(0, 6);
+        if (!accounts.length) return reply.code(400).send({ error: "Pass the accounts in ?accounts=a,b", code: "needAccounts" });
+        const fl = filtersOf(req);
+        const players = accounts.map((a) => q.playerProfile(db, a, fl)).filter((x) => x !== null);
+        return { players, baseline: q.baseline(db, fl) };
+      });
+
+      scope.get("/guilds", async (req) => q.guildSummaries(db, filtersOf(req)));
+      scope.get("/days", async (req) => q.battleDays(db, filtersOf(req)));
+      scope.get("/overview", async (req) => q.overview(db, filtersOf(req)));
+      scope.get("/meta", async (req) => q.meta(db, req.owner.id));
+    },
+    { prefix: "/api/u/:uid" },
+  );
 
   // ---------- Site (build do apps/web) ----------
   if (existsSync(cfg.webDir)) {
