@@ -136,7 +136,7 @@ describe("login com o Discord", () => {
     expect(volta.statusCode).toBe(302);
     const user = app.db.prepare("SELECT public_id AS p, name FROM users WHERE discord_id = '777'").get() as { p: string; name: string };
     expect(user.name).toBe("fulano");
-    expect(volta.headers.location).toBe(`/u/${user.p}`);
+    expect(volta.headers.location).toBe(`/u/${user.p}/import`); // ainda sem lutas: vai direto importar
 
     const sessao = cookieDe(volta, "session")!;
     expect(sessao).toMatch(/HttpOnly/i);
@@ -153,6 +153,17 @@ describe("login com o Discord", () => {
     const cookieState = cookieDe(ida, "oauth_state")!.split(";")[0]!;
     expect((await app.server.inject({ url: "/api/auth/callback?code=abc&state=outro", headers: { cookie: cookieState } })).statusCode).toBe(400);
     expect((await app.server.inject("/api/auth/callback?code=abc&state=outro")).statusCode).toBe(400);
+  });
+
+  it("quem já tem lutas entra na visão geral, não na importação", async () => {
+    const fulano = criarUsuario(app, "777", "fulano");
+    app.db.prepare("INSERT INTO fights (id, sha256, status, uploaded_at, owner_id) VALUES ('f1', 'sha-f1', 'done', ?, ?)").run(new Date().toISOString(), fulano.id);
+    const ida = await app.server.inject("/api/auth/login");
+    const state = new URL(String(ida.headers.location)).searchParams.get("state");
+
+    const volta = await app.server.inject({ url: `/api/auth/callback?code=abc&state=${state}`, headers: { cookie: cookieDe(ida, "oauth_state")!.split(";")[0]! } });
+
+    expect(volta.headers.location).toBe(`/u/${fulano.publicId}`);
   });
 
   it("cancelar na tela do Discord volta para a entrada, sem sessão e sem erro", async () => {
