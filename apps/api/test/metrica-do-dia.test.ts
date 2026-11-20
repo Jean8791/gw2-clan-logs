@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isShortParticipation, mainRole, SHORT_PARTICIPATION_MS, STAT_KEYS, statRate, suggestMetric, type Aggregate } from "@gw2logs/shared";
+import { chartMetrics, isShortParticipation, mainRole, SHORT_PARTICIPATION_MS, STAT_GROUPS, STAT_KEYS, STAT_META, statRate, suggestMetric, type Aggregate } from "@gw2logs/shared";
 
 /** Soma de um jogador (ou do squad) em várias lutas: tudo zero, menos o que o teste pede. Padrão: 1 luta de 10 minutos. */
 const agg = (o: Partial<Aggregate> = {}): Aggregate =>
@@ -100,5 +100,42 @@ describe("isShortParticipation: marca no gráfico a luta em que o jogador ficou 
     expect(SHORT_PARTICIPATION_MS).toBe(30_000);
     expect([0, 3_000, 29_999].map(isShortParticipation)).toEqual([true, true, true]);
     expect([30_000, 600_000].map(isShortParticipation)).toEqual([false, false]);
+  });
+});
+
+describe("chartMetrics: o seletor de grupo e o de métrica do gráfico", () => {
+  it("cada grupo tem métricas, todas do próprio grupo e sem repetir", () => {
+    for (const g of STAT_GROUPS) {
+      const lista = chartMetrics(g.id);
+
+      expect(lista.length).toBeGreaterThan(0);
+      expect(lista.every((k) => STAT_META[k].group === g.id)).toBe(true);
+      expect(new Set(lista).size).toBe(lista.length);
+    }
+  });
+
+  it("os grupos juntos cobrem todas as métricas, uma vez cada: nenhuma se perde ao separar o seletor em dois", () => {
+    const todas = STAT_GROUPS.flatMap((g) => chartMetrics(g.id));
+
+    expect(new Set(todas).size).toBe(todas.length);
+    expect([...todas].sort()).toEqual([...STAT_KEYS].sort());
+  });
+
+  it("boons trazem os três alcances (squad, grupo e próprio)", () => {
+    const boons = chartMetrics("boons");
+
+    expect(boons).toEqual(expect.arrayContaining(["stabOut", "stabGroup", "stabSelf"]));
+  });
+
+  it("ao trocar de grupo o gráfico abre na primeira métrica dele (dano, no grupo de dano)", () => {
+    expect(chartMetrics("offense")[0]).toBe("damage");
+  });
+
+  it("a métrica sugerida para o dia sempre pertence a um grupo do seletor", () => {
+    const grupos = STAT_GROUPS.map((g) => g.id);
+    const sugerida = suggestMetric(agg({ healing: 500_000, damage: 300_000 }), squad);
+
+    expect(grupos).toContain(STAT_META[sugerida].group);
+    expect(chartMetrics(STAT_META[sugerida].group)).toContain(sugerida);
   });
 });

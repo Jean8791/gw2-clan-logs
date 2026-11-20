@@ -208,6 +208,9 @@ export function uptimeValue(k: StatKey, ms: number, activeMs: number): number {
 export const statsOfGroup = (g: StatGroup, scope: BoonScope = "squad"): StatKey[] =>
   STAT_KEYS.filter((k) => STAT_META[k].group === g && (g !== "boons" || (STAT_META[k].scope ?? "squad") === scope));
 
+/** Métricas de um grupo para o seletor do gráfico: nos boons entram os três alcances (squad, grupo e próprio). */
+export const chartMetrics = (g: StatGroup): StatKey[] => (g === "boons" ? BOON_SCOPES.flatMap((s) => statsOfGroup(g, s)) : statsOfGroup(g));
+
 export const emptyStats = (): Stats => Object.fromEntries(STAT_KEYS.map((k) => [k, 0])) as Stats;
 
 // ---------- Entidades da API ----------

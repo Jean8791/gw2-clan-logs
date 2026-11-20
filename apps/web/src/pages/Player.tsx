@@ -3,7 +3,7 @@ import { useMemo, useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { CartesianGrid, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import {
-  BOON_SCOPES,
+  chartMetrics,
   filtersToQuery,
   isShortParticipation,
   isUptimeStat,
@@ -22,6 +22,7 @@ import {
   type BoonScope,
   type PlayerHistoryRow,
   type PlayerSkill,
+  type StatGroup,
   type StatKey,
 } from "@gw2logs/shared";
 import { DataTable, type Column } from "../components/DataTable";
@@ -87,6 +88,7 @@ export function PlayerPage() {
   const suggested: StatKey = dayKey && data ? suggestMetric(data.totals, squad) : "damage";
   const manual = picked && picked.day === dayKey ? picked.metric : null;
   const metric = manual ?? suggested;
+  const chartGroup = STAT_META[metric].group;
   const [group, setGroup] = useState(STAT_GROUPS[0]!.id);
   const [scope, setScope] = useState<BoonScope>("squad");
 
@@ -212,19 +214,25 @@ export function PlayerPage() {
             <Card
               title={tr("player.evolution")}
               action={
-                <Select className="w-52" value={metric} onChange={(e) => setPicked({ day: dayKey, metric: e.target.value as StatKey })} aria-label={tr("player.metric")}>
-                  {STAT_GROUPS.map((g) => (
-                    <optgroup key={g.id} label={tr(`group.${g.id}`)}>
-                      {(g.id === "boons" ? BOON_SCOPES.flatMap((s) => statsOfGroup(g.id, s)) : statsOfGroup(g.id)).map((k) => (
-                        <option key={k} value={k}>
-                          {statText(k, getLang()).label}
-                          {STAT_META[k].scope ? ` (${tr(`scope.${STAT_META[k].scope}`)})` : ""}
-                          {STAT_META[k].format === "volume" || isUptimeStat(k) ? "" : " / min"}
-                        </option>
-                      ))}
-                    </optgroup>
-                  ))}
-                </Select>
+                <div className="flex flex-wrap items-center gap-2">
+                  {/* dois seletores: o grupo e, dentro dele, a métrica. O grupo vem da métrica atual (inclusive a sugerida para o dia) */}
+                  <Select className="w-32" value={chartGroup} onChange={(e) => setPicked({ day: dayKey, metric: chartMetrics(e.target.value as StatGroup)[0]! })} aria-label={tr("player.metricGroup")}>
+                    {STAT_GROUPS.map((g) => (
+                      <option key={g.id} value={g.id}>
+                        {tr(`group.${g.id}`)}
+                      </option>
+                    ))}
+                  </Select>
+                  <Select className="w-52" value={metric} onChange={(e) => setPicked({ day: dayKey, metric: e.target.value as StatKey })} aria-label={tr("player.metric")}>
+                    {chartMetrics(chartGroup).map((k) => (
+                      <option key={k} value={k}>
+                        {statText(k, getLang()).label}
+                        {STAT_META[k].scope ? ` (${tr(`scope.${STAT_META[k].scope}`)})` : ""}
+                        {STAT_META[k].format === "volume" || isUptimeStat(k) ? "" : " / min"}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
               }
             >
               {dayKey && !manual && (
