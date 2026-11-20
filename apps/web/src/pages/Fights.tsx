@@ -9,7 +9,7 @@ import { Card, Empty, ErrorBox, Loading, PageHeader } from "../components/ui";
 import { useFightsPage } from "../lib/api";
 import { useFilters } from "../lib/hooks";
 import { t } from "../lib/i18n";
-import { compact, dateTime, duration } from "../lib/format";
+import { compact, dateTimeSeconds, duration } from "../lib/format";
 
 const columns = (): Column<Fight>[] => [
   { id: "result", header: "", cell: (f) => <Won fight={f} />, align: "center" },
@@ -18,8 +18,10 @@ const columns = (): Column<Fight>[] => [
     header: t("fights.col.when"),
     fixed: true,
     sort: (f) => f.timeStart ?? f.uploadedAt,
-    cell: (f) => <span className="text-muted">{dateTime(f.timeStart ?? f.uploadedAt)}</span>,
+    cell: (f) => <span className="text-muted">{dateTimeSeconds(f.timeStart ?? f.uploadedAt)}</span>,
   },
+  // quem gravou o log no jogo (recorded_by do Elite Insights): com a hora exata, mostra que a mesma luta gravada por outro membro é outro log
+  { id: "rec", header: t("fights.col.recordedBy"), sort: (f) => f.recordedBy ?? "", cell: (f) => <span className="text-muted">{f.recordedBy ?? "—"}</span> },
   {
     id: "name",
     header: t("fights.col.name"),
@@ -35,7 +37,7 @@ const columns = (): Column<Fight>[] => [
   { id: "size", header: t("fights.col.size"), align: "right", sort: (f) => f.squadCount, cell: (f) => <SquadVsEnemy fight={f} /> },
   { id: "kd", header: t("fights.col.kd"), align: "right", sort: (f) => (fightKills(f) ?? 0) - (f.squadDeaths ?? 0), cell: (f) => <KillDeath kills={fightKills(f)} deaths={f.squadDeaths} /> },
   { id: "dmg", header: t("fights.col.damage"), align: "right", sort: (f) => f.squadDamage, cell: (f) => compact(f.squadDamage) },
-  { id: "up", header: t("fights.col.uploader"), sort: (f) => f.uploader ?? "", cell: (f) => <span className="text-muted">{f.uploader ?? f.recordedBy ?? "—"}</span> },
+  { id: "up", header: t("fights.col.uploader"), sort: (f) => f.uploader ?? "", cell: (f) => <span className="text-muted">{f.uploader ?? "—"}</span> },
 ];
 
 export function FightsPage() {

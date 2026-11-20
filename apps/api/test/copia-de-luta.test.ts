@@ -97,6 +97,21 @@ describe("o mesmo arquivo enviado por outro usuário", () => {
   });
 });
 
+describe("a cópia não expõe quem enviou a original", () => {
+  it("cada usuário vê só o próprio nome em 'Enviado por', mesmo quando a luta de um é cópia da do outro", async () => {
+    const ana = criarUsuario(app, "1", "ana");
+    const beto = criarUsuario(app, "2", "beto");
+    await enviar(ana.token);
+    await app.worker.idle();
+    await enviar(beto.token); // cópia da luta da Ana
+
+    const uploaders = async (publicId: string) => ((await app.server.inject(`/api/u/${publicId}/fights`)).json() as { uploader: string | null }[]).map((f) => f.uploader);
+
+    expect(await uploaders(ana.publicId)).toEqual(["ana"]);
+    expect(await uploaders(beto.publicId)).toEqual(["beto"]);
+  });
+});
+
 describe("tempo de processamento", () => {
   it("o worker grava o tempo total na luta e o informa no log 'luta processada'", async () => {
     const ana = criarUsuario(app, "1", "ana");
