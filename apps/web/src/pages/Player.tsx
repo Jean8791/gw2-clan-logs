@@ -3,8 +3,9 @@ import { useMemo, useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { CartesianGrid, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import {
-  chartMetrics,
+  BOON_SCOPES,
   filtersToQuery,
+  inScope,
   isShortParticipation,
   isUptimeStat,
   mainRole,
@@ -89,6 +90,8 @@ export function PlayerPage() {
   const manual = picked && picked.day === dayKey ? picked.metric : null;
   const metric = manual ?? suggested;
   const chartGroup = STAT_META[metric].group;
+  // nos boons há um terceiro seletor, o alcance (para o squad, para o grupo ou só para você): sem ele a lista misturava os três
+  const chartScope: BoonScope = STAT_META[metric].scope ?? "squad";
   const [group, setGroup] = useState(STAT_GROUPS[0]!.id);
   const [scope, setScope] = useState<BoonScope>("squad");
 
@@ -216,18 +219,32 @@ export function PlayerPage() {
               action={
                 <div className="flex flex-wrap items-center gap-2">
                   {/* dois seletores: o grupo e, dentro dele, a métrica. O grupo vem da métrica atual (inclusive a sugerida para o dia) */}
-                  <Select className="w-32" value={chartGroup} onChange={(e) => setPicked({ day: dayKey, metric: chartMetrics(e.target.value as StatGroup)[0]! })} aria-label={tr("player.metricGroup")}>
+                  <Select className="w-32" value={chartGroup} onChange={(e) => setPicked({ day: dayKey, metric: statsOfGroup(e.target.value as StatGroup)[0]! })} aria-label={tr("player.metricGroup")}>
                     {STAT_GROUPS.map((g) => (
                       <option key={g.id} value={g.id}>
                         {tr(`group.${g.id}`)}
                       </option>
                     ))}
                   </Select>
+                  {chartGroup === "boons" && (
+                    <Select
+                      className="w-28"
+                      value={chartScope}
+                      onChange={(e) => setPicked({ day: dayKey, metric: inScope(metric, e.target.value as BoonScope) })}
+                      aria-label={tr("scope.label")}
+                      title={tr("player.scopeHint")}
+                    >
+                      {BOON_SCOPES.map((s) => (
+                        <option key={s} value={s}>
+                          {tr(`scope.${s}`)}
+                        </option>
+                      ))}
+                    </Select>
+                  )}
                   <Select className="w-52" value={metric} onChange={(e) => setPicked({ day: dayKey, metric: e.target.value as StatKey })} aria-label={tr("player.metric")}>
-                    {chartMetrics(chartGroup).map((k) => (
+                    {statsOfGroup(chartGroup, chartScope).map((k) => (
                       <option key={k} value={k}>
                         {statText(k, getLang()).label}
-                        {STAT_META[k].scope ? ` (${tr(`scope.${STAT_META[k].scope}`)})` : ""}
                         {STAT_META[k].format === "volume" || isUptimeStat(k) ? "" : " / min"}
                       </option>
                     ))}

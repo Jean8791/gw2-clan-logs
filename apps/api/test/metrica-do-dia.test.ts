@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { chartMetrics, isShortParticipation, mainRole, SHORT_PARTICIPATION_MS, STAT_GROUPS, STAT_KEYS, STAT_META, statRate, suggestMetric, type Aggregate } from "@gw2logs/shared";
+import { BOON_SCOPES, inScope, isShortParticipation, mainRole, SHORT_PARTICIPATION_MS, STAT_GROUPS, STAT_KEYS, STAT_META, statRate, statsOfGroup, suggestMetric, type Aggregate } from "@gw2logs/shared";
 
 /** Soma de um jogador (ou do squad) em várias lutas: tudo zero, menos o que o teste pede. Padrão: 1 luta de 10 minutos. */
 const agg = (o: Partial<Aggregate> = {}): Aggregate =>
@@ -103,39 +103,50 @@ describe("isShortParticipation: marca no gráfico a luta em que o jogador ficou 
   });
 });
 
-describe("chartMetrics: o seletor de grupo e o de métrica do gráfico", () => {
-  it("cada grupo tem métricas, todas do próprio grupo e sem repetir", () => {
-    for (const g of STAT_GROUPS) {
-      const lista = chartMetrics(g.id);
+describe("seletores do gráfico: grupo, alcance (só nos boons) e métrica", () => {
+  /** Tudo o que o seletor de métrica mostra para um grupo, somando os alcances dos boons. */
+  const doGrupo = (g: (typeof STAT_GROUPS)[number]["id"]) => (g === "boons" ? BOON_SCOPES.flatMap((s) => statsOfGroup(g, s)) : statsOfGroup(g));
 
-      expect(lista.length).toBeGreaterThan(0);
-      expect(lista.every((k) => STAT_META[k].group === g.id)).toBe(true);
-      expect(new Set(lista).size).toBe(lista.length);
-    }
-  });
-
-  it("os grupos juntos cobrem todas as métricas, uma vez cada: nenhuma se perde ao separar o seletor em dois", () => {
-    const todas = STAT_GROUPS.flatMap((g) => chartMetrics(g.id));
+  it("os grupos juntos cobrem todas as métricas, uma vez cada: nenhuma se perde ao separar o seletor", () => {
+    const todas = STAT_GROUPS.flatMap((g) => doGrupo(g.id));
 
     expect(new Set(todas).size).toBe(todas.length);
     expect([...todas].sort()).toEqual([...STAT_KEYS].sort());
   });
 
-  it("boons trazem os três alcances (squad, grupo e próprio)", () => {
-    const boons = chartMetrics("boons");
-
-    expect(boons).toEqual(expect.arrayContaining(["stabOut", "stabGroup", "stabSelf"]));
+  it("cada alcance dos boons lista os mesmos 10 boons, e o grupo de dano abre em dano", () => {
+    for (const s of BOON_SCOPES) expect(statsOfGroup("boons", s)).toHaveLength(10);
+    expect(statsOfGroup("offense")[0]).toBe("damage");
   });
 
-  it("ao trocar de grupo o gráfico abre na primeira métrica dele (dano, no grupo de dano)", () => {
-    expect(chartMetrics("offense")[0]).toBe("damage");
+  it("trocar o alcance mantém o mesmo boon: stabOut vira stabGroup e stabSelf, e volta", () => {
+    expect(inScope("stabOut", "group")).toBe("stabGroup");
+    expect(inScope("stabGroup", "self")).toBe("stabSelf");
+    expect(inScope("stabSelf", "squad")).toBe("stabOut");
+    expect(inScope("quickGroup", "group")).toBe("quickGroup");
   });
 
-  it("a métrica sugerida para o dia sempre pertence a um grupo do seletor", () => {
-    const grupos = STAT_GROUPS.map((g) => g.id);
+  it("para todo boon e todo alcance, o resultado existe, é o mesmo boon e está no alcance pedido", () => {
+    for (const k of STAT_KEYS.filter((x) => STAT_META[x].group === "boons")) {
+      for (const s of BOON_SCOPES) {
+        const r = inScope(k, s);
+
+        expect(STAT_KEYS).toContain(r);
+        expect(STAT_META[r].buffId).toBe(STAT_META[k].buffId);
+        expect(STAT_META[r].scope ?? "squad").toBe(s);
+      }
+    }
+  });
+
+  it("métricas fora dos boons não mudam com o alcance", () => {
+    expect(inScope("damage", "self")).toBe("damage");
+    expect(inScope("healing", "group")).toBe("healing");
+    expect(inScope("stabUp", "group")).toBe("stabUp");
+  });
+
+  it("a métrica sugerida para o dia sempre aparece na lista do seu grupo", () => {
     const sugerida = suggestMetric(agg({ healing: 500_000, damage: 300_000 }), squad);
 
-    expect(grupos).toContain(STAT_META[sugerida].group);
-    expect(chartMetrics(STAT_META[sugerida].group)).toContain(sugerida);
+    expect(doGrupo(STAT_META[sugerida].group)).toContain(sugerida);
   });
 });
