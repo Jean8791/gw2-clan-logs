@@ -1,10 +1,10 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { KeyRound, Star } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { ROUTES, type GuildSummary } from "@gw2logs/shared";
+import { guildMatches, PAGE_SIZE, ROUTES, type GuildSummary } from "@gw2logs/shared";
 import { DataTable, type Column } from "../components/DataTable";
-import { Badge, Card, ErrorBox, Input, Loading, PageHeader, cx } from "../components/ui";
+import { Badge, Card, Empty, ErrorBox, Input, Loading, PageHeader, cx } from "../components/ui";
 import { setGuildAlliance, useConfig, useGuilds } from "../lib/api";
 import { useSessionValue } from "../lib/hooks";
 import { date } from "../lib/format";
@@ -15,6 +15,7 @@ export function GuildsPage() {
   const { data: cfg } = useConfig();
   const [key, setKey] = useSessionValue("gw2logs.adminKey");
   const [busy, setBusy] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
   const [err, setErr] = useState<unknown>(null);
   const qc = useQueryClient();
 
@@ -30,6 +31,9 @@ export function GuildsPage() {
       setBusy(null);
     }
   };
+
+  // a busca define o conjunto: a ordenação, o total e as páginas valem só para as guildas que batem com ela
+  const rows = useMemo(() => (data ?? []).filter((g) => guildMatches(g, search)), [data, search]);
 
   const columns: Column<GuildSummary>[] = [
     {
@@ -86,11 +90,18 @@ export function GuildsPage() {
       {error && <ErrorBox error={error} />}
       {isLoading && <Loading />}
       {data && (
-        <Card>
-          <DataTable rows={data} columns={columns} rowKey={(g) => g.id} initialSort={{ id: "players", desc: true }} />
-        </Card>
+        <>
+          <Input className="mb-3 max-w-sm shrink-0" label={t("guilds.search")} type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t("guilds.searchHint")} />
+          <Card className="flex min-h-0 flex-1 flex-col">
+            {rows.length === 0 && search.trim() !== "" ? (
+              <Empty title={t("guilds.noMatch")} />
+            ) : (
+              <DataTable fill rows={rows} columns={columns} rowKey={(g) => g.id} initialSort={{ id: "players", desc: true }} pageSize={PAGE_SIZE} />
+            )}
+          </Card>
+        </>
       )}
-      <p className="mt-3 text-xs text-faint">{t("guilds.note")}</p>
+      <p className="mt-3 shrink-0 text-xs text-faint">{t("guilds.note")}</p>
     </>
   );
 }

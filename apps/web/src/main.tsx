@@ -41,7 +41,7 @@ const routes = [
       { path: "/players/:account", element: <PlayerPage /> },
       { path: ROUTES.me, element: <MePage /> },
       { path: ROUTES.compare, element: <ComparePage /> },
-      { path: ROUTES.guilds, element: <GuildsPage /> },
+      { path: ROUTES.guilds, element: <GuildsPage />, handle: { fill: true } },
       { path: ROUTES.import, element: <OwnerOnly><UploadPage /></OwnerOnly> },
       { path: "*", element: <NotFound /> },
     ],
