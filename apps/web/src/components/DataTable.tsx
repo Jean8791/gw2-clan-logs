@@ -88,6 +88,8 @@ export function DataTable<T>({
       return sort!.desc ? -r : r;
     });
   }, [rows, columns, sort, external]);
+  // paginada no navegador (pageSize) ou no servidor (ordenação de fora): em ambos a tabela mostra só uma página por vez
+  const paged = pageSize !== undefined || external;
   const pages = pageSize ? pageCount(sorted.length, pageSize) : 1;
   const current = Math.min(page, pages);
   const visible = pageSize ? pageSlice(sorted, current, pageSize) : sorted;
@@ -105,7 +107,8 @@ export function DataTable<T>({
           onChange={choose}
         />
       )}
-      <div className="max-h-[calc(100vh-5rem)] overflow-auto">
+      {/* lista paginada é curta: sem rolagem própria na vertical, só a da página (a horizontal fica para as tabelas largas) */}
+      <div className={paged ? "overflow-x-auto" : "max-h-[calc(100vh-5rem)] overflow-auto"}>
       <table className="w-full border-separate border-spacing-0 text-sm">
         <thead>
           <tr>
