@@ -5,8 +5,11 @@ import { MAX_UPLOAD_MB } from "./upload.js";
 
 const MB = 1024 * 1024;
 
-/** Tamanho máximo do zip, em MB: acima disso o navegador sofre para abrir. */
-export const MAX_ZIP_MB = 500;
+/**
+ * Tamanho máximo do zip, em MB. Medido nos logs reais do clã: uma semana de jogo dá em média 95 logs e 204 MB (máximo 430 MB);
+ * 300 MB cobre a semana normal com folga, cabe nos 200 envios por hora de cada usuário e leva uns 5 minutos para processar.
+ */
+export const MAX_ZIP_MB = 300;
 
 export class ZipError extends Error {
   constructor(public code: "zipTooBig" | "zipInvalid") {
