@@ -16,8 +16,12 @@ export interface Config {
   adminKey: string;
   /** Endereço público do site (ex.: https://logs.exemplo.com): vira o retorno do login e decide o cookie Secure. */
   publicUrl: string;
-  /** Aplicativo do Discord para o login. Sem os dois valores o login fica desligado. `guildIds`: só quem está em um desses servidores entra; vazio = qualquer conta do Discord. */
-  discord: { clientId: string; clientSecret: string; guildIds: string[] };
+  /**
+   * Aplicativo do Discord para o login. Sem os dois valores o login fica desligado.
+   * `guildIds`: só quem está em um desses servidores entra. `userIds`: só esses usuários entram.
+   * Preenchidas as duas, valem juntas. Vazia, a lista não restringe.
+   */
+  discord: { clientId: string; clientSecret: string; guildIds: string[]; userIds: string[] };
   /** Pasta com o site compilado (apps/web/dist). */
   webDir: string;
   /** Dias que as lutas ficam guardadas. 0 = guardar para sempre. */
@@ -50,6 +54,9 @@ const positive = (raw: string | undefined, fallback: number) => {
   return raw !== undefined && raw !== "" && Number.isFinite(n) && n > 0 ? n : fallback;
 };
 
+/** Lista de IDs separados por vírgula: tira espaços e ignora vazios. */
+const idList = (raw: string | undefined) => (raw ?? "").split(",").map((id) => id.trim()).filter(Boolean);
+
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   return {
     port: Number(env.PORT ?? 5080),
@@ -62,7 +69,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     discord: {
       clientId: env.DISCORD_CLIENT_ID ?? "",
       clientSecret: env.DISCORD_CLIENT_SECRET ?? "",
-      guildIds: (env.DISCORD_GUILD_IDS ?? "").split(",").map((id) => id.trim()).filter(Boolean),
+      guildIds: idList(env.DISCORD_GUILD_IDS),
+      userIds: idList(env.DISCORD_USER_IDS),
     },
     webDir: path.resolve(env.WEB_DIR ?? path.join(repoRoot, "apps", "web", "dist")),
     retentionDays: Number(env.RETENTION_DAYS ?? 0),

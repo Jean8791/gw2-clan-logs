@@ -16,15 +16,19 @@ export function LandingPage() {
 
   if (viewer.isLoading || viewer.data) return <Loading />;
 
+  // o login negado volta para cá com ?erro=notInGuild (fora dos servidores do clã) ou ?erro=notAllowed (fora da lista de usuários)
+  const erro = new URLSearchParams(window.location.search).get("erro");
+  const loginDenied = erro === "notInGuild" || erro === "notAllowed" ? erro : null;
+
   return (
     <div className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center gap-5 px-6 text-center">
       <img src="/favicon.svg" alt="" className="size-14" />
       <h1 className="font-display text-2xl font-bold tracking-wider text-gold">{t("landing.title")}</h1>
       <p className="text-sm text-muted">{t("landing.subtitle")}</p>
       <RetentionNotice />
-      {new URLSearchParams(window.location.search).get("erro") === "notInGuild" && (
+      {loginDenied && (
         <p role="alert" className="text-sm text-bad">
-          {t("landing.notInGuild")}
+          {t(`landing.${loginDenied}`)}
         </p>
       )}
       {cfg?.loginAvailable === false ? (

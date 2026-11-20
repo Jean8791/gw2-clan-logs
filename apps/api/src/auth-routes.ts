@@ -1,7 +1,7 @@
 // Rotas de login (Discord), sessão e token pessoal de envio.
 import crypto from "node:crypto";
 import { ROUTES } from "@gw2logs/shared";
-import type { FastifyInstance, FastifyRequest } from "fastify";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { paths, type Config } from "./config.js";
 import { cookieHeader, createSession, deleteSession, readCookie, revokeAccessByDiscordId, upsertDiscordUser, userFromToken, type User } from "./auth.js";
 import type { DB } from "./db.js";
@@ -29,14 +29,18 @@ export function registerAuthRoutes(server: FastifyInstance, db: DB, cfg: Config,
   const scope = onlyClan ? "identify guilds" : "identify";
   const clear = (name: string, path = "/") => cookieHeader(name, "", { secure, maxAgeSec: 0, path });
 
-  /** Está em algum servidor do clã? Quem não está perde o token pessoal e as sessões, se já tinha conta (o Discord só é consultado no login). */
-  const inClanServer = async (accessToken: string, discordId: string): Promise<boolean> => {
+  /** Está em algum servidor do clã? (o Discord só é consultado no login) */
+  const inClanServer = async (accessToken: string): Promise<boolean> => {
     const res = await doFetch(`${DISCORD}/api/users/@me/guilds`, { headers: { authorization: `Bearer ${accessToken}` } });
     if (!res.ok) throw new Error(`servidores ${res.status}`);
     const servers = (await res.json()) as { id: string }[];
-    const member = servers.some((g) => cfg.discord.guildIds.includes(g.id));
-    if (!member) revokeAccessByDiscordId(db, discordId);
-    return member;
+    return servers.some((g) => cfg.discord.guildIds.includes(g.id));
+  };
+
+  /** Login negado: nada de usuário nem sessão novos, e quem já tinha conta perde o token pessoal e as sessões (as lutas ficam). */
+  const deny = (reply: FastifyReply, discordId: string, reason: "notInGuild" | "notAllowed") => {
+    revokeAccessByDiscordId(db, discordId);
+    return reply.header("set-cookie", clear(STATE_COOKIE, "/api/auth")).redirect(`/?erro=${reason}`);
   };
 
   server.get("/api/auth/login", async (_req, reply) => {
@@ -67,10 +71,10 @@ export function registerAuthRoutes(server: FastifyInstance, db: DB, cfg: Config,
       if (!meRes.ok) throw new Error(`perfil ${meRes.status}`);
       const me = (await meRes.json()) as { id: string; username: string; global_name?: string | null; avatar?: string | null };
 
+      // as duas listas valem juntas; a de usuários vem primeiro porque não custa uma consulta ao Discord
+      if (cfg.discord.userIds.length > 0 && !cfg.discord.userIds.includes(me.id)) return deny(reply, me.id, "notAllowed");
       // a consulta falhar lança erro e cai no loginFailed: na dúvida, ninguém entra
-      if (onlyClan && !(await inClanServer(access_token, me.id))) {
-        return reply.header("set-cookie", clear(STATE_COOKIE, "/api/auth")).redirect("/?erro=notInGuild");
-      }
+      if (onlyClan && !(await inClanServer(access_token))) return deny(reply, me.id, "notInGuild");
 
       const user = upsertDiscordUser(db, { id: me.id, username: me.global_name || me.username, avatar: me.avatar ?? null });
       const token = createSession(db, user.id, "web");
