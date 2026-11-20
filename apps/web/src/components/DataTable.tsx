@@ -1,8 +1,9 @@
 import { ArrowDown, ArrowUp } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { visibleColumns } from "@gw2logs/shared";
+import { pageCount, pageSlice, visibleColumns } from "@gw2logs/shared";
 import { loadHiddenColumns, saveHiddenColumns } from "../lib/columns";
 import { ColumnPicker } from "./ColumnPicker";
+import { Pagination } from "./Pagination";
 import { cx } from "./ui";
 
 export interface Column<T> {
@@ -27,6 +28,9 @@ export function DataTable<T>({
   columns,
   rowKey,
   initialSort,
+  sort: sortProp,
+  onSortChange,
+  pageSize,
   onRowClick,
   rowClassName,
   footer,
@@ -37,6 +41,14 @@ export function DataTable<T>({
   columns: Column<T>[];
   rowKey: (r: T) => string;
   initialSort?: { id: string; desc: boolean };
+  /**
+   * Ordenação feita fora (no servidor): com `onSortChange` a tabela só mostra a seta de `sort` e avisa o clique, sem reordenar as linhas.
+   * Sem ele, ordena aqui, sobre todas as linhas recebidas.
+   */
+  sort?: { id: string; desc: boolean } | null;
+  onSortChange?: (sort: { id: string; desc: boolean }) => void;
+  /** Mostra só esta quantidade de linhas por vez, com os controles de página. A ordenação continua valendo para todas as linhas. */
+  pageSize?: number;
   onRowClick?: (r: T) => void;
   rowClassName?: (r: T) => string | undefined;
   footer?: ReactNode;
@@ -44,7 +56,17 @@ export function DataTable<T>({
   /** com ele, aparece o botão "Colunas" e a escolha fica salva no navegador, por tabela */
   pickerKey?: string;
 }) {
-  const [sort, setSort] = useState(initialSort ?? null);
+  const [localSort, setLocalSort] = useState(initialSort ?? null);
+  const [page, setPage] = useState(1);
+  const external = onSortChange !== undefined;
+  const sort = external ? (sortProp ?? null) : localSort;
+  const chooseSort = (next: { id: string; desc: boolean }) => {
+    if (external) return onSortChange(next);
+    setLocalSort(next);
+    setPage(1);
+  };
+  // mudou o conjunto de linhas (filtro): volta para a primeira página
+  useEffect(() => setPage(1), [rows.length]);
   const [hidden, setHidden] = useState<string[]>(() => (pickerKey ? loadHiddenColumns(pickerKey) : []));
   useEffect(() => setHidden(pickerKey ? loadHiddenColumns(pickerKey) : []), [pickerKey]);
   const shown = useMemo(() => visibleColumns(columns, hidden), [columns, hidden]);
@@ -54,7 +76,7 @@ export function DataTable<T>({
   };
   const sorted = useMemo(() => {
     const col = sort && columns.find((c) => c.id === sort.id);
-    if (!col?.sort) return rows;
+    if (external || !col?.sort) return rows;
     const get = col.sort;
     return [...rows].sort((a, b) => {
       const x = get(a);
@@ -65,7 +87,12 @@ export function DataTable<T>({
       const r = typeof x === "string" && typeof y === "string" ? x.localeCompare(y, "pt-BR") : (x as number) - (y as number);
       return sort!.desc ? -r : r;
     });
-  }, [rows, columns, sort]);
+  }, [rows, columns, sort, external]);
+  const pages = pageSize ? pageCount(sorted.length, pageSize) : 1;
+  const current = Math.min(page, pages);
+  const visible = pageSize ? pageSlice(sorted, current, pageSize) : sorted;
+  // a posição da linha (#) continua contando desde a primeira página
+  const offset = pageSize ? (current - 1) * pageSize : 0;
 
   return (
     // Área de rolagem com altura limitada: assim o cabeçalho (sticky) fica preso no topo dela ao rolar, como na bel.st.
@@ -95,7 +122,7 @@ export function DataTable<T>({
                     active && "text-gold",
                     c.sticky && "left-0 z-20",
                   )}
-                  onClick={() => c.sort && setSort(active ? { id: c.id, desc: !sort!.desc } : { id: c.id, desc: true })}
+                  onClick={() => c.sort && chooseSort(active ? { id: c.id, desc: !sort!.desc } : { id: c.id, desc: true })}
                 >
                   <span className={cx("inline-flex items-center gap-1", c.align === "right" && "flex-row-reverse")}>
                     {c.header}
@@ -107,7 +134,7 @@ export function DataTable<T>({
           </tr>
         </thead>
         <tbody>
-          {sorted.map((r, i) => (
+          {visible.map((r, i) => (
             <tr
               key={rowKey(r)}
               onClick={onRowClick ? () => onRowClick(r) : undefined}
@@ -124,7 +151,7 @@ export function DataTable<T>({
                     c.className,
                   )}
                 >
-                  {c.cell(r, i)}
+                  {c.cell(r, offset + i)}
                 </td>
               ))}
             </tr>
@@ -133,6 +160,7 @@ export function DataTable<T>({
         {footer}
       </table>
       </div>
+      {pageSize && sorted.length > pageSize && <Pagination page={current} pages={pages} total={sorted.length} onPage={setPage} />}
     </div>
   );
 }

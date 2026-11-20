@@ -1,7 +1,7 @@
 import { GitCompareArrows, Link2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { filtersToQuery, ROUTES, type BoonScope, type RankingRow, type StatGroup } from "@gw2logs/shared";
+import { filtersToQuery, PAGE_SIZE, ROUTES, type BoonScope, type RankingRow, type StatGroup } from "@gw2logs/shared";
 import { DataTable, type Column } from "../components/DataTable";
 import { FilterBar } from "../components/FilterBar";
 import { defaultSort, GroupTabs, pickerView, ModeToggle, statColumns, type ValueMode } from "../components/statColumns";
@@ -129,6 +129,7 @@ export function RankingPage() {
             columns={columns}
             rowKey={(r) => r.account}
             initialSort={defaultSort(group, scope)}
+            pageSize={PAGE_SIZE}
             rowClassName={(r) => (r.account === me ? "bg-gold/5" : selected.includes(r.account) ? "bg-info/5" : undefined)}
             onRowClick={(r) => toggle(r.account)}
             dense

@@ -6,6 +6,7 @@ import {
   BOON_SCOPES,
   filtersToQuery,
   isUptimeStat,
+  PAGE_SIZE,
   perMinute,
   ROUTES,
   STAT_GROUPS,
@@ -282,7 +283,7 @@ export function PlayerPage() {
           )}
 
           <Card className="mt-6" title={tr("player.history")}>
-            <DataTable pickerKey="player-history" rows={[...data.history].reverse()} columns={histCols} rowKey={(h) => h.fightId} dense />
+            <DataTable pickerKey="player-history" rows={[...data.history].reverse()} columns={histCols} rowKey={(h) => h.fightId} pageSize={PAGE_SIZE} dense />
           </Card>
         </>
       )}

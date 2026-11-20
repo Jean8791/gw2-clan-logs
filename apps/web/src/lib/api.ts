@@ -1,6 +1,7 @@
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import {
   filtersToQuery,
+  PAGE_SIZE,
   type Aggregate,
   type DaySummary,
   type Fight,
@@ -63,6 +64,21 @@ export const useFights = (f: Filters, limit = 100) =>
     queryFn: () => get<Fight[]>(withFilters(`${spaceApi}/fights`, f, { limit })),
     // enquanto houver luta na fila, atualiza sozinho
     refetchInterval: (q) => (q.state.data?.some((x) => x.status === "queued" || x.status === "parsing") ? 3000 : false),
+  });
+
+/** Uma página da lista de lutas, já ordenada pelo servidor sobre todas as lutas do filtro, e o total dele (cabeçalho x-total-count). */
+export const useFightsPage = (f: Filters, o: { page: number; sort: string; dir: "asc" | "desc" }) =>
+  useQuery({
+    queryKey: ["fights-page", f, o],
+    queryFn: async (): Promise<{ rows: Fight[]; total: number }> => {
+      const res = await fetch(withFilters(`${spaceApi}/fights`, f, { limit: PAGE_SIZE, offset: (o.page - 1) * PAGE_SIZE, sort: o.sort, dir: o.dir }));
+      if (!res.ok) throw apiErrorFrom(res.status, await res.json().catch(() => null));
+      return { rows: (await res.json()) as Fight[], total: Number(res.headers.get("x-total-count")) || 0 };
+    },
+    // ao trocar de página ou de ordem, a tabela anterior fica na tela até a nova chegar (sem piscar)
+    placeholderData: keepPreviousData,
+    // enquanto houver luta na fila, atualiza sozinho
+    refetchInterval: (q) => (q.state.data?.rows.some((x) => x.status === "queued" || x.status === "parsing") ? 3000 : false),
   });
 
 export const useFight = (id: string) => useQuery({ queryKey: ["fight", id], queryFn: () => get<FightDetail>(`${spaceApi}/fights/${encodeURIComponent(id)}`) });

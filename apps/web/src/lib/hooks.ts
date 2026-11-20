@@ -19,6 +19,8 @@ export function useFilters(defaults: Filters = {}) {
           const p = new URLSearchParams(prev);
           for (const k of FILTER_KEYS) p.delete(k);
           p.delete("_");
+          // outro filtro, outro conjunto de lutas: volta para a primeira página
+          p.delete("page");
           for (const k of FILTER_KEYS) {
             const v = next[k];
             if (v !== undefined && v !== "") p.set(k, String(v));
