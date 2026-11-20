@@ -106,6 +106,7 @@ Variáveis de ambiente do servidor. No Docker Compose, as principais vêm do arq
 | Variável | Para quê | Padrão |
 |---|---|---|
 | `DISCORD_CLIENT_ID` / `DISCORD_CLIENT_SECRET` | Aplicativo do Discord do login (portal de desenvolvedores). Sem os dois, o login fica desligado. O secret vai só no servidor | vazio |
+| `DISCORD_GUILD_IDS` | IDs dos servidores do Discord do clã, separados por vírgula. Preenchida, o login pede também o escopo `guilds` e só entra quem está em um deles; quem já tinha conta e saiu perde o token pessoal no próximo login. Vazia, qualquer conta do Discord entra. Confere só os 200 primeiros servidores de cada pessoa | vazio |
 | `PUBLIC_URL` | Endereço público do site (ex.: `https://logs.exemplo.com`): é o retorno do login do Discord (`/api/auth/callback`) e liga o cookie `Secure` quando é https | `http://localhost:5080` |
 | `ADMIN_KEY` | Senha para marcar as guildas da aliança. Vazio = qualquer um marca | vazio |
 | `DATA_DIR` | Banco SQLite, logs enviados e JSON das lutas | `./data` |

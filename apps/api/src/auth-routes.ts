@@ -3,7 +3,7 @@ import crypto from "node:crypto";
 import { ROUTES } from "@gw2logs/shared";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { paths, type Config } from "./config.js";
-import { cookieHeader, createSession, deleteSession, readCookie, upsertDiscordUser, userFromToken, type User } from "./auth.js";
+import { cookieHeader, createSession, deleteSession, readCookie, revokeAccessByDiscordId, upsertDiscordUser, userFromToken, type User } from "./auth.js";
 import type { DB } from "./db.js";
 import { safeEqual } from "./guards.js";
 import { removeFights } from "./retention.js";
@@ -24,13 +24,26 @@ export function registerAuthRoutes(server: FastifyInstance, db: DB, cfg: Config,
   const secure = cfg.publicUrl.startsWith("https://");
   const enabled = cfg.discord.clientId !== "" && cfg.discord.clientSecret !== "";
   const redirectUri = `${cfg.publicUrl}/api/auth/callback`;
+  const onlyClan = cfg.discord.guildIds.length > 0;
+  // o escopo guilds só é pedido quando há servidores a conferir
+  const scope = onlyClan ? "identify guilds" : "identify";
   const clear = (name: string, path = "/") => cookieHeader(name, "", { secure, maxAgeSec: 0, path });
+
+  /** Está em algum servidor do clã? Quem não está perde o token pessoal e as sessões, se já tinha conta (o Discord só é consultado no login). */
+  const inClanServer = async (accessToken: string, discordId: string): Promise<boolean> => {
+    const res = await doFetch(`${DISCORD}/api/users/@me/guilds`, { headers: { authorization: `Bearer ${accessToken}` } });
+    if (!res.ok) throw new Error(`servidores ${res.status}`);
+    const servers = (await res.json()) as { id: string }[];
+    const member = servers.some((g) => cfg.discord.guildIds.includes(g.id));
+    if (!member) revokeAccessByDiscordId(db, discordId);
+    return member;
+  };
 
   server.get("/api/auth/login", async (_req, reply) => {
     if (!enabled) return reply.code(503).send({ error: "Login is not configured.", code: "loginOff" });
     const state = crypto.randomBytes(16).toString("base64url");
     const url = new URL("/oauth2/authorize", DISCORD);
-    url.search = new URLSearchParams({ client_id: cfg.discord.clientId, redirect_uri: redirectUri, response_type: "code", scope: "identify", state }).toString();
+    url.search = new URLSearchParams({ client_id: cfg.discord.clientId, redirect_uri: redirectUri, response_type: "code", scope, state }).toString();
     return reply.header("set-cookie", cookieHeader(STATE_COOKIE, state, { secure, maxAgeSec: STATE_MINUTES * 60, path: "/api/auth" })).redirect(url.toString());
   });
 
@@ -53,6 +66,11 @@ export function registerAuthRoutes(server: FastifyInstance, db: DB, cfg: Config,
       const meRes = await doFetch(`${DISCORD}/api/users/@me`, { headers: { authorization: `Bearer ${access_token}` } });
       if (!meRes.ok) throw new Error(`perfil ${meRes.status}`);
       const me = (await meRes.json()) as { id: string; username: string; global_name?: string | null; avatar?: string | null };
+
+      // a consulta falhar lança erro e cai no loginFailed: na dúvida, ninguém entra
+      if (onlyClan && !(await inClanServer(access_token, me.id))) {
+        return reply.header("set-cookie", clear(STATE_COOKIE, "/api/auth")).redirect("/?erro=notInGuild");
+      }
 
       const user = upsertDiscordUser(db, { id: me.id, username: me.global_name || me.username, avatar: me.avatar ?? null });
       const token = createSession(db, user.id, "web");

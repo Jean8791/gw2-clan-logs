@@ -16,8 +16,8 @@ export interface Config {
   adminKey: string;
   /** Endereço público do site (ex.: https://logs.exemplo.com): vira o retorno do login e decide o cookie Secure. */
   publicUrl: string;
-  /** Aplicativo do Discord para o login. Sem os dois valores o login fica desligado. */
-  discord: { clientId: string; clientSecret: string };
+  /** Aplicativo do Discord para o login. Sem os dois valores o login fica desligado. `guildIds`: só quem está em um desses servidores entra; vazio = qualquer conta do Discord. */
+  discord: { clientId: string; clientSecret: string; guildIds: string[] };
   /** Pasta com o site compilado (apps/web/dist). */
   webDir: string;
   /** Dias que as lutas ficam guardadas. 0 = guardar para sempre. */
@@ -59,7 +59,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     dotnet: env.DOTNET ?? "dotnet",
     adminKey: env.ADMIN_KEY ?? "",
     publicUrl: (env.PUBLIC_URL ?? `http://localhost:${env.PORT ?? 5080}`).replace(/\/+$/, ""),
-    discord: { clientId: env.DISCORD_CLIENT_ID ?? "", clientSecret: env.DISCORD_CLIENT_SECRET ?? "" },
+    discord: {
+      clientId: env.DISCORD_CLIENT_ID ?? "",
+      clientSecret: env.DISCORD_CLIENT_SECRET ?? "",
+      guildIds: (env.DISCORD_GUILD_IDS ?? "").split(",").map((id) => id.trim()).filter(Boolean),
+    },
     webDir: path.resolve(env.WEB_DIR ?? path.join(repoRoot, "apps", "web", "dist")),
     retentionDays: Number(env.RETENTION_DAYS ?? 0),
     gw2Api: env.GW2_API !== "off",
