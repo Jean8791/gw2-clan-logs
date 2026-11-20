@@ -85,8 +85,12 @@ export function FightsPage() {
                 sort={sort}
                 onSortChange={(s) => update({ sort: s.id, dir: s.desc ? "desc" : "asc", page: null })}
                 onRowClick={(f) => f.status === "done" && nav(ROUTES.fight(f.id))}
+                bar={(picker) =>
+                  data.total > PAGE_SIZE ? (
+                    <Pagination page={Math.min(page, pages)} pages={pages} total={data.total} onPage={(p) => update({ page: p <= 1 ? null : String(p) })} extra={picker} />
+                  ) : null
+                }
               />
-              {data.total > PAGE_SIZE && <Pagination page={Math.min(page, pages)} pages={pages} total={data.total} onPage={(p) => update({ page: p <= 1 ? null : String(p) })} />}
             </>
           )}
         </Card>

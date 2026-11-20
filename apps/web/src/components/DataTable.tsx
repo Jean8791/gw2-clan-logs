@@ -32,6 +32,7 @@ export function DataTable<T>({
   onSortChange,
   pageSize,
   fill,
+  bar,
   onRowClick,
   rowClassName,
   footer,
@@ -55,6 +56,8 @@ export function DataTable<T>({
    * só a lista de dentro, e o cabeçalho fica sempre à vista. Sem ele, a tabela tem altura máxima própria.
    */
   fill?: boolean;
+  /** Barra de baixo montada pelo pai (paginação no servidor). Recebe o botão "Colunas", para ficar nela; devolva null se não houver barra. */
+  bar?: (picker: ReactNode) => ReactNode;
   onRowClick?: (r: T) => void;
   rowClassName?: (r: T) => string | undefined;
   footer?: ReactNode;
@@ -100,17 +103,26 @@ export function DataTable<T>({
   // a posição da linha (#) continua contando desde a primeira página
   const offset = pageSize ? (current - 1) * pageSize : 0;
 
+  // o botão "Colunas" fica na barra de baixo, depois do "Próxima"; sem paginação, numa barra só com ele
+  const picker = pickerKey ? (
+    <ColumnPicker
+      columns={columns.map((c) => ({ id: c.id, fixed: c.fixed, label: c.label ?? (typeof c.header === "string" && c.header ? c.header : c.id) }))}
+      hidden={hidden}
+      onChange={choose}
+    />
+  ) : null;
+  const bottom =
+    bar?.(picker) ??
+    (pageSize && sorted.length > pageSize ? (
+      <Pagination page={current} pages={pages} total={sorted.length} onPage={setPage} extra={picker} />
+    ) : picker ? (
+      <div className="flex shrink-0 justify-end border-t border-line px-4 py-2">{picker}</div>
+    ) : null);
+
   return (
     // Área de rolagem com altura limitada: assim o cabeçalho (sticky) fica preso no topo dela ao rolar, como na bel.st.
     // Com overflow só no eixo x o cabeçalho colava num contêiner que não rola na vertical e sumia.
     <div className={fill ? "flex min-h-0 flex-1 flex-col" : undefined}>
-      {pickerKey && (
-        <ColumnPicker
-          columns={columns.map((c) => ({ id: c.id, fixed: c.fixed, label: c.label ?? (typeof c.header === "string" && c.header ? c.header : c.id) }))}
-          hidden={hidden}
-          onChange={choose}
-        />
-      )}
       <div className={fill ? "min-h-0 flex-1 overflow-auto" : "max-h-[calc(100vh-5rem)] overflow-auto"}>
       <table className="w-full border-separate border-spacing-0 text-sm">
         <thead>
@@ -166,7 +178,7 @@ export function DataTable<T>({
         {footer}
       </table>
       </div>
-      {pageSize && sorted.length > pageSize && <Pagination page={current} pages={pages} total={sorted.length} onPage={setPage} />}
+      {bottom}
     </div>
   );
 }
