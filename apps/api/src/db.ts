@@ -69,7 +69,8 @@ function migrate(db: DB) {
       enemy_downs   INTEGER,                  -- inimigos caídos na luta toda (de quem for o crédito)
       enemy_deaths  INTEGER,                  -- inimigos mortos na luta toda (de quem for o crédito)
       ei_version    TEXT,
-      has_report    INTEGER NOT NULL DEFAULT 0
+      has_report    INTEGER NOT NULL DEFAULT 0,
+      process_ms    INTEGER                   -- tempo total do processamento (EI + gravação); vazio nas lutas copiadas e nas antigas
     );
 
     CREATE TABLE IF NOT EXISTS player_stats (
@@ -133,6 +134,7 @@ function migrate(db: DB) {
   for (const col of ["enemy_downs", "enemy_deaths"]) {
     if (!haveFights.has(col)) db.exec(`ALTER TABLE fights ADD COLUMN ${col} INTEGER`);
   }
+  if (!haveFights.has("process_ms")) db.exec("ALTER TABLE fights ADD COLUMN process_ms INTEGER");
   // dono da luta; as lutas anteriores ao login ficam sem dono até o primeiro usuário entrar
   if (!haveFights.has("owner_id")) db.exec("ALTER TABLE fights ADD COLUMN owner_id INTEGER REFERENCES users(id)");
   dropGlobalShaUnique(db);

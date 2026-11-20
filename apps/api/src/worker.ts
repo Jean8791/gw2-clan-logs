@@ -79,8 +79,12 @@ export class LogWorker {
         const id = this.queue.shift()!;
         try {
           setStatus(this.db, id, "parsing");
-          await this.process(id);
-          this.log.info({ id }, "luta processada");
+          const started = Date.now();
+          const { eiMs } = await this.process(id);
+          const totalMs = Date.now() - started;
+          this.db.prepare("UPDATE fights SET process_ms = ? WHERE id = ?").run(totalMs, id);
+          // eiMs é nulo quando o envio já era o JSON do Elite Insights (o EI não rodou)
+          this.log.info({ id, eiMs, totalMs }, "luta processada");
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e);
           this.log.error({ id, err: msg }, "falha ao processar luta");
@@ -95,7 +99,8 @@ export class LogWorker {
     }
   }
 
-  private async process(id: string) {
+  /** Processa o log e devolve quanto tempo o Elite Insights levou (null se ele não rodou). */
+  private async process(id: string): Promise<{ eiMs: number | null }> {
     const files = await fs.readdir(this.p.uploads);
     const name = files.find((f) => f.startsWith(id + "."));
     if (!name) throw fightError("logMissing");
@@ -103,6 +108,7 @@ export class LogWorker {
     const outDir = this.p.fightDir(id);
     const work = path.join(outDir, "work");
     await fs.mkdir(work, { recursive: true });
+    let eiMs: number | null = null;
 
     try {
       let jsonFile: string;
@@ -111,7 +117,9 @@ export class LogWorker {
         // JSON já gerado pelo Elite Insights (ex.: baixado do dps.report)
         jsonFile = src;
       } else {
+        const eiStarted = Date.now();
         const out = await runEliteInsights({ eiDir: this.cfg.eiDir, dotnet: this.cfg.dotnet, logFile: src, outDir: work, html: this.cfg.eiHtml });
+        eiMs = Date.now() - eiStarted;
         jsonFile = out.json;
         html = out.html;
       }
@@ -122,6 +130,7 @@ export class LogWorker {
 
       // o que importa já está no banco: o log enviado não precisa ficar. Em caso de erro ele fica, para tentar de novo.
       await fs.rm(src, { force: true });
+      return { eiMs };
     } finally {
       await fs.rm(work, { recursive: true, force: true });
       await fs.rmdir(outDir).catch(() => {}); // só sai se ficou vazia (sobra o report.html quando ele é gerado)

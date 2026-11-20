@@ -97,6 +97,31 @@ describe("o mesmo arquivo enviado por outro usuário", () => {
   });
 });
 
+describe("tempo de processamento", () => {
+  it("o worker grava o tempo total na luta e o informa no log 'luta processada'", async () => {
+    const ana = criarUsuario(app, "1", "ana");
+    const info = vi.spyOn(app.server.log, "info");
+
+    const id = (await enviar(ana.token)).json()[0].id;
+    await app.worker.idle();
+
+    const { process_ms } = app.db.prepare("SELECT process_ms FROM fights WHERE id = ?").get(id) as { process_ms: number };
+    expect(Number.isInteger(process_ms) && process_ms >= 0).toBe(true);
+    expect(info).toHaveBeenCalledWith(expect.objectContaining({ id, totalMs: process_ms, eiMs: null }), "luta processada");
+  });
+
+  it("a cópia não processou nada: fica sem tempo, para não distorcer a média", async () => {
+    const ana = criarUsuario(app, "1", "ana");
+    const beto = criarUsuario(app, "2", "beto");
+    await enviar(ana.token);
+    await app.worker.idle();
+
+    const doBeto = (await enviar(beto.token)).json()[0];
+
+    expect(app.db.prepare("SELECT process_ms FROM fights WHERE id = ?").get(doBeto.id)).toEqual({ process_ms: null });
+  });
+});
+
 describe("limites no envio copiado", () => {
   it("o limite por hora vale também para a cópia", async () => {
     await app.server.close();

@@ -67,7 +67,7 @@ const columnsOf = (db: DB, table: string, skip: string[]) =>
  * A cópia é independente: apagar uma luta não mexe na outra. Fica sem relatório HTML, que pertence à luta original.
  */
 export function copyFight(db: DB, fromId: string, newId: string, owner: { id: number; name: string }, fileName: string) {
-  const fightCols = columnsOf(db, "fights", ["id", "owner_id", "uploader", "file_name", "uploaded_at", "has_report"]).join(",");
+  const fightCols = columnsOf(db, "fights", ["id", "owner_id", "uploader", "file_name", "uploaded_at", "has_report", "process_ms"]).join(",");
   const statCols = columnsOf(db, "player_stats", ["fight_id"]).join(",");
   db.transaction(() => {
     db.prepare(

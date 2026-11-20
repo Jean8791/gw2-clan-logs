@@ -149,7 +149,7 @@ O site precisa de disco que não se perde e de ~1 GB de memória, então serviç
 
 - **Atualizar:** na branch `release`, `git pull && docker compose up -d --build`. Se a extração mudou (`SCHEMA_VERSION` em `apps/api/src/db.ts`), `reingest` só alcança as lutas que ainda têm o JSON guardado (`docker compose exec app node apps/api/dist/scripts/reingest.js`; o total impresso no fim mostra quantas foram). (com `sudo` se o seu usuário não estiver no grupo `docker`). Lutas novas já saem certas.
 - **Backup diário:** `crontab -e` e `0 4 * * * cd ~/gw2-clan-logs && scripts/backup.sh`. Guarda as últimas 7 cópias do banco em `/data/backup`, dentro do mesmo disco: copie para fora se o histórico for importante. Confira o espaço do disco de vez em quando.
-- **Acompanhar:** `docker compose logs -f app`, `docker stats`, e a tela Lutas mostra a fila e os erros de processamento.
+- **Acompanhar:** `docker compose logs -f app`, `docker stats`, e a tela Lutas mostra a fila e os erros de processamento. Cada log processado registra `eiMs` (Elite Insights) e `totalMs` no log "luta processada", e o total fica em `fights.process_ms` (vazio nas lutas copiadas e nas antigas): `SELECT COUNT(*), AVG(process_ms), MAX(process_ms) FROM fights WHERE process_ms IS NOT NULL` dá a média e o pico para estimar quantos logs por hora o servidor aguenta.
 - **Alerta de fora do ar:** `GET /api/health` responde o estado e o tamanho da fila. O workflow `.github/workflows/uptime.yml` o consulta a cada 15 minutos e o GitHub avisa por e-mail se falhar; defina a variável `SITE_URL` do repositório (Settings, Secrets and variables, Variables).
 - **Segurança:** o SSH deve aceitar só chave (sem senha) e pode usar `fail2ban`. O site é de leitura aberta; enviar logs e marcar guildas exigem as chaves.
 
