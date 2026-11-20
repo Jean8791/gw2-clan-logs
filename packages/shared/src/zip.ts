@@ -7,12 +7,18 @@ const MB = 1024 * 1024;
 
 /**
  * Tamanho máximo do zip, em MB. Medido nos logs reais do clã: uma semana de jogo dá em média 95 logs e 204 MB (máximo 430 MB);
- * 300 MB cobre a semana normal com folga, cabe nos 200 envios por hora de cada usuário e leva uns 5 minutos para processar.
+ * 300 MB cobre a semana normal com folga e protege a memória do navegador. Quem garante caber nos envios por hora é o limite de logs, abaixo.
  */
 export const MAX_ZIP_MB = 300;
 
+/**
+ * Máximo de logs por zip. Fica abaixo dos 200 envios por hora de cada usuário, para um zip aceito nunca estourar esse limite sozinho.
+ * Nos logs do clã a semana de jogo tem em média 95 logs (máximo 173), então 150 cobre quase todas.
+ */
+export const MAX_ZIP_LOGS = 150;
+
 export class ZipError extends Error {
-  constructor(public code: "zipTooBig" | "zipInvalid") {
+  constructor(public code: "zipTooBig" | "zipTooMany" | "zipInvalid") {
     super(code);
     this.name = "ZipError";
   }
@@ -24,6 +30,8 @@ export interface ZipLimits {
   maxFileBytes?: number;
   /** Soma dos logs abertos: protege contra zip muito comprimido que encheria a memória. */
   maxTotalBytes?: number;
+  /** Quantos logs o zip pode ter (só contam os que seriam enviados). */
+  maxLogs?: number;
 }
 
 export interface ZipLogs {
@@ -40,10 +48,12 @@ const isLog = (path: string) => !path.endsWith("/") && !path.startsWith("__MACOS
 export function readLogsFromZip(zip: Uint8Array, limits: ZipLimits = {}): ZipLogs {
   const maxFile = limits.maxFileBytes ?? MAX_UPLOAD_MB * MB;
   const maxTotal = limits.maxTotalBytes ?? 2 * MAX_ZIP_MB * MB;
+  const maxLogs = limits.maxLogs ?? MAX_ZIP_LOGS;
   if (zip.length > (limits.maxZipBytes ?? MAX_ZIP_MB * MB)) throw new ZipError("zipTooBig");
 
   const tooBig: string[] = [];
   let total = 0;
+  let count = 0;
   try {
     // o filtro decide pelo tamanho do cabeçalho, antes de expandir: o que não passa nem chega a ser aberto
     const files = unzipSync(zip, {
@@ -55,6 +65,7 @@ export function readLogsFromZip(zip: Uint8Array, limits: ZipLimits = {}): ZipLog
         }
         total += f.originalSize;
         if (total > maxTotal) throw new ZipError("zipTooBig");
+        if (++count > maxLogs) throw new ZipError("zipTooMany");
         return true;
       },
     });

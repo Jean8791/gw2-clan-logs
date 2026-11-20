@@ -2,7 +2,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, CircleDashed, FileUp, Info, KeyRound, ListChecks, Loader2, PauseCircle, XCircle } from "lucide-react";
 import { useRef, useState, type DragEvent } from "react";
 import { Link } from "react-router-dom";
-import { MAX_UPLOAD_MB, MAX_ZIP_MB, ROUTES, readLogsFromZip, sendInOrder, ZipError, type ItemState } from "@gw2logs/shared";
+import { MAX_UPLOAD_MB, MAX_ZIP_LOGS, MAX_ZIP_MB, ROUTES, readLogsFromZip, sendInOrder, ZipError, type ItemState } from "@gw2logs/shared";
 import { RetentionNotice } from "../components/RetentionNotice";
 import { Button, Card, ErrorBox, PageHeader, Rich, cx } from "../components/ui";
 import { createToken, uploadLog, useConfig, useFights } from "../lib/api";
@@ -156,7 +156,7 @@ export function UploadPage() {
           >
             <FileUp className={cx("size-10", drag ? "text-gold" : "text-faint")} />
             <div className="font-medium">{opening ? t("upload.opening") : t("upload.drop")}</div>
-            <div className="text-sm text-muted">{t("upload.dropHint", { file: MAX_UPLOAD_MB, zip: MAX_ZIP_MB })}</div>
+            <div className="text-sm text-muted">{t("upload.dropHint", { file: MAX_UPLOAD_MB, zip: MAX_ZIP_MB, logs: MAX_ZIP_LOGS })}</div>
             <input ref={input} type="file" multiple accept={ACCEPT.join(",")} className="hidden" onChange={(e) => (add(e.target.files), (e.target.value = ""))} />
           </div>
 
@@ -206,7 +206,7 @@ export function UploadPage() {
               <Rich text={t("upload.limits.types")} />
             </p>
             <p>
-              <Rich text={t("upload.limits.size", { file: MAX_UPLOAD_MB, zip: MAX_ZIP_MB })} />
+              <Rich text={t("upload.limits.size", { file: MAX_UPLOAD_MB, zip: MAX_ZIP_MB, logs: MAX_ZIP_LOGS })} />
             </p>
             {cfg && (
               <p>

@@ -1,6 +1,7 @@
 import { strToU8, zipSync, type Zippable } from "fflate";
 import { describe, expect, it } from "vitest";
-import { readLogsFromZip, ZipError } from "@gw2logs/shared";
+import { MAX_ZIP_LOGS, readLogsFromZip, ZipError } from "@gw2logs/shared";
+import { loadConfig } from "../src/config.js";
 
 const zip = (files: Zippable) => zipSync(files);
 const nomes = (r: ReturnType<typeof readLogsFromZip>) => r.logs.map((l) => l.name).sort();
@@ -69,5 +70,32 @@ describe("readLogsFromZip: abrir o zip de logs no navegador", () => {
 
     expect(comprimido.length).toBeLessThan(10_000);
     expect(erro(() => readLogsFromZip(comprimido, { maxTotalBytes: 1_000_000 }))).toMatchObject({ code: "zipTooBig" });
+  });
+});
+
+describe("readLogsFromZip: limite de logs por zip", () => {
+  const logs = (n: number) => Object.fromEntries(Array.from({ length: n }, (_, i) => [`dia/${i}.zevtc`, strToU8(String(i))]));
+
+  it("acima do máximo de logs é recusado (zipTooMany), sem enviar nada", () => {
+    expect(erro(() => readLogsFromZip(zip(logs(3)), { maxLogs: 2 }))).toMatchObject({ name: "ZipError", code: "zipTooMany" });
+  });
+
+  it("exatamente no máximo passa", () => {
+    expect(readLogsFromZip(zip(logs(2)), { maxLogs: 2 }).logs).toHaveLength(2);
+  });
+
+  it("só conta log de verdade: pastas, outros arquivos, zip dentro de zip e log grande demais ficam de fora da conta", () => {
+    const r = readLogsFromZip(
+      zip({ ...logs(2), "leia-me.txt": strToU8("x"), "pasta/": new Uint8Array(0), "dentro.zip": strToU8("zip"), "grande.zevtc": new Uint8Array(2_000_000) }),
+      { maxLogs: 2, maxFileBytes: 1_000_000 },
+    );
+
+    expect(r.logs).toHaveLength(2);
+    expect(r.tooBig).toEqual(["grande.zevtc"]);
+  });
+
+  it("o máximo padrão cabe no limite de envios por hora de cada usuário, para um zip aceito nunca estourá-lo sozinho", () => {
+    expect(MAX_ZIP_LOGS).toBe(150);
+    expect(MAX_ZIP_LOGS).toBeLessThanOrEqual(loadConfig({}).limits.maxPerHourPerUser);
   });
 });
