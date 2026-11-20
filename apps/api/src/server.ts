@@ -266,6 +266,12 @@ export async function buildApp(cfg: Config, opts: { logger?: boolean; fetch?: ty
         return prof ?? reply.code(404).send({ error: "Player not found.", code: "playerNotFound" });
       });
 
+      // funções, classes e dias que o jogador jogou (nos logs deste espaço), para as listas dos filtros da página dele
+      scope.get<{ Params: { account: string } }>("/players/:account/options", async (req, reply) => {
+        const o = q.playerOptions(db, req.params.account, filtersOf(req));
+        return o ?? reply.code(404).send({ error: "Player not found.", code: "playerNotFound" });
+      });
+
       scope.get<{ Params: { account: string } }>("/players/:account/skills", async (req) => q.playerSkills(db, req.params.account, filtersOf(req)));
 
       scope.get("/compare", async (req, reply) => {

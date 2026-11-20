@@ -5,19 +5,25 @@ import { CartesianGrid, Line, LineChart, ReferenceLine, ResponsiveContainer, Too
 import {
   BOON_SCOPES,
   filtersToQuery,
+  inScope,
+  isShortParticipation,
   isUptimeStat,
+  mainRole,
   PAGE_SIZE,
   perMinute,
   ROUTES,
   STAT_GROUPS,
   STAT_META,
+  statRate,
   statsOfGroup,
   statText,
+  suggestMetric,
   uptimeValue,
   type Aggregate,
   type BoonScope,
   type PlayerHistoryRow,
   type PlayerSkill,
+  type StatGroup,
   type StatKey,
 } from "@gw2logs/shared";
 import { DataTable, type Column } from "../components/DataTable";
@@ -27,20 +33,18 @@ import { AXIS, GRID, TOOLTIP } from "../components/charts";
 import { PlayerPicker } from "../components/PlayerPicker";
 import { SkillIcon } from "../components/MediaIcon";
 import { Badge, Button, Card, Delta, Empty, ErrorBox, Kpi, Loading, PageHeader, Select, cx } from "../components/ui";
-import { usePlayer, usePlayerSkills, useRanking } from "../lib/api";
-import { mainRole, setMe, useFilters, useMe } from "../lib/hooks";
+import { usePlayer, usePlayerOptions, usePlayerSkills, useRanking } from "../lib/api";
+import { setMe, useFilters, useMe } from "../lib/hooks";
 import { getLang, t as tr } from "../lib/i18n"; // "t" já é o total do jogador nesta página
 import { ScopeToggle } from "../components/statColumns";
 import { BaselinePicker, type BaselineRole } from "../components/BaselinePicker";
 import { accountShort, axis, compact, date, dateTime, diffPct, duration, int, stat } from "../lib/format";
 
-const pm = (a: Aggregate, k: StatKey) => (isUptimeStat(k) ? uptimeValue(k, a[k], a.activeMs) : STAT_META[k].format === "volume" ? (a.fights ? a[k] / a.fights : 0) : perMinute(a[k], a.activeMs));
-
 /** Barra comparando o jogador com a média do squad (mesmos filtros). */
 function VsAverage({ k, player, avg }: { k: StatKey; player: Aggregate; avg: Aggregate }) {
   const meta = STAT_META[k];
-  const a = pm(player, k);
-  const b = pm(avg, k);
+  const a = statRate(player, k);
+  const b = statRate(avg, k);
   const max = Math.max(a, b) || 1;
   // a unidade vem escrita: sem ela, "26,5 mil" de dano recebido parecia o total, e é por minuto
   const unit = isUptimeStat(k) ? "" : meta.format === "volume" ? tr("unit.perFight") : "/min";
@@ -75,7 +79,19 @@ export function PlayerPage() {
   const avg = useRanking({ ...filters, role: effRole === "all" ? filters.role : effRole }).data?.baseline;
   const me = useMe();
   const nav = useNavigate();
-  const [metric, setMetric] = useState<StatKey>("damage");
+  // listas dos filtros: só o que este jogador jogou (funções, classes e dias)
+  const options = usePlayerOptions(account, filters).data;
+  // Com UM dia escolhido, o gráfico abre na métrica em que o jogador mais se destacou naquele dia frente ao squad todo (todas as funções:
+  // contra quem joga a mesma função ou classe, uma cura mínima de um DPS pareceria enorme). A escolha manual vale até trocar o dia.
+  const squad = useRanking({ ...filters, role: undefined, profession: undefined }).data?.baseline;
+  const dayKey = filters.day?.length === 1 ? filters.day[0]! : null;
+  const [picked, setPicked] = useState<{ day: string | null; metric: StatKey } | null>(null);
+  const suggested: StatKey = dayKey && data ? suggestMetric(data.totals, squad) : "damage";
+  const manual = picked && picked.day === dayKey ? picked.metric : null;
+  const metric = manual ?? suggested;
+  const chartGroup = STAT_META[metric].group;
+  // nos boons há um terceiro seletor, o alcance (para o squad, para o grupo ou só para você): sem ele a lista misturava os três
+  const chartScope: BoonScope = STAT_META[metric].scope ?? "squad";
   const [group, setGroup] = useState(STAT_GROUPS[0]!.id);
   const [scope, setScope] = useState<BoonScope>("squad");
 
@@ -84,11 +100,14 @@ export function PlayerPage() {
       (data?.history ?? []).map((h, i) => ({
         i: i + 1,
         label: dateTime(h.timeStart),
+        activeMs: h.activeMs,
+        // pouca participação (morreu cedo): continua no gráfico, com o valor real, mas o ponto é marcado
+        short: isShortParticipation(h.activeMs),
         value: isUptimeStat(metric) ? uptimeValue(metric, h[metric], h.activeMs) : STAT_META[metric].format === "volume" ? h[metric] : perMinute(h[metric], h.activeMs),
       })),
     [data, metric],
   );
-  const avgLine = avg ? pm(avg, metric) : null;
+  const avgLine = avg ? statRate(avg, metric) : null;
 
   if (isLoading) return <Loading />;
   if (error) return <ErrorBox error={error} />;
@@ -177,7 +196,7 @@ export function PlayerPage() {
           </>
         }
       />
-      <FilterBar value={filters} onChange={setFilters} fields={["period", "day", "role", "profession", "size", "map"]} />
+      <FilterBar value={filters} onChange={setFilters} fields={["period", "day", "role", "profession", "size", "map"]} options={options} />
 
       {data.history.length === 0 ? (
         <Card>
@@ -188,9 +207,9 @@ export function PlayerPage() {
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
             <Kpi label={tr("overview.kpi.fights")} value={int(t.fights)} hint={`${date(data.history[0]?.timeStart)} → ${date(data.history.at(-1)?.timeStart)}`} />
             <Kpi label={tr("overview.kpi.time")} value={duration(t.activeMs)} />
-            <Kpi label={tr("player.kpi.damagePerMin")} value={compact(perMinute(t.damage, t.activeMs))} accent hint={avg && <Delta pct={diffPct(pm(t, "damage"), pm(avg, "damage"))} />} />
+            <Kpi label={tr("player.kpi.damagePerMin")} value={compact(perMinute(t.damage, t.activeMs))} accent hint={avg && <Delta pct={diffPct(statRate(t, "damage"), statRate(avg, "damage"))} />} />
             <Kpi label={tr("hist.col.kills")} value={int(t.kills)} hint={tr("player.kpi.downs", { n: int(t.downs) })} />
-            <Kpi label={tr("player.kpi.stripsPerMin")} value={stat("strips", perMinute(t.strips, t.activeMs), true)} hint={avg && <Delta pct={diffPct(pm(t, "strips"), pm(avg, "strips"))} />} />
+            <Kpi label={tr("player.kpi.stripsPerMin")} value={stat("strips", perMinute(t.strips, t.activeMs), true)} hint={avg && <Delta pct={diffPct(statRate(t, "strips"), statRate(avg, "strips"))} />} />
             <Kpi label={tr("overview.kpi.deaths")} value={int(t.deaths)} hint={tr("player.kpi.timesDowned", { n: int(t.timesDowned) })} />
           </div>
 
@@ -198,33 +217,68 @@ export function PlayerPage() {
             <Card
               title={tr("player.evolution")}
               action={
-                <Select className="w-52" value={metric} onChange={(e) => setMetric(e.target.value as StatKey)} aria-label={tr("player.metric")}>
-                  {STAT_GROUPS.map((g) => (
-                    <optgroup key={g.id} label={tr(`group.${g.id}`)}>
-                      {(g.id === "boons" ? BOON_SCOPES.flatMap((s) => statsOfGroup(g.id, s)) : statsOfGroup(g.id)).map((k) => (
-                        <option key={k} value={k}>
-                          {statText(k, getLang()).label}
-                          {STAT_META[k].scope ? ` (${tr(`scope.${STAT_META[k].scope}`)})` : ""}
-                          {STAT_META[k].format === "volume" || isUptimeStat(k) ? "" : " / min"}
+                <div className="flex flex-wrap items-center gap-2">
+                  {/* dois seletores: o grupo e, dentro dele, a métrica. O grupo vem da métrica atual (inclusive a sugerida para o dia) */}
+                  <Select className="w-32" value={chartGroup} onChange={(e) => setPicked({ day: dayKey, metric: statsOfGroup(e.target.value as StatGroup)[0]! })} aria-label={tr("player.metricGroup")}>
+                    {STAT_GROUPS.map((g) => (
+                      <option key={g.id} value={g.id}>
+                        {tr(`group.${g.id}`)}
+                      </option>
+                    ))}
+                  </Select>
+                  {chartGroup === "boons" && (
+                    <Select
+                      className="w-28"
+                      value={chartScope}
+                      onChange={(e) => setPicked({ day: dayKey, metric: inScope(metric, e.target.value as BoonScope) })}
+                      aria-label={tr("scope.label")}
+                      title={tr("player.scopeHint")}
+                    >
+                      {BOON_SCOPES.map((s) => (
+                        <option key={s} value={s}>
+                          {tr(`scope.${s}`)}
                         </option>
                       ))}
-                    </optgroup>
-                  ))}
-                </Select>
+                    </Select>
+                  )}
+                  <Select className="w-52" value={metric} onChange={(e) => setPicked({ day: dayKey, metric: e.target.value as StatKey })} aria-label={tr("player.metric")}>
+                    {statsOfGroup(chartGroup, chartScope).map((k) => (
+                      <option key={k} value={k}>
+                        {statText(k, getLang()).label}
+                        {STAT_META[k].format === "volume" || isUptimeStat(k) ? "" : " / min"}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
               }
             >
+              {dayKey && !manual && (
+                <p className="px-5 pt-3 text-xs text-muted">{tr("player.metricSuggested", { metric: statText(metric, getLang()).label })}</p>
+              )}
               <div className="h-72 px-2 py-4">
                 <ResponsiveContainer>
                   <LineChart data={series} margin={{ left: 8, right: 16 }}>
                     <CartesianGrid {...GRID} />
                     <XAxis dataKey="i" {...AXIS} />
                     <YAxis {...AXIS} width={56} tickFormatter={axis} />
-                    <Tooltip {...TOOLTIP} labelFormatter={(_l, p) => p?.[0]?.payload?.label ?? ""} formatter={(v: number) => [stat(metric, v, true), statText(metric, getLang()).label]} />
+                    <Tooltip {...TOOLTIP} labelFormatter={(_l, p) => {
+                        const x = p?.[0]?.payload;
+                        return x ? (x.short ? `${x.label} · ${tr("player.shortFight", { time: duration(x.activeMs) })}` : x.label) : "";
+                      }} formatter={(v: number) => [stat(metric, v, true), statText(metric, getLang()).label]} />
                     {avgLine != null && <ReferenceLine y={avgLine} stroke="#8f98a8" strokeDasharray="4 4" label={{ value: tr(`player.avgLine.${effRole}`), fill: "#8f98a8", fontSize: 11, position: "insideTopRight" }} />}
-                    <Line type="monotone" dataKey="value" stroke="#e0b25a" strokeWidth={2.5} dot={{ r: 3, fill: "#e0b25a" }} activeDot={{ r: 5 }} />
+                    <Line type="monotone" dataKey="value" stroke="#e0b25a" strokeWidth={2.5} dot={(p: { cx?: number; cy?: number; index?: number; payload?: { short?: boolean } }) =>
+                        p.cx == null || p.cy == null ? <g key={p.index} /> : p.payload?.short ? (
+                          <circle key={p.index} cx={p.cx} cy={p.cy} r={4} fill="#0d0f14" stroke="#e0b25a" strokeWidth={2} />
+                        ) : (
+                          <circle key={p.index} cx={p.cx} cy={p.cy} r={3} fill="#e0b25a" />
+                        )
+                      }
+                      activeDot={{ r: 5 }}
+                    />
                   </LineChart>
                 </ResponsiveContainer>
               </div>
+              {series.some((x) => x.short) && <p className="border-t border-line px-5 py-2.5 text-xs text-faint">{tr("player.shortLegend")}</p>}
             </Card>
 
             <Card title={tr("player.classes")}>

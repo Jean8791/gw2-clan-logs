@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useSyncExternalStore } from "react";
 import { useSearchParams } from "react-router-dom";
-import { FILTER_KEYS, parseFilters, type Filters, type Role } from "@gw2logs/shared";
+import { FILTER_KEYS, parseFilters, type Filters } from "@gw2logs/shared";
 
 /** Filtros guardados na URL: dá para mandar o link de um ranking filtrado no Discord. */
 export function useFilters(defaults: Filters = {}) {
@@ -34,12 +34,6 @@ export function useFilters(defaults: Filters = {}) {
     [setParams],
   );
   return [filters, setFilters] as const;
-}
-
-/** Função mais jogada num conjunto de lutas. */
-export function mainRole(history: { role: Role }[]): Role {
-  const sup = history.filter((h) => h.role === "support").length;
-  return sup > history.length / 2 ? "support" : "dps";
 }
 
 // ---------- "Minha conta" (só no navegador de quem está vendo) ----------

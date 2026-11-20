@@ -9,6 +9,7 @@ import {
   type Filters,
   type GuildSummary,
   type Overview,
+  type PlayerOptions,
   type PlayerProfile,
   type PlayerSkill,
   type RankingRow,
@@ -88,6 +89,16 @@ export const useRanking = (f: Filters) =>
 
 export const usePlayer = (account: string, f: Filters) =>
   useQuery({ queryKey: ["player", account, f], queryFn: () => get<PlayerProfile>(withFilters(`${spaceApi}/players/${encodeURIComponent(account)}`, f)), retry: false });
+
+/** Funções, classes e dias que o jogador jogou, para as listas dos filtros da página dele. */
+export const usePlayerOptions = (account: string, f: Filters) =>
+  useQuery({
+    queryKey: ["player-options", account, f],
+    queryFn: () => get<PlayerOptions>(withFilters(`${spaceApi}/players/${encodeURIComponent(account)}/options`, f)),
+    retry: false,
+    // ao trocar um filtro, as listas anteriores ficam na tela até as novas chegarem (sem piscar)
+    placeholderData: keepPreviousData,
+  });
 
 export const usePlayerSkills = (account: string, f: Filters) =>
   useQuery({ queryKey: ["player-skills", account, f], queryFn: () => get<PlayerSkill[]>(withFilters(`${spaceApi}/players/${encodeURIComponent(account)}/skills`, f)) });
