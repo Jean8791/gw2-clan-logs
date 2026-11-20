@@ -302,6 +302,82 @@ describe("login restrito aos servidores do Discord do clã", () => {
     expect((await app.server.inject({ url: "/api/auth/me", headers: { cookie: `session=${sessaoWeb}` } })).statusCode).toBe(401);
     expect(app.db.prepare("SELECT COUNT(*) AS n FROM fights WHERE owner_id = ?").get(fulano.id)).toEqual({ n: 1 });
   });
+
+  describe("lista de usuários (DISCORD_USER_IDS), que vale junto com a dos servidores", () => {
+    /** O usuário do Discord falso tem o id 777. `servidores`: IDs configurados (null = só a lista de usuários); `dele`: servidores em que ele está. */
+    const iniciarComUsuarios = async (userIds: string, servidores: string | null, dele: string[] = []) => {
+      await app.server.close();
+      const discord = discordComServidores(dele);
+      await start({ ...DISCORD, DISCORD_USER_IDS: userIds, ...(servidores ? { DISCORD_GUILD_IDS: servidores } : {}) }, discord.doFetch);
+      return discord;
+    };
+    const negadoSemAcesso = (volta: { headers: Record<string, unknown>; statusCode: number }, motivo: string) => {
+      expect(volta.statusCode).toBe(302);
+      expect(volta.headers.location).toBe(`/?erro=${motivo}`);
+      expect(cookieDe(volta, "session")).toBeUndefined();
+      expect(cookieDe(volta, "oauth_state")).toContain("Max-Age=0");
+      expect(usuarios()).toBe(0);
+    };
+
+    it("só a lista de usuários: quem está nela entra, com escopo identify e sem consultar os servidores", async () => {
+      const discord = await iniciarComUsuarios("555, 777", null);
+
+      const { ida, volta } = await entrar();
+
+      expect(escopo(ida)).toBe("identify");
+      expect(cookieDe(volta, "session")).toBeDefined();
+      expect(discord.chamadas).not.toContain("/api/users/@me/guilds");
+    });
+
+    it("quem não está na lista volta para a entrada com o aviso, sem usuário, sem sessão e sem consultar os servidores", async () => {
+      const discord = await iniciarComUsuarios("555", "111", ["111"]);
+
+      const { volta } = await entrar();
+
+      negadoSemAcesso(volta, "notAllowed");
+      expect(discord.chamadas).not.toContain("/api/users/@me/guilds");
+    });
+
+    it("as duas listas: na de usuários mas fora dos servidores, é negado pelos servidores", async () => {
+      await iniciarComUsuarios("777", "111", ["999"]);
+
+      negadoSemAcesso((await entrar()).volta, "notInGuild");
+    });
+
+    it("as duas listas: nos servidores mas fora da lista de usuários, é negado pela lista", async () => {
+      await iniciarComUsuarios("555", "111", ["111"]);
+
+      negadoSemAcesso((await entrar()).volta, "notAllowed");
+    });
+
+    it("as duas listas: quem está nas duas entra", async () => {
+      await iniciarComUsuarios("777", "111", ["111"]);
+
+      const { volta } = await entrar();
+
+      expect(cookieDe(volta, "session")).toBeDefined();
+      expect(usuarios()).toBe(1);
+    });
+
+    it("quem já tinha conta e saiu da lista perde o token pessoal e as sessões, mas as lutas ficam", async () => {
+      await iniciarComUsuarios("555", null);
+      const fulano = criarUsuario(app, "777", "fulano");
+      const sessaoWeb = createWebSession(fulano.id);
+      app.db.prepare("INSERT INTO fights (id, sha256, status, uploaded_at, owner_id) VALUES ('f1', 'sha-f1', 'done', ?, ?)").run(new Date().toISOString(), fulano.id);
+
+      const { volta } = await entrar();
+
+      expect(volta.headers.location).toBe("/?erro=notAllowed");
+      expect((await enviar(fulano.token)).statusCode).toBe(401);
+      expect((await app.server.inject({ url: "/api/auth/me", headers: { cookie: `session=${sessaoWeb}` } })).statusCode).toBe(401);
+      expect(app.db.prepare("SELECT COUNT(*) AS n FROM fights WHERE owner_id = ?").get(fulano.id)).toEqual({ n: 1 });
+    });
+
+    it("lista vazia não restringe: a configuração aceita IDs com espaços e ignora vazios", () => {
+      expect(loadConfig({ DISCORD_USER_IDS: " 1, 2 ,,3 " }).discord.userIds).toEqual(["1", "2", "3"]);
+      expect(loadConfig({}).discord.userIds).toEqual([]);
+    });
+  });
 });
 
 describe("dono do espaço", () => {
