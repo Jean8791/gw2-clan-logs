@@ -12,6 +12,9 @@ export const ROUTES = {
   import: "/import",
 } as const;
 
+/** Só quem está logado como dono do espaço vê e usa o que é do dono (importar logs e menu da conta). */
+export const isSpaceOwner = (viewerPublicId: string | undefined, spaceId: string | null): boolean => !!viewerPublicId && viewerPublicId === spaceId;
+
 // Primeiro trecho das rotas antigas (em português) e o que virou; os links já compartilhados continuam abrindo.
 const LEGACY: Record<string, string> = {
   dias: "days",

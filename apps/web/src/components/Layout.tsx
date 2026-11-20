@@ -1,6 +1,6 @@
-import { BarChart3, CalendarDays, ChevronUp, GitCompareArrows, Home, Link2, LogIn, LogOut, Shield, Swords, Trash2, Upload, UserRound } from "lucide-react";
+import { BarChart3, CalendarDays, ChevronUp, GitCompareArrows, Home, Link2, LogOut, Shield, Swords, Trash2, Upload, UserRound } from "lucide-react";
 import { useState } from "react";
-import { ROUTES } from "@gw2logs/shared";
+import { ROUTES, isSpaceOwner } from "@gw2logs/shared";
 import { NavLink, Outlet } from "react-router-dom";
 import { deleteAccount, logout, useOwner, useViewer } from "../lib/api";
 import { spaceBase, spaceId } from "../lib/space";
@@ -14,8 +14,9 @@ const NAV = [
   { to: ROUTES.ranking, label: "nav.ranking", icon: BarChart3 },
   { to: ROUTES.compare, label: "nav.compare", icon: GitCompareArrows },
   { to: ROUTES.guilds, label: "nav.guilds", icon: Shield },
-  { to: ROUTES.me, label: "nav.myProfile", icon: UserRound },
 ];
+const ME = { to: ROUTES.me, label: "nav.myProfile", icon: UserRound, end: false };
+const IMPORT = { to: ROUTES.import, label: "nav.import", icon: Upload, end: false };
 
 /** Botão PT | EN. A escolha fica salva no navegador, e a tela é refeita no idioma novo. */
 function LangToggle() {
@@ -35,21 +36,13 @@ function LangToggle() {
   );
 }
 
-/** Quem está logado: o nome abre o menu com sair e apagar conta. Sem login, o botão de entrar. */
-function AccountMenu() {
+/** Só o dono do espaço, logado: o nome abre o menu com sair e apagar conta. */
+function AccountMenu({ name }: { name: string }) {
   const t = useT();
-  const viewer = useViewer();
   const [open, setOpen] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const item = "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted transition hover:bg-surface-2 hover:text-text";
-  if (!viewer.data) {
-    return (
-      <a href="/api/auth/login" className={item}>
-        <LogIn className="size-4" /> {t("space.signIn")}
-      </a>
-    );
-  }
   const leave = (action: () => Promise<unknown>) => {
     setBusy(true);
     void action().then(() => window.location.assign("/"), () => setBusy(false));
@@ -87,7 +80,7 @@ function AccountMenu() {
       >
         <span className="flex min-w-0 items-center gap-2">
           <UserRound className="size-4 shrink-0" />
-          <span className="truncate">{viewer.data.name}</span>
+          <span className="truncate">{name}</span>
         </span>
         <ChevronUp className={cx("size-4 shrink-0 transition", !open && "rotate-180")} />
       </button>
@@ -128,8 +121,11 @@ function CopyLink() {
 export function Layout() {
   const owner = useOwner();
   const viewer = useViewer();
-  // só o dono, logado, importa logs no próprio espaço
-  const nav = viewer.data && viewer.data.publicId === spaceId ? [...NAV, { to: ROUTES.import, label: "nav.import", icon: Upload, end: false }] : NAV;
+  // o dono, logado, vê o Meu Perfil na lista, o Importar logs e o menu da conta. Quem abre o link vê só o Meu Perfil, embaixo
+  // (no celular não há "embaixo": lá ele entra na lista). O Meu Perfil é do navegador de quem usa, não depende de login.
+  const isOwner = isSpaceOwner(viewer.data?.publicId, spaceId);
+  const nav = isOwner ? [...NAV, ME, IMPORT] : NAV;
+  const mobileNav = isOwner ? nav : [...NAV, ME];
   const lang = useLang();
   const t = useT();
   const link = (active: boolean) =>
@@ -153,7 +149,16 @@ export function Layout() {
           ))}
         </nav>
         <div className="mt-auto">
-          <AccountMenu />
+          {isOwner && viewer.data ? (
+            <AccountMenu name={viewer.data.name} />
+          ) : (
+            // enquanto o login ainda carrega, nada aparece embaixo (evita piscar o Meu Perfil para o dono)
+            !viewer.isLoading && (
+              <NavLink to={ME.to} className={({ isActive }) => link(isActive)}>
+                <ME.icon className="size-4" /> {t(ME.label)}
+              </NavLink>
+            )
+          )}
         </div>
       </aside>
 
@@ -167,7 +172,7 @@ export function Layout() {
           </div>
         </div>
         <nav className="flex gap-1 overflow-x-auto px-3 pb-2">
-          {nav.map(({ to, label, icon: Icon, end }) => (
+          {mobileNav.map(({ to, label, icon: Icon, end }) => (
             <NavLink key={to} to={to} end={end} className={({ isActive }) => cx(link(isActive), "shrink-0 px-2.5 py-1.5 text-xs")}>
               <Icon className="size-3.5" /> {t(label)}
             </NavLink>
