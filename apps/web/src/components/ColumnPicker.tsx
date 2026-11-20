@@ -9,7 +9,7 @@ export interface PickableColumn {
   fixed?: boolean;
 }
 
-/** Botão "Colunas": lista as colunas da tabela para marcar as que a pessoa quer ver. */
+/** Botão "Colunas": lista as colunas da tabela para marcar as que a pessoa quer ver. Fica na barra de baixo da tabela, e o menu abre para cima. */
 export function ColumnPicker({ columns, hidden, onChange }: { columns: PickableColumn[]; hidden: string[]; onChange: (hidden: string[]) => void }) {
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement>(null);
@@ -33,7 +33,7 @@ export function ColumnPicker({ columns, hidden, onChange }: { columns: PickableC
   const toggle = (id: string) => onChange(hidden.includes(id) ? hidden.filter((h) => h !== id) : [...hidden, id]);
 
   return (
-    <div ref={box} className="relative flex justify-end border-b border-line px-3 py-2">
+    <div ref={box} className="relative">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
@@ -51,7 +51,7 @@ export function ColumnPicker({ columns, hidden, onChange }: { columns: PickableC
       </button>
       {open && (
         <>
-          <div className="absolute right-3 top-full z-40 mt-1 max-h-80 w-64 overflow-auto rounded-xl border border-line bg-surface p-2 shadow-xl">
+          <div className="absolute bottom-full right-0 z-40 mb-1 max-h-80 w-64 overflow-auto rounded-xl border border-line bg-surface p-2 shadow-xl">
             <button
               type="button"
               onClick={() => onChange([])}

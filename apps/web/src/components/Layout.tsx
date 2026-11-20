@@ -1,7 +1,7 @@
 import { BarChart3, CalendarDays, ChevronUp, GitCompareArrows, Home, Link2, LogOut, Shield, Swords, Trash2, Upload, UserRound } from "lucide-react";
 import { useState } from "react";
 import { ROUTES, isSpaceOwner } from "@gw2logs/shared";
-import { NavLink, Outlet } from "react-router-dom";
+import { NavLink, Outlet, useMatches } from "react-router-dom";
 import { deleteAccount, logout, useOwner, useViewer } from "../lib/api";
 import { spaceBase, spaceId } from "../lib/space";
 import { setLang, useLang, useT } from "../lib/i18n";
@@ -121,6 +121,8 @@ function CopyLink() {
 export function Layout() {
   const owner = useOwner();
   const viewer = useViewer();
+  // páginas de lista (rota com handle.fill) ocupam a altura da tela, e só a tabela rola por dentro
+  const fill = useMatches().some((m) => (m.handle as { fill?: boolean } | undefined)?.fill);
   // o dono, logado, vê o Meu Perfil na lista, o Importar logs e o menu da conta. Quem abre o link vê só o Meu Perfil, embaixo
   // (no celular não há "embaixo": lá ele entra na lista). O Meu Perfil é do navegador de quem usa, não depende de login.
   const isOwner = isSpaceOwner(viewer.data?.publicId, spaceId);
@@ -180,14 +182,22 @@ export function Layout() {
         </nav>
       </header>
 
-      <main className="mx-auto w-full max-w-[1400px] min-w-0 px-4 pb-6 pt-6 sm:px-6 md:pt-4 lg:px-10 lg:pb-10 lg:pt-5">
+      <main className={cx("mx-auto w-full max-w-[1400px] min-w-0 px-4 pb-6 pt-6 sm:px-6 md:pt-4 lg:px-10 lg:pb-10 lg:pt-5", fill && "md:flex md:h-screen md:min-h-[44rem] md:flex-col")}>
         {/* link e idioma: canto superior direito (no celular ficam no cabeçalho) */}
-        <div className="mb-3 hidden items-center justify-end gap-2 md:flex">
+        <div className="mb-3 hidden shrink-0 items-center justify-end gap-2 md:flex">
           <CopyLink />
           <LangToggle />
         </div>
         {/* key: ao trocar o idioma a tela é refeita, e os textos e números saem no idioma novo */}
-        {owner.isError ? <Empty title={t("space.notFound")} /> : <Outlet key={lang} />}
+        {owner.isError ? (
+          <Empty title={t("space.notFound")} />
+        ) : fill ? (
+          <div className="flex min-h-0 flex-1 flex-col">
+            <Outlet key={lang} />
+          </div>
+        ) : (
+          <Outlet key={lang} />
+        )}
       </main>
     </div>
   );

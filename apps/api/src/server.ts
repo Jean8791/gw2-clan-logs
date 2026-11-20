@@ -231,11 +231,14 @@ export async function buildApp(cfg: Config, opts: { logger?: boolean; fetch?: ty
       // quem é o dono deste espaço (nome e avatar); nunca o id do Discord
       scope.get("/", async (req) => ({ publicId: req.owner.publicId, name: req.owner.name, avatar: req.owner.avatar }));
 
-      scope.get("/fights", async (req) => {
+      scope.get("/fights", async (req, reply) => {
         const qs = req.query as Record<string, string>;
         const limit = Math.min(Math.max(Number(qs.limit) || 50, 1), 500);
         const offset = Math.max(Number(qs.offset) || 0, 0);
-        return q.listFights(db, filtersOf(req), limit, offset);
+        const fl = filtersOf(req);
+        // o total (já com os filtros) vai num cabeçalho, para a resposta continuar sendo a lista de lutas
+        reply.header("x-total-count", q.countFights(db, fl));
+        return q.listFights(db, fl, limit, offset, { sort: qs.sort, dir: qs.dir });
       });
 
       scope.get<{ Params: { id: string } }>("/fights/:id", async (req, reply) => {

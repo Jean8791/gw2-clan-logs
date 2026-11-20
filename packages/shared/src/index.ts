@@ -5,6 +5,8 @@ export * from "./routes.js";
 export * from "./boons.js";
 export * from "./upload.js";
 export * from "./zip.js";
+export * from "./pagination.js";
+export * from "./search.js";
 import { BOON_BASES, type ScopedKey } from "./boons.js";
 
 export type Mode = "wvw" | "pve";

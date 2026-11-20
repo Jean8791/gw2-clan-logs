@@ -1,11 +1,13 @@
 // Consultas da API. Todas aceitam os mesmos filtros (Filters) do pacote compartilhado.
 import {
   BATTLE_DAY_SHIFT_HOURS,
+  FIGHT_SORT_KEYS,
   STAT_KEYS,
   type DaySummary,
   type Aggregate,
   type Fight,
   type FightDetail,
+  type FightSortKey,
   type Filters,
   type GuildSummary,
   type Overview,
@@ -86,19 +88,50 @@ const toAggregate = (r: any): Aggregate => {
 
 // ---------- Consultas ----------
 
-export function listFights(db: DB, fl: Filters, limit = 50, offset = 0): Fight[] {
+/**
+ * Expressão SQL de cada coluna ordenável da lista de lutas. A requisição só escolhe a chave (FIGHT_SORT_KEYS): o texto SQL
+ * vem sempre daqui, nunca da entrada do usuário. Reproduz a ordenação que a tela fazia no navegador.
+ */
+const FIGHT_SORT_SQL: Record<FightSortKey, string> = {
+  time: "COALESCE(f.time_start, f.uploaded_at)",
+  name: "COALESCE(f.fight_name, f.file_name, '') COLLATE NOCASE",
+  dur: "f.duration_ms",
+  size: "f.squad_count",
+  kd: "COALESCE(f.enemy_deaths, f.squad_kills, 0) - COALESCE(f.squad_deaths, 0)",
+  dmg: "f.squad_damage",
+  up: "COALESCE(f.uploader, '') COLLATE NOCASE",
+};
+
+/** Condições das lutas prontas que valem para a lista e para a contagem: o filtro define o conjunto. */
+function listedFights(fl: Filters): { where: string; params: Params } {
   const f = fightConditions(fl);
   const p = playerConditions(fl);
   const where = [...f.where];
   if (p.where.length) where.push(`EXISTS (SELECT 1 FROM player_stats ps WHERE ps.fight_id = f.id AND ${p.where.join(" AND ")})`);
+  return { where: where.join(" AND "), params: { ...f.params, ...p.params } };
+}
+
+/** Quantas lutas prontas o filtro alcança (o total que a paginação mostra). */
+export function countFights(db: DB, fl: Filters): number {
+  const { where, params } = listedFights(fl);
+  return (db.prepare(`SELECT COUNT(*) AS n FROM fights f WHERE ${where}`).get(params) as { n: number }).n;
+}
+
+/** Uma página da lista de lutas. Sem coluna válida a ordem é a data, da mais nova; valor vazio fica sempre no fim. */
+export function listFights(db: DB, fl: Filters, limit = 50, offset = 0, order: { sort?: string; dir?: string } = {}): Fight[] {
+  const { where, params } = listedFights(fl);
+  const key = (FIGHT_SORT_KEYS as readonly string[]).includes(order.sort ?? "") ? (order.sort as FightSortKey) : "time";
+  const dir = order.dir === "asc" ? "ASC" : "DESC";
+  const expr = FIGHT_SORT_SQL[key];
   // lutas ainda na fila ou com erro aparecem sempre no topo da primeira página
   const pending =
     offset === 0
       ? (db.prepare(`SELECT ${FIGHT_COLS} FROM fights f WHERE f.status != 'done' AND f.owner_id = ? ORDER BY f.uploaded_at DESC LIMIT 50`).all(fl.owner) as any[])
       : [];
+  // f.id desempata: sem isso, lutas com o mesmo valor poderiam repetir ou sumir entre uma página e outra
   const done = db
-    .prepare(`SELECT ${FIGHT_COLS} FROM fights f WHERE ${where.join(" AND ")} ORDER BY f.time_start DESC LIMIT @limit OFFSET @offset`)
-    .all({ ...f.params, ...p.params, limit, offset }) as any[];
+    .prepare(`SELECT ${FIGHT_COLS} FROM fights f WHERE ${where} ORDER BY (${expr}) IS NULL, (${expr}) ${dir}, f.id ${dir} LIMIT @limit OFFSET @offset`)
+    .all({ ...params, limit, offset }) as any[];
   return [...pending, ...done].map(toFight);
 }
 
