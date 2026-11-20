@@ -1,8 +1,8 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, CircleDashed, FileUp, Info, KeyRound, ListChecks, Loader2, PauseCircle, XCircle } from "lucide-react";
-import { useRef, useState, type DragEvent } from "react";
+import { useMemo, useRef, useState, type DragEvent } from "react";
 import { Link } from "react-router-dom";
-import { MAX_UPLOAD_MB, MAX_ZIP_LOGS, MAX_ZIP_MB, ROUTES, readLogsFromZip, sendInOrder, ZipError, type ItemState } from "@gw2logs/shared";
+import { MAX_UPLOAD_MB, MAX_ZIP_LOGS, MAX_ZIP_MB, retentionCutoff, ROUTES, readLogsFromZip, sendInOrder, ZipError, type ItemState } from "@gw2logs/shared";
 import { RetentionNotice } from "../components/RetentionNotice";
 import { Button, Card, ErrorBox, PageHeader, Rich, cx } from "../components/ui";
 import { createToken, uploadLog, useConfig, useFights } from "../lib/api";
@@ -50,6 +50,14 @@ export function UploadPage() {
   // acompanha o processamento das lutas já enviadas (atualiza sozinho enquanto houver fila)
   const fights = useFights({}, 100);
   const fightOf = (id?: string) => fights.data?.find((f) => f.id === id);
+  // Lutas que já nasceram fora do prazo de guarda (a data que vale é a da luta, não a do envio): a limpeza as apaga na próxima rodada.
+  // Pedidas ao servidor pelo mesmo corte da limpeza, porque as antigas nem aparecem entre as 100 mais novas da lista acima.
+  const retentionDays = cfg?.retentionDays ?? 0;
+  const cutoff = useMemo(() => retentionCutoff(new Date(), retentionDays), [retentionDays]);
+  const pastRetention = useFights({ to: cutoff }, 500, retentionDays > 0);
+  const expiredIds = useMemo(() => new Set((pastRetention.data ?? []).filter((f) => f.status === "done").map((f) => f.id)), [pastRetention.data]);
+  const isExpired = (it: Item) => it.state.kind === "done" && !!it.state.result.id && expiredIds.has(it.state.result.id);
+  const expiredCount = retentionDays > 0 ? items.filter(isExpired).length : 0;
 
   const send = async (batch: Item[]) => {
     const todo = batch.filter((it) => it.state.kind === "pending" || it.state.kind === "skipped");
@@ -110,13 +118,19 @@ export function UploadPage() {
     if (s.kind === "skipped") return t("upload.notSent", { reason: s.code === "stopped" ? t("upload.stopped") : codeText(s.code) });
     const f = fightOf(s.result.id);
     if (f?.error) return fightErrorText(f.error);
-    if (s.result.duplicate) return t("upload.duplicate");
+    const expired = expiredCount > 0 && isExpired(it) && (
+      <span className="text-bad" title={t("upload.expiredTip", { n: retentionDays })}>
+        {t("upload.expired")}
+      </span>
+    );
+    if (s.result.duplicate) return expired ? <span className="inline-flex items-center gap-2">{t("upload.duplicate")}{expired}</span> : t("upload.duplicate");
     if ((f?.status ?? s.result.status) === "done") {
-      return (
+      const link = (
         <Link className="text-gold hover:underline" to={ROUTES.fight(s.result.id ?? "")}>
           {t("upload.viewFight")}
         </Link>
       );
+      return expired ? <span className="inline-flex items-center gap-2">{link}{expired}</span> : link;
     }
     return (f?.status ?? s.result.status) === "parsing" ? t("upload.parsing") : t("upload.queued");
   };
@@ -182,6 +196,12 @@ export function UploadPage() {
             {waiting > 0 && <span className="text-sm text-muted">{t("upload.filesToSend", { n: waiting })}</span>}
           </div>
           <p className="text-xs text-faint">{t("upload.safety")}</p>
+
+          {expiredCount > 0 && (
+            <div role="status" className="rounded-lg border border-bad/30 bg-bad/10 p-3 text-sm text-bad">
+              {t("upload.expiredSummary", { count: expiredCount, n: retentionDays })}
+            </div>
+          )}
 
           {items.length > 0 && (
             <Card title={t("upload.done")}>
