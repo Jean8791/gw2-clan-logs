@@ -12,6 +12,7 @@ import {
   type GuildSummary,
   type Overview,
   type PlayerFight,
+  type PlayerOptions,
   type PlayerProfile,
   type PlayerSkill,
   type RankingRow,
@@ -213,6 +214,26 @@ export function battleDays(db: DB, fl: Filters): DaySummary[] {
     ).map((r) => [r.day, r.players]),
   );
   return days.map((d) => ({ ...d, players: players.get(d.day) ?? 0 }));
+}
+
+/**
+ * O que o jogador jogou, para as listas dos filtros da página dele. Função e classe ficam fora da conta (escolher uma não pode
+ * esconder a outra); o dia entra nas listas de função e de classe, mas não na de dias, para dar para trocar de dia.
+ * Tudo dentro do espaço do dono (Filters.owner): o mesmo jogador nos logs de outro usuário não entra.
+ */
+export function playerOptions(db: DB, account: string, fl: Filters): PlayerOptions | null {
+  const inSpace = db.prepare("SELECT 1 FROM player_stats ps JOIN fights f ON f.id = ps.fight_id WHERE ps.account = ? AND f.owner_id = ? LIMIT 1").get(account, fl.owner);
+  if (!inSpace) return null;
+  const base: Filters = { ...fl, role: undefined, profession: undefined };
+  const day = combined(base);
+  const anyDay = combined({ ...base, day: undefined });
+  const from = "FROM player_stats ps JOIN fights f ON f.id = ps.fight_id";
+  const column = (col: string) =>
+    (db.prepare(`SELECT DISTINCT ${col} AS v ${from} WHERE ps.account = @account AND ${col} IS NOT NULL AND ${day.where} ORDER BY ${col}`).all({ ...day.params, account }) as { v: string }[]).map((r) => r.v);
+  const days = db
+    .prepare(`SELECT ${BATTLE_DAY} AS day, COUNT(*) AS fights ${from} WHERE ps.account = @account AND f.time_start IS NOT NULL AND ${anyDay.where} GROUP BY day ORDER BY day DESC`)
+    .all({ ...anyDay.params, account }) as { day: string; fights: number }[];
+  return { roles: column("ps.role") as PlayerOptions["roles"], professions: column("ps.profession"), days };
 }
 
 export function playerProfile(db: DB, account: string, fl: Filters): PlayerProfile | null {

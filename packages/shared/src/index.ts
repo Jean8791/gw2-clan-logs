@@ -287,6 +287,14 @@ export interface PlayerHistoryRow extends PlayerFight {
   fightName: string | null;
 }
 
+/** O que o jogador jogou, para as listas dos filtros da página dele: só funções, classes e dias que existem nos logs dele. */
+export interface PlayerOptions {
+  roles: Role[];
+  professions: string[];
+  /** Dias de batalha em que ele jogou, do mais novo para o mais antigo, com quantas lutas ELE fez em cada um. */
+  days: { day: string; fights: number }[];
+}
+
 export interface PlayerProfile {
   account: string;
   name: string | null;
@@ -473,6 +481,47 @@ export const professionColor = (p: string | null | undefined): string =>
 
 /** Valor por minuto de tempo ativo em luta. */
 export const perMinute = (value: number, activeMs: number): number => (activeMs > 0 ? (value * 60000) / activeMs : 0);
+
+/**
+ * Valor mostrado de uma métrica numa soma de lutas: uptime em %, boon por luta e o resto por minuto de tempo ativo.
+ * É sempre soma sobre soma (valores sobre tempo, ou sobre lutas), então uma luta curta pesa só o que durou, e conta como luta.
+ */
+export const statRate = (a: Aggregate, k: StatKey): number =>
+  isUptimeStat(k) ? uptimeValue(k, a[k], a.activeMs) : STAT_META[k].format === "volume" ? (a.fights ? a[k] / a.fights : 0) : perMinute(a[k], a.activeMs);
+
+/** Métricas que definem o papel de um jogador. Ficam de fora as raras ou de resultado (ressurreição, abates, mortes…), que dariam razões enormes por acaso. */
+const ROLE_METRICS: StatKey[] = [
+  "damage", "strips", "cleanses", "healing", "downedHealing", "barrier",
+  "stabOut", "quickOut", "alacOut", "protOut", "mightOut", "aegisOut", "resistOut", "resolOut", "furyOut", "superspeedOut",
+];
+
+/**
+ * Métrica para abrir o gráfico de um dia: aquela em que o jogador mais se destaca frente ao squad (razão entre o valor dele e o da média).
+ * Só entram métricas que os dois têm; empate fica com a primeira da lista (dano). Sem média ou sem nada a comparar, dano.
+ */
+export function suggestMetric(player: Aggregate, squad: Aggregate | undefined): StatKey {
+  if (!squad) return "damage";
+  let best: StatKey = "damage";
+  let bestRatio = 0;
+  for (const k of ROLE_METRICS) {
+    const mine = statRate(player, k);
+    const theirs = statRate(squad, k);
+    if (mine <= 0 || theirs <= 0) continue;
+    if (mine / theirs > bestRatio) [best, bestRatio] = [k, mine / theirs];
+  }
+  return best;
+}
+
+/** Função principal num conjunto de lutas: suporte se passou de metade do TEMPO jogado como suporte (sem tempo, vale a contagem de lutas). */
+export function mainRole(history: { role: Role; activeMs: number }[]): Role {
+  const total = history.reduce((a, h) => a + h.activeMs, 0);
+  if (total <= 0) return history.filter((h) => h.role === "support").length > history.length / 2 ? "support" : "dps";
+  return history.reduce((a, h) => a + (h.role === "support" ? h.activeMs : 0), 0) > total / 2 ? "support" : "dps";
+}
+
+/** Abaixo disto de tempo ativo a luta é de "pouca participação" (o jogador morreu cedo): o ponto do gráfico é marcado, o valor não muda. */
+export const SHORT_PARTICIPATION_MS = 30_000;
+export const isShortParticipation = (activeMs: number): boolean => activeMs < SHORT_PARTICIPATION_MS;
 
 /** Valor por segundo de tempo ativo em luta (o "DPS"). */
 /**
