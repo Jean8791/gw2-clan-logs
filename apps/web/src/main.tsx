@@ -14,6 +14,7 @@ import { GuildsPage } from "./pages/Guilds";
 import { DaysPage } from "./pages/Days";
 import { UploadPage } from "./pages/Upload";
 import { LandingPage } from "./pages/Landing";
+import { OwnerOnly } from "./components/OwnerOnly";
 import { spaceBase, spaceId } from "./lib/space";
 import { Empty } from "./components/ui";
 import { t } from "./lib/i18n";
@@ -41,7 +42,7 @@ const routes = [
       { path: ROUTES.me, element: <MePage /> },
       { path: ROUTES.compare, element: <ComparePage /> },
       { path: ROUTES.guilds, element: <GuildsPage /> },
-      { path: ROUTES.import, element: <UploadPage /> },
+      { path: ROUTES.import, element: <OwnerOnly><UploadPage /></OwnerOnly> },
       { path: "*", element: <NotFound /> },
     ],
   },
