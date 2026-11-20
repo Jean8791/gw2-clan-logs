@@ -9,6 +9,7 @@ import {
   isShortParticipation,
   isUptimeStat,
   mainRole,
+  metricForGroup,
   PAGE_SIZE,
   perMinute,
   ROUTES,
@@ -92,8 +93,14 @@ export function PlayerPage() {
   const chartGroup = STAT_META[metric].group;
   // nos boons há um terceiro seletor, o alcance (para o squad, para o grupo ou só para você): sem ele a lista misturava os três
   const chartScope: BoonScope = STAT_META[metric].scope ?? "squad";
-  const [group, setGroup] = useState(STAT_GROUPS[0]!.id);
-  const [scope, setScope] = useState<BoonScope>("squad");
+  // O cartão "vs média" e o gráfico seguem o MESMO grupo e o mesmo alcance (os dois vêm da métrica do gráfico): trocar num muda o outro.
+  // O alcance escolhido fica guardado para quando se volta ao grupo Boons.
+  const [boonScope, setBoonScope] = useState<BoonScope>("squad");
+  const selectGroup = (g: StatGroup) => setPicked({ day: dayKey, metric: metricForGroup(g, boonScope) });
+  const selectScope = (s: BoonScope) => {
+    setBoonScope(s);
+    setPicked({ day: dayKey, metric: inScope(metric, s) });
+  };
 
   const series = useMemo(
     () =>
@@ -219,7 +226,7 @@ export function PlayerPage() {
               action={
                 <div className="flex flex-wrap items-center gap-2">
                   {/* dois seletores: o grupo e, dentro dele, a métrica. O grupo vem da métrica atual (inclusive a sugerida para o dia) */}
-                  <Select className="w-32" value={chartGroup} onChange={(e) => setPicked({ day: dayKey, metric: statsOfGroup(e.target.value as StatGroup)[0]! })} aria-label={tr("player.metricGroup")}>
+                  <Select className="w-32" value={chartGroup} onChange={(e) => selectGroup(e.target.value as StatGroup)} aria-label={tr("player.metricGroup")}>
                     {STAT_GROUPS.map((g) => (
                       <option key={g.id} value={g.id}>
                         {tr(`group.${g.id}`)}
@@ -230,7 +237,7 @@ export function PlayerPage() {
                     <Select
                       className="w-28"
                       value={chartScope}
-                      onChange={(e) => setPicked({ day: dayKey, metric: inScope(metric, e.target.value as BoonScope) })}
+                      onChange={(e) => selectScope(e.target.value as BoonScope)}
                       aria-label={tr("scope.label")}
                       title={tr("player.scopeHint")}
                     >
@@ -307,17 +314,17 @@ export function PlayerPage() {
                 <BaselinePicker value={effRole} onChange={setBaseRole} />
                 <div className="flex gap-1">
                   {STAT_GROUPS.map((g) => (
-                    <button key={g.id} onClick={() => setGroup(g.id)} className={cx("rounded-md px-2 py-1 text-xs font-medium", group === g.id ? "bg-surface-3 text-gold" : "text-muted hover:text-text")}>
+                    <button key={g.id} onClick={() => selectGroup(g.id)} className={cx("rounded-md px-2 py-1 text-xs font-medium", chartGroup === g.id ? "bg-surface-3 text-gold" : "text-muted hover:text-text")}>
                       {tr(`group.${g.id}`)}
                     </button>
                   ))}
                 </div>
-                {group === "boons" && <ScopeToggle value={scope} onChange={setScope} />}
+                {chartGroup === "boons" && <ScopeToggle value={chartScope} onChange={selectScope} />}
                 </div>
               }
             >
               <div className="grid gap-x-10 px-5 py-3 lg:grid-cols-2">
-                {statsOfGroup(group, scope).map((k) => (
+                {statsOfGroup(chartGroup, chartScope).map((k) => (
                   <VsAverage key={k} k={k} player={t} avg={avg} />
                 ))}
               </div>

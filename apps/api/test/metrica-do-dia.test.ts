@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BOON_SCOPES, inScope, isShortParticipation, mainRole, SHORT_PARTICIPATION_MS, STAT_GROUPS, STAT_KEYS, STAT_META, statRate, statsOfGroup, suggestMetric, type Aggregate } from "@gw2logs/shared";
+import { BOON_SCOPES, inScope, isShortParticipation, mainRole, metricForGroup, SHORT_PARTICIPATION_MS, STAT_GROUPS, STAT_KEYS, STAT_META, statRate, statsOfGroup, suggestMetric, type Aggregate } from "@gw2logs/shared";
 
 /** Soma de um jogador (ou do squad) em várias lutas: tudo zero, menos o que o teste pede. Padrão: 1 luta de 10 minutos. */
 const agg = (o: Partial<Aggregate> = {}): Aggregate =>
@@ -142,6 +142,25 @@ describe("seletores do gráfico: grupo, alcance (só nos boons) e métrica", () 
     expect(inScope("damage", "self")).toBe("damage");
     expect(inScope("healing", "group")).toBe("healing");
     expect(inScope("stabUp", "group")).toBe("stabUp");
+  });
+
+  it("trocar o grupo (no cartão ou no gráfico) leva o gráfico à primeira métrica dele, no alcance escolhido nos boons", () => {
+    expect(metricForGroup("offense")).toBe("damage");
+    expect(metricForGroup("boons")).toBe("stabOut");
+    expect(metricForGroup("boons", "group")).toBe("stabGroup");
+    expect(metricForGroup("boons", "self")).toBe("stabSelf");
+  });
+
+  it("para todo grupo e alcance existe uma métrica, do grupo e do alcance pedidos", () => {
+    for (const g of STAT_GROUPS) {
+      for (const s of BOON_SCOPES) {
+        const k = metricForGroup(g.id, s);
+
+        expect(STAT_KEYS).toContain(k);
+        expect(STAT_META[k].group).toBe(g.id);
+        if (g.id === "boons") expect(STAT_META[k].scope ?? "squad").toBe(s);
+      }
+    }
   });
 
   it("a métrica sugerida para o dia sempre aparece na lista do seu grupo", () => {
