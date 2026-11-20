@@ -75,24 +75,29 @@ export class LogWorker {
     if (this.running) return;
     this.running = true;
     try {
-      while (this.queue.length) {
-        const id = this.queue.shift()!;
-        try {
-          setStatus(this.db, id, "parsing");
-          const started = Date.now();
-          const { eiMs } = await this.process(id);
-          const totalMs = Date.now() - started;
-          this.db.prepare("UPDATE fights SET process_ms = ? WHERE id = ?").run(totalMs, id);
-          // eiMs é nulo quando o envio já era o JSON do Elite Insights (o EI não rodou)
-          this.log.info({ id, eiMs, totalMs }, "luta processada");
-        } catch (e) {
-          const msg = e instanceof Error ? e.message : String(e);
-          this.log.error({ id, err: msg }, "falha ao processar luta");
-          setStatus(this.db, id, "error", msg);
+      // Depois do await das guildas a fila é relida: um log que chegou nessa espera já viu `running` ligado (o enqueue não abriu outro
+      // laço), e sem esta releitura ele ficaria esquecido na fila até outro envio acordar o worker. Entre o último `queue.length` e o
+      // `finally` não há await, então nada escapa: quem chegar depois já encontra `running` desligado e abre um laço novo.
+      do {
+        while (this.queue.length) {
+          const id = this.queue.shift()!;
+          try {
+            setStatus(this.db, id, "parsing");
+            const started = Date.now();
+            const { eiMs } = await this.process(id);
+            const totalMs = Date.now() - started;
+            this.db.prepare("UPDATE fights SET process_ms = ? WHERE id = ?").run(totalMs, id);
+            // eiMs é nulo quando o envio já era o JSON do Elite Insights (o EI não rodou)
+            this.log.info({ id, eiMs, totalMs }, "luta processada");
+          } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            this.log.error({ id, err: msg }, "falha ao processar luta");
+            setStatus(this.db, id, "error", msg);
+          }
         }
-      }
-      // nomes das guildas novas (não bloqueia o processamento)
-      await this.api.resolvePendingGuilds().catch(() => 0);
+        // nomes das guildas novas (não bloqueia o processamento)
+        await this.api.resolvePendingGuilds().catch(() => 0);
+      } while (this.queue.length);
     } finally {
       this.running = false;
       this.idleWaiters.splice(0).forEach((r) => r());
