@@ -222,18 +222,18 @@ describe("lutas: ordenação vale para todas as lutas, não só para a página",
 });
 
 describe("regra de paginação (usada pela tela)", () => {
-  it("a página padrão é de 50 e o número de páginas arredonda para cima", () => {
-    expect(PAGE_SIZE).toBe(50);
-    expect([0, 1, 50, 51, 230].map((n) => pageCount(n, 50))).toEqual([1, 1, 1, 2, 5]);
+  it("a página padrão é de 40 e o número de páginas arredonda para cima", () => {
+    expect(PAGE_SIZE).toBe(40);
+    expect([0, 1, 40, 41, 230].map((n) => pageCount(n))).toEqual([1, 1, 1, 2, 6]);
   });
 
   it("fatia a lista mantendo a ordem, e página fora do intervalo cai na última ou na primeira", () => {
     const linhas = Array.from({ length: 230 }, (_, i) => i);
 
-    expect(pageSlice(linhas, 1, 50)).toEqual(linhas.slice(0, 50));
-    expect(pageSlice(linhas, 5, 50)).toEqual(linhas.slice(200));
-    expect(pageSlice(linhas, 99, 50)).toEqual(linhas.slice(200));
-    expect(pageSlice(linhas, 0, 50)).toEqual(linhas.slice(0, 50));
-    expect(pageSlice([], 3, 50)).toEqual([]);
+    expect(pageSlice(linhas, 1)).toEqual(linhas.slice(0, 40));
+    expect(pageSlice(linhas, 6)).toEqual(linhas.slice(200));
+    expect(pageSlice(linhas, 99)).toEqual(linhas.slice(200));
+    expect(pageSlice(linhas, 0)).toEqual(linhas.slice(0, 40));
+    expect(pageSlice([], 3)).toEqual([]);
   });
 });
