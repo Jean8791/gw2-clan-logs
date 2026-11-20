@@ -59,8 +59,9 @@ export const useOverview = (f: Filters) => useQuery({ queryKey: ["overview", f],
 export const useDays = (f: Filters, enabled = true) =>
   useQuery({ queryKey: ["days", f], queryFn: () => get<DaySummary[]>(withFilters(`${spaceApi}/days`, f)), enabled });
 
-export const useFights = (f: Filters, limit = 100) =>
+export const useFights = (f: Filters, limit = 100, enabled = true) =>
   useQuery({
+    enabled,
     queryKey: ["fights", f, limit],
     queryFn: () => get<Fight[]>(withFilters(`${spaceApi}/fights`, f, { limit })),
     // enquanto houver luta na fila, atualiza sozinho
