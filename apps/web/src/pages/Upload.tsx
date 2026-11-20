@@ -2,7 +2,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, CircleDashed, FileUp, Info, KeyRound, Loader2, PauseCircle, XCircle } from "lucide-react";
 import { useRef, useState, type DragEvent } from "react";
 import { Link } from "react-router-dom";
-import { MAX_UPLOAD_MB, ROUTES, sendInOrder, type ItemState } from "@gw2logs/shared";
+import { MAX_UPLOAD_MB, MAX_ZIP_MB, ROUTES, readLogsFromZip, sendInOrder, ZipError, type ItemState } from "@gw2logs/shared";
 import { RetentionNotice } from "../components/RetentionNotice";
 import { Button, Card, ErrorBox, PageHeader, Rich, cx } from "../components/ui";
 import { createToken, uploadLog, useConfig, useFights } from "../lib/api";
@@ -18,11 +18,31 @@ interface Item {
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
+const MB = 1024 * 1024;
+const tooBigItem = (file: File): Item => ({ file, state: { kind: "error", code: "tooBig" } });
+
+/** Itens de um arquivo escolhido. Um .zip vira um item por log de dentro, ou um item de erro se não der para abri-lo. */
+async function itemsOf(file: File): Promise<Item[]> {
+  if (!file.name.toLowerCase().endsWith(".zip")) return [file.size > MAX_UPLOAD_MB * MB ? tooBigItem(file) : { file, state: { kind: "pending" } }];
+  if (file.size > MAX_ZIP_MB * MB) return [{ file, state: { kind: "error", code: "zipTooBig" } }];
+  try {
+    const { logs, tooBig } = readLogsFromZip(new Uint8Array(await file.arrayBuffer()));
+    const items: Item[] = [
+      ...logs.map((l): Item => ({ file: new File([l.data], l.name), state: { kind: "pending" } })),
+      ...tooBig.map((name) => tooBigItem(new File([], name))),
+    ];
+    return items.length ? items : [{ file, state: { kind: "error", code: "zipEmpty" } }];
+  } catch (e) {
+    return [{ file, state: { kind: "error", code: e instanceof ZipError ? e.code : "zipInvalid" } }];
+  }
+}
+
 export function UploadPage() {
   const { data: cfg } = useConfig();
   const [items, setItems] = useState<Item[]>([]);
   const [drag, setDrag] = useState(false);
   const [running, setRunning] = useState(false);
+  const [opening, setOpening] = useState(false);
   const [pct, setPct] = useState(0);
   const stop = useRef(false);
   const input = useRef<HTMLInputElement>(null);
@@ -53,15 +73,24 @@ export function UploadPage() {
   };
 
   /** Escolher ou soltar os arquivos já valida e começa a importar. */
-  const add = (list: FileList | null) => {
-    if (!list || running) return;
-    const fresh = [...list]
-      .filter((f) => ACCEPT.some((e) => f.name.toLowerCase().endsWith(e)))
-      .filter((f) => !items.some((c) => c.file.name === f.name && c.file.size === f.size))
-      .map((file): Item => ({ file, state: file.size > MAX_UPLOAD_MB * 1024 * 1024 ? { kind: "error", code: "tooBig" } : { kind: "pending" } }));
-    if (!fresh.length) return;
-    setItems((cur) => [...cur, ...fresh]);
-    void send(fresh);
+  const add = async (list: FileList | null) => {
+    if (!list || running || opening) return;
+    // copia já: o seletor esvazia a lista assim que o evento termina
+    const chosen = [...list].filter((f) => ACCEPT.some((e) => f.name.toLowerCase().endsWith(e)));
+    setOpening(true);
+    try {
+      const fresh: Item[] = [];
+      for (const file of chosen) {
+        for (const it of await itemsOf(file)) {
+          if (![...items, ...fresh].some((c) => c.file.name === it.file.name && c.file.size === it.file.size)) fresh.push(it);
+        }
+      }
+      if (!fresh.length) return;
+      setItems((cur) => [...cur, ...fresh]);
+      void send(fresh);
+    } finally {
+      setOpening(false);
+    }
   };
 
   const onDrop = (e: DragEvent) => {
@@ -119,15 +148,15 @@ export function UploadPage() {
             }}
             onDragLeave={() => setDrag(false)}
             onDrop={onDrop}
-            onClick={() => !running && input.current?.click()}
+            onClick={() => !running && !opening && input.current?.click()}
             className={cx(
               "flex cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed px-6 py-14 text-center transition",
               drag ? "border-gold bg-gold/10" : "border-line bg-surface/50 hover:border-faint",
             )}
           >
             <FileUp className={cx("size-10", drag ? "text-gold" : "text-faint")} />
-            <div className="font-medium">{t("upload.drop")}</div>
-            <div className="text-sm text-muted">{t("upload.dropHint")}</div>
+            <div className="font-medium">{opening ? t("upload.opening") : t("upload.drop")}</div>
+            <div className="text-sm text-muted">{t("upload.dropHint", { max: MAX_ZIP_MB })}</div>
             <input ref={input} type="file" multiple accept={ACCEPT.join(",")} className="hidden" onChange={(e) => (add(e.target.files), (e.target.value = ""))} />
           </div>
 
