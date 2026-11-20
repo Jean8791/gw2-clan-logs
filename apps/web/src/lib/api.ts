@@ -44,6 +44,8 @@ export interface AppConfig {
   adminKeyRequired: boolean;
   eliteInsights: boolean;
   retentionDays: number;
+  /** Limites de envio de cada usuário. */
+  limits: { queuePerUser: number; perHourPerUser: number };
 }
 
 export const useConfig = () => useQuery({ queryKey: ["config"], queryFn: () => get<AppConfig>("/api/config"), staleTime: Infinity });

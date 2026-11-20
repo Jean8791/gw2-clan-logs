@@ -419,3 +419,16 @@ describe("aviso de retenção", () => {
     expect((await app.server.inject("/api/config")).json().retentionDays).toBe(30);
   });
 });
+
+describe("limites informados na configuração", () => {
+  it("a configuração traz os limites de envio de cada usuário, para a tela de importação mostrar", async () => {
+    await app.server.close();
+    await start({ UPLOAD_MAX_QUEUE_USER: "7", UPLOAD_MAX_PER_HOUR_USER: "123" });
+
+    expect((await app.server.inject("/api/config")).json().limits).toEqual({ queuePerUser: 7, perHourPerUser: 123 });
+  });
+
+  it("sem configurar, mostra os valores padrão", async () => {
+    expect((await app.server.inject("/api/config")).json().limits).toEqual({ queuePerUser: 10, perHourPerUser: 200 });
+  });
+});
