@@ -17,6 +17,7 @@ import { Gw2Api } from "./gw2api.js";
 import { AttemptLimiter, folderBytes, safeEqual } from "./guards.js";
 import { MEDIA_KEY, MediaStore } from "./media.js";
 import * as q from "./queries.js";
+import { copyFight } from "./store.js";
 import { LogWorker } from "./worker.js";
 
 const MAX_UPLOAD = MAX_UPLOAD_MB * 1024 * 1024; // logs grandes de WvW passam fácil de 20 MB
@@ -97,18 +98,23 @@ export async function buildApp(cfg: Config, opts: { logger?: boolean; fetch?: ty
     return null;
   };
 
-  /** Por que um novo log não pode entrar agora (fila cheia, limite por hora ou disco cheio), ou null se pode. */
-  const uploadBlocker = async (userId: number): Promise<"queueFull" | "hourlyLimit" | "diskFull" | null> => {
-    const count = (sql: string, ...args: unknown[]) => (db.prepare(sql).get(...args) as { n: number }).n;
+  // Por que um novo log não pode entrar agora, ou null se pode. Um log novo passa pelos três; a cópia de uma luta já pronta
+  // só pelo limite por hora, porque não entra na fila nem guarda arquivo.
+  const count = (sql: string, ...args: unknown[]) => (db.prepare(sql).get(...args) as { n: number }).n;
+  const queueBlocker = (userId: number): "queueFull" | null => {
     const pending = "status IN ('queued','parsing')";
     if (count(`SELECT COUNT(*) AS n FROM fights WHERE ${pending}`) >= cfg.limits.maxQueue) return "queueFull";
     if (count(`SELECT COUNT(*) AS n FROM fights WHERE ${pending} AND owner_id = ?`, userId) >= cfg.limits.maxQueuePerUser) return "queueFull";
+    return null;
+  };
+  const hourlyBlocker = (userId: number): "hourlyLimit" | null => {
     const hourAgo = new Date(Date.now() - 3600_000).toISOString();
     if (count("SELECT COUNT(*) AS n FROM fights WHERE uploaded_at > ?", hourAgo) >= cfg.limits.maxPerHour) return "hourlyLimit";
     if (count("SELECT COUNT(*) AS n FROM fights WHERE uploaded_at > ? AND owner_id = ?", hourAgo, userId) >= cfg.limits.maxPerHourPerUser) return "hourlyLimit";
-    if ((await folderBytes(p.uploads)) >= cfg.limits.maxUploadsMb * 1024 * 1024) return "diskFull";
     return null;
   };
+  const diskBlocker = async (): Promise<"diskFull" | null> => ((await folderBytes(p.uploads)) >= cfg.limits.maxUploadsMb * 1024 * 1024 ? "diskFull" : null);
+  const newFightId = (sha: string, userId: number) => `${new Date().toISOString().replace(/\D/g, "").slice(0, 14)}-${sha.slice(0, 8)}-${userId}`;
 
   // ---------- Envio de logs ----------
   server.post("/api/upload", async (req, reply) => {
@@ -144,14 +150,23 @@ export async function buildApp(cfg: Config, opts: { logger?: boolean; fetch?: ty
         results.push({ file: part.filename, id: existing.id, status: existing.status, duplicate: true });
         continue;
       }
+      // o mesmo arquivo já processado para outro usuário: copia o resultado do banco em vez de rodar o Elite Insights de novo.
+      // Se a original ainda está na fila (ou deu erro), o envio segue o caminho normal: é raro e não vale um estado de espera.
+      const processed = db.prepare("SELECT id FROM fights WHERE sha256 = ? AND status = 'done' LIMIT 1").get(sha) as { id: string } | undefined;
       // os limites valem só para log novo: um duplicado é ignorado de qualquer jeito e não custa nada
-      const blocked = await uploadBlocker(user.id);
+      const blocked = processed ? hourlyBlocker(user.id) : (queueBlocker(user.id) ?? hourlyBlocker(user.id) ?? (await diskBlocker()));
       if (blocked) {
         await fs.rm(tmp, { force: true });
         results.push({ file: part.filename, error: LIMIT_MESSAGES[blocked], code: blocked });
         continue;
       }
-      const id = `${new Date().toISOString().replace(/\D/g, "").slice(0, 14)}-${sha.slice(0, 8)}-${user.id}`;
+      const id = newFightId(sha, user.id);
+      if (processed) {
+        await fs.rm(tmp, { force: true });
+        copyFight(db, processed.id, id, user, part.filename.slice(0, 200));
+        results.push({ file: part.filename, id, status: "done" });
+        continue;
+      }
       await fs.rename(tmp, path.join(p.uploads, id + ext));
       db.prepare("INSERT INTO fights (id, sha256, status, uploaded_at, uploader, owner_id, file_name) VALUES (?, ?, 'queued', ?, ?, ?, ?)").run(
         id, sha, new Date().toISOString(), user.name, user.id, part.filename.slice(0, 200),

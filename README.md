@@ -26,7 +26,7 @@ ArcDPS (.zevtc) ──scripts/enviar-logs.sh──▶ API ──▶ fila ──�
 ```
 
 - **Não há tela de envio.** Os logs entram só pela API, com uma chave, usando o script `scripts/enviar-logs.sh` (veja [Enviar logs](#enviar-logs)).
-- O mesmo log enviado duas vezes pelo mesmo usuário é ignorado enquanto a luta ainda está guardada; depois de apagada, pode ser importado de novo. O site também aceita o `.json` do Elite Insights ou do dps.report.
+- O mesmo log enviado duas vezes pelo mesmo usuário é ignorado enquanto a luta ainda está guardada; depois de apagada, pode ser importado de novo. Se outro usuário já enviou o mesmo arquivo e a luta está pronta, ela é copiada do banco, sem rodar o Elite Insights de novo (só o limite por hora vale nesse caso). O site também aceita o `.json` do Elite Insights ou do dps.report.
 - Depois de processar uma luta, o servidor guarda só o que foi para o banco (cerca de 0,2 MB por luta): o log enviado e o JSON do Elite Insights são apagados. Se o processamento falhar, o log enviado fica para diagnóstico. Por isso uma métrica nova só vale para as lutas enviadas depois dela; as antigas precisam ser enviadas de novo.
 - **O site não é um arquivo de logs:** ele só personaliza a visualização, e quem usa precisa guardar os originais em outro lugar. A tela de importação e a de entrada avisam isso, com o prazo em `RETENTION_DAYS`.
 - As lutas antigas são apagadas depois de `RETENTION_DAYS` dias, contados pela data da luta (no Docker Compose o padrão é 30; fora dele, 0 = guardar para sempre).

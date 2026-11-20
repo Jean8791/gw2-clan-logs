@@ -322,12 +322,12 @@ describe("o mesmo log enviado por usuários diferentes", () => {
     const beto = criarUsuario(app, "2", "beto");
 
     const daAna = (await enviar(ana.token)).json()[0];
+    await app.worker.idle(); // com a luta da Ana pronta, a do Beto é uma cópia (ver copia-de-luta.test.ts)
     const doBeto = (await enviar(beto.token)).json()[0];
     const repetido = (await enviar(ana.token)).json()[0];
-    await app.worker.idle();
 
     expect(daAna.duplicate).toBeUndefined();
-    expect(doBeto).toMatchObject({ status: "queued" });
+    expect(doBeto).toMatchObject({ status: "done" });
     expect(doBeto.duplicate).toBeUndefined();
     expect(doBeto.id).not.toBe(daAna.id);
     expect(repetido).toMatchObject({ id: daAna.id, duplicate: true });

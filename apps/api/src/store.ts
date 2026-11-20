@@ -58,6 +58,30 @@ export function saveFight(db: DB, id: string, f: ExtractedFight, mapName: string
   })();
 }
 
+/** Colunas de uma tabela, menos as que não devem ser copiadas. Pelo banco, para uma métrica nova entrar na cópia sozinha. */
+const columnsOf = (db: DB, table: string, skip: string[]) =>
+  (db.pragma(`table_info(${table})`) as { name: string }[]).map((c) => c.name).filter((n) => !skip.includes(n));
+
+/**
+ * Cria a luta de outro dono a partir de uma luta já pronta (o mesmo arquivo), sem rodar o Elite Insights.
+ * A cópia é independente: apagar uma luta não mexe na outra. Fica sem relatório HTML, que pertence à luta original.
+ */
+export function copyFight(db: DB, fromId: string, newId: string, owner: { id: number; name: string }, fileName: string) {
+  const fightCols = columnsOf(db, "fights", ["id", "owner_id", "uploader", "file_name", "uploaded_at", "has_report"]).join(",");
+  const statCols = columnsOf(db, "player_stats", ["fight_id"]).join(",");
+  db.transaction(() => {
+    db.prepare(
+      `INSERT INTO fights (id, owner_id, uploader, file_name, uploaded_at, has_report, ${fightCols})
+       SELECT ?, ?, ?, ?, ?, 0, ${fightCols} FROM fights WHERE id = ?`,
+    ).run(newId, owner.id, owner.name, fileName, new Date().toISOString(), fromId);
+    db.prepare(`INSERT INTO player_stats (fight_id, ${statCols}) SELECT ?, ${statCols} FROM player_stats WHERE fight_id = ?`).run(newId, fromId);
+    db.prepare(
+      `INSERT INTO player_skills (fight_id, account, skill_id, damage, hits, connected_hits)
+       SELECT ?, account, skill_id, damage, hits, connected_hits FROM player_skills WHERE fight_id = ?`,
+    ).run(newId, fromId);
+  })();
+}
+
 export function setStatus(db: DB, id: string, status: string, error: string | null = null) {
   db.prepare("UPDATE fights SET status = ?, error = ? WHERE id = ?").run(status, error?.slice(0, 500) ?? null, id);
 }
