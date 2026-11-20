@@ -1,7 +1,7 @@
 // Paginação das listas longas: só fatia a exibição. O filtro decide quais registros existem e a ordenação vale sobre todos eles.
 
 /** Linhas por página. */
-export const PAGE_SIZE = 40;
+export const PAGE_SIZE = 20;
 
 /** Colunas pelas quais a lista de lutas pode ser ordenada no servidor (são os ids das colunas da tela). */
 export const FIGHT_SORT_KEYS = ["time", "name", "dur", "size", "kd", "dmg", "up"] as const;
