@@ -192,6 +192,8 @@ export async function buildApp(cfg: Config, opts: { logger?: boolean; fetch?: ty
     adminKeyRequired: cfg.adminKey !== "",
     eliteInsights: eiAvailable(cfg.eiDir),
     retentionDays: cfg.retentionDays,
+    // só o que vale para cada usuário (os limites do servidor todo não são da conta de ninguém); tamanho por arquivo e por zip são constantes do shared
+    limits: { queuePerUser: cfg.limits.maxQueuePerUser, perHourPerUser: cfg.limits.maxPerHourPerUser },
   }));
 
   registerAuthRoutes(server, db, cfg, opts.fetch ?? fetch);

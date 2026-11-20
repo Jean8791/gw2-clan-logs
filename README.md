@@ -72,7 +72,7 @@ O ArcDPS grava em `Documentos\Guild Wars 2\addons\arcdps\arcdps.cbtlogs\`. Para 
 
 Há duas formas de enviar, e as duas guardam os logs no seu espaço:
 
-1. **Pelo site**: entre com o Discord, abra *Importar logs* e arraste os arquivos. Eles vão um de cada vez; se o servidor encher, o envio espera sozinho, e ao bater um limite ele para e avisa.
+1. **Pelo site**: entre com o Discord, abra *Importar logs* e arraste os arquivos, ou um `.zip` com vários logs (até 300 MB e 150 logs, o equivalente a uma semana de jogo; o zip é aberto no seu navegador e cada log vai como arquivo solto). Eles vão um de cada vez; se o servidor encher, o envio espera sozinho, e ao bater um limite ele para e avisa.
 2. **Por script**, que usa a API e o seu token pessoal. Na página *Importar logs*, o cartão *Envio por script* gera o token (ele só aparece uma vez, e o anterior deixa de valer).
 
 No **Windows** (`scripts/enviar-logs.bat`, usa o `curl.exe` que já vem no Windows 10 e 11). Crie o arquivo `%APPDATA%\gw2logs\config.bat` com o endereço e o token:
