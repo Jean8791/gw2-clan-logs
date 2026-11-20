@@ -75,6 +75,11 @@ export function deleteSession(db: DB, token: string | undefined) {
   if (token) db.prepare("DELETE FROM sessions WHERE token_hash = ?").run(sha256(token));
 }
 
+/** Tira o acesso de quem saiu do servidor do Discord: apaga o token pessoal e as sessões do navegador. As lutas ficam. */
+export function revokeAccessByDiscordId(db: DB, discordId: string) {
+  db.prepare("DELETE FROM sessions WHERE user_id IN (SELECT id FROM users WHERE discord_id = ?)").run(discordId);
+}
+
 /** Apaga as sessões que já expiraram (o token pessoal não expira e fica). Devolve quantas saíram. */
 export function purgeExpiredSessions(db: DB, now = new Date()): number {
   return db.prepare("DELETE FROM sessions WHERE expires_at IS NOT NULL AND expires_at <= ?").run(now.toISOString()).changes;

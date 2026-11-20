@@ -22,6 +22,11 @@ export function LandingPage() {
       <h1 className="font-display text-2xl font-bold tracking-wider text-gold">{t("landing.title")}</h1>
       <p className="text-sm text-muted">{t("landing.subtitle")}</p>
       <RetentionNotice />
+      {new URLSearchParams(window.location.search).get("erro") === "notInGuild" && (
+        <p role="alert" className="text-sm text-bad">
+          {t("landing.notInGuild")}
+        </p>
+      )}
       {cfg?.loginAvailable === false ? (
         <p className="text-sm text-faint">{t("landing.loginOff")}</p>
       ) : (

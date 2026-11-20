@@ -43,6 +43,22 @@ describe("migração do sha256 único por dono", () => {
     db.close();
   });
 
+  it("banco antigo ganha a coluna process_ms (tempo de processamento) sem perder as lutas", () => {
+    const file = path.join(dir, "antigo-tempo.db");
+    bancoAntigo(file);
+
+    const db = openDb(file);
+
+    expect(db.prepare("SELECT id, process_ms FROM fights").all()).toEqual([{ id: "f1", process_ms: null }]);
+    db.close();
+  });
+
+  it("banco novo já nasce com a coluna process_ms", () => {
+    const db = openDb(path.join(dir, "novo-tempo.db"));
+    expect((db.pragma("table_info(fights)") as { name: string }[]).map((c) => c.name)).toContain("process_ms");
+    db.close();
+  });
+
   it("abrir de novo um banco já migrado não refaz nada", () => {
     const file = path.join(dir, "novo.db");
     openDb(file).close();

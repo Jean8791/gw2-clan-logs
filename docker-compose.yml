@@ -9,6 +9,8 @@ services:
       # login com o Discord: o retorno é https://DOMINIO/api/auth/callback (cadastre no portal de desenvolvedores do Discord)
       DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID:?defina DISCORD_CLIENT_ID no .env}
       DISCORD_CLIENT_SECRET: ${DISCORD_CLIENT_SECRET:?defina DISCORD_CLIENT_SECRET no .env}
+      # opcional: IDs dos servidores do Discord do clã, separados por vírgula; vazio = qualquer conta do Discord entra
+      DISCORD_GUILD_IDS: ${DISCORD_GUILD_IDS:-}
       PUBLIC_URL: https://${DOMINIO:?defina DOMINIO no .env}
       RETENTION_DAYS: ${RETENTION_DAYS:-30}
       # só o Caddy chega no app (a porta não é publicada), então o IP do X-Forwarded-For é confiável
