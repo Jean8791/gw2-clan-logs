@@ -35,9 +35,9 @@ const routes = [
     children: [
       { path: ROUTES.overview, element: <OverviewPage /> },
       { path: ROUTES.days, element: <DaysPage /> },
-      { path: ROUTES.fights, element: <FightsPage /> },
+      { path: ROUTES.fights, element: <FightsPage />, handle: { fill: true } },
       { path: `${ROUTES.fights}/:id`, element: <FightPage /> },
-      { path: ROUTES.ranking, element: <RankingPage /> },
+      { path: ROUTES.ranking, element: <RankingPage />, handle: { fill: true } },
       { path: "/players/:account", element: <PlayerPage /> },
       { path: ROUTES.me, element: <MePage /> },
       { path: ROUTES.compare, element: <ComparePage /> },

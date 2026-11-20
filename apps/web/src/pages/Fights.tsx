@@ -70,7 +70,7 @@ export function FightsPage() {
       {error && <ErrorBox error={error} />}
       {isLoading && <Loading />}
       {data && (
-        <Card>
+        <Card className="flex min-h-0 flex-1 flex-col">
           {data.rows.length === 0 ? (
             <Empty title={t("fights.empty.title")}>{t("empty.changeFilters")}</Empty>
           ) : (
@@ -78,6 +78,7 @@ export function FightsPage() {
               {/* a ordenação é do servidor: vale para todas as lutas do filtro, não só para esta página */}
               <DataTable
                 pickerKey="fights"
+                fill
                 rows={data.rows}
                 columns={columns()}
                 rowKey={(f) => f.id}

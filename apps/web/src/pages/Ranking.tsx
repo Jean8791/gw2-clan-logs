@@ -86,7 +86,7 @@ export function RankingPage() {
       />
       <FilterBar value={filters} onChange={setFilters} fields={["period", "day", "guild", "role", "profession", "size", "duration", "map"]} />
 
-      <Card>
+      <Card className="flex min-h-0 flex-1 flex-col">
         <div className="flex flex-wrap items-center gap-3 border-b border-line px-4 py-3">
           <GroupTabs value={group} onChange={setGroup} scope={scope} onScopeChange={setScope} />
           <ModeToggle value={mode} onChange={setMode} />
@@ -130,6 +130,7 @@ export function RankingPage() {
             rowKey={(r) => r.account}
             initialSort={defaultSort(group, scope)}
             pageSize={PAGE_SIZE}
+            fill
             rowClassName={(r) => (r.account === me ? "bg-gold/5" : selected.includes(r.account) ? "bg-info/5" : undefined)}
             onRowClick={(r) => toggle(r.account)}
             dense

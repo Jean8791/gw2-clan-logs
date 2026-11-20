@@ -31,6 +31,7 @@ export function DataTable<T>({
   sort: sortProp,
   onSortChange,
   pageSize,
+  fill,
   onRowClick,
   rowClassName,
   footer,
@@ -49,6 +50,11 @@ export function DataTable<T>({
   onSortChange?: (sort: { id: string; desc: boolean }) => void;
   /** Mostra só esta quantidade de linhas por vez, com os controles de página. A ordenação continua valendo para todas as linhas. */
   pageSize?: number;
+  /**
+   * Ocupa o resto da altura da tela (o pai precisa ser uma coluna com altura definida, ver `fill` nas rotas): a página não rola,
+   * só a lista de dentro, e o cabeçalho fica sempre à vista. Sem ele, a tabela tem altura máxima própria.
+   */
+  fill?: boolean;
   onRowClick?: (r: T) => void;
   rowClassName?: (r: T) => string | undefined;
   footer?: ReactNode;
@@ -88,8 +94,6 @@ export function DataTable<T>({
       return sort!.desc ? -r : r;
     });
   }, [rows, columns, sort, external]);
-  // paginada no navegador (pageSize) ou no servidor (ordenação de fora): em ambos a tabela mostra só uma página por vez
-  const paged = pageSize !== undefined || external;
   const pages = pageSize ? pageCount(sorted.length, pageSize) : 1;
   const current = Math.min(page, pages);
   const visible = pageSize ? pageSlice(sorted, current, pageSize) : sorted;
@@ -99,7 +103,7 @@ export function DataTable<T>({
   return (
     // Área de rolagem com altura limitada: assim o cabeçalho (sticky) fica preso no topo dela ao rolar, como na bel.st.
     // Com overflow só no eixo x o cabeçalho colava num contêiner que não rola na vertical e sumia.
-    <div>
+    <div className={fill ? "flex min-h-0 flex-1 flex-col" : undefined}>
       {pickerKey && (
         <ColumnPicker
           columns={columns.map((c) => ({ id: c.id, fixed: c.fixed, label: c.label ?? (typeof c.header === "string" && c.header ? c.header : c.id) }))}
@@ -107,8 +111,7 @@ export function DataTable<T>({
           onChange={choose}
         />
       )}
-      {/* lista paginada é curta: sem rolagem própria na vertical, só a da página (a horizontal fica para as tabelas largas) */}
-      <div className={paged ? "overflow-x-auto" : "max-h-[calc(100vh-5rem)] overflow-auto"}>
+      <div className={fill ? "min-h-0 flex-1 overflow-auto" : "max-h-[calc(100vh-5rem)] overflow-auto"}>
       <table className="w-full border-separate border-spacing-0 text-sm">
         <thead>
           <tr>
