@@ -103,6 +103,9 @@ export function registerAuthRoutes(server: FastifyInstance, db: DB, cfg: Config,
   server.delete("/api/auth/account", async (req, reply) => {
     const user = sessionUser(db, req);
     if (!user) return reply.code(401).send({ error: "Not signed in.", code: "notSignedIn" });
+    // apaga tudo e não dá para desfazer: a pessoa digita o próprio nome (a tela pede), e um pedido sem isso não apaga nada
+    const { confirm } = (req.body ?? {}) as { confirm?: unknown };
+    if (confirm !== user.name) return reply.code(400).send({ error: "Type your name to confirm.", code: "confirmName" });
     const ids = (db.prepare("SELECT id FROM fights WHERE owner_id = ?").all(user.id) as { id: string }[]).map((f) => f.id);
     await removeFights(db, paths(cfg.dataDir), ids);
     db.prepare("DELETE FROM users WHERE id = ?").run(user.id);

@@ -18,6 +18,7 @@ import { AttemptLimiter, folderBytes, safeEqual } from "./guards.js";
 import { MEDIA_KEY, MediaStore } from "./media.js";
 import * as q from "./queries.js";
 import { removeFights } from "./retention.js";
+import { isCrossSite, SAFE_METHODS, securityHeaders } from "./security.js";
 import { copyFight } from "./store.js";
 import { LogWorker } from "./worker.js";
 
@@ -57,6 +58,21 @@ export async function buildApp(cfg: Config, opts: { logger?: boolean; fetch?: ty
   const media = new MediaStore(db, cfg.gw2Api ? fetch : offline);
   const server = Fastify({ logger: opts.logger ?? false, bodyLimit: 1024 * 1024, trustProxy: cfg.trustProxy });
   const worker = new LogWorker(db, api, media, cfg, server.log);
+
+  // Pedido que muda estado vindo de outro site é recusado (só o cookie SameSite=Lax não basta dentro do mesmo site); cabeçalhos de segurança em
+  // toda resposta. Registrados antes das rotas e dos plugins, para valerem para todos.
+  const publicHost = new URL(cfg.publicUrl).host;
+  server.addHook("onRequest", async (req, reply) => {
+    if (!SAFE_METHODS.has(req.method) && isCrossSite(req.headers, publicHost)) {
+      return reply.code(403).send({ error: "Request blocked: it does not come from this site.", code: "badOrigin" });
+    }
+  });
+  const REPORT = /\/fights\/[^/?]+\/report(\?|$)/; // o relatório HTML do Elite Insights traz scripts próprios: a CSP do site o quebraria
+  server.addHook("onSend", async (req, reply, payload) => {
+    const html = String(reply.getHeader("content-type") ?? "").startsWith("text/html") && !REPORT.test(req.url);
+    reply.headers(securityHeaders({ https: cfg.publicUrl.startsWith("https://"), html }));
+    return payload;
+  });
 
   await server.register(multipart, { limits: { fileSize: MAX_UPLOAD, files: 50 } });
 
