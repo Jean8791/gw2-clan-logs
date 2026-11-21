@@ -37,9 +37,13 @@ export function registerAuthRoutes(server: FastifyInstance, db: DB, cfg: Config,
     return servers.some((g) => cfg.discord.guildIds.includes(g.id));
   };
 
-  /** Login negado: nada de usuário nem sessão novos, e quem já tinha conta perde o token pessoal e as sessões (as lutas ficam). */
-  const deny = (reply: FastifyReply, discordId: string, reason: "notInGuild" | "notAllowed") => {
-    revokeAccessByDiscordId(db, discordId);
+  /**
+   * Login negado: nada de usuário nem sessão novos, e quem já tinha conta perde o token pessoal e as sessões (as lutas ficam).
+   * O ID e o nome do Discord vão só para o log do servidor (nunca para a resposta): é o que o administrador copia para a lista de acesso.
+   */
+  const deny = (req: FastifyRequest, reply: FastifyReply, me: { id: string; username: string; global_name?: string | null }, reason: "notInGuild" | "notAllowed") => {
+    req.log.warn({ discordId: me.id, name: me.global_name || me.username, reason }, "login negado");
+    revokeAccessByDiscordId(db, me.id);
     return reply.header("set-cookie", clear(STATE_COOKIE, "/api/auth")).redirect(`/?erro=${reason}`);
   };
 
@@ -72,9 +76,9 @@ export function registerAuthRoutes(server: FastifyInstance, db: DB, cfg: Config,
       const me = (await meRes.json()) as { id: string; username: string; global_name?: string | null; avatar?: string | null };
 
       // as duas listas valem juntas; a de usuários vem primeiro porque não custa uma consulta ao Discord
-      if (cfg.discord.userIds.length > 0 && !cfg.discord.userIds.includes(me.id)) return deny(reply, me.id, "notAllowed");
+      if (cfg.discord.userIds.length > 0 && !cfg.discord.userIds.includes(me.id)) return deny(req, reply, me, "notAllowed");
       // a consulta falhar lança erro e cai no loginFailed: na dúvida, ninguém entra
-      if (onlyClan && !(await inClanServer(access_token))) return deny(reply, me.id, "notInGuild");
+      if (onlyClan && !(await inClanServer(access_token))) return deny(req, reply, me, "notInGuild");
 
       const user = upsertDiscordUser(db, { id: me.id, username: me.global_name || me.username, avatar: me.avatar ?? null });
       const token = createSession(db, user.id, "web");

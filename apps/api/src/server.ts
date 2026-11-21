@@ -4,7 +4,7 @@ import { createWriteStream, existsSync } from "node:fs";
 import path from "node:path";
 import { pipeline } from "node:stream/promises";
 import { Transform } from "node:stream";
-import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
+import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest, type FastifyServerOptions } from "fastify";
 import multipart from "@fastify/multipart";
 import fastifyStatic from "@fastify/static";
 import { MAX_JSON_MB, MAX_UPLOAD_MB, parseFilters, type Filters, type UploadResult } from "@gw2logs/shared";
@@ -44,7 +44,7 @@ declare module "fastify" {
 }
 
 /** `fetch` é trocável para os testes não falarem com o Discord de verdade. */
-export async function buildApp(cfg: Config, opts: { logger?: boolean; fetch?: typeof fetch } = {}): Promise<App> {
+export async function buildApp(cfg: Config, opts: { logger?: FastifyServerOptions["logger"]; fetch?: typeof fetch } = {}): Promise<App> {
   const p = paths(cfg.dataDir);
   await fs.mkdir(p.uploads, { recursive: true });
   await fs.mkdir(p.fights, { recursive: true });
