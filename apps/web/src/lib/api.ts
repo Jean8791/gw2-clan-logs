@@ -143,8 +143,9 @@ export const useViewer = () =>
 export const logout = () => fetch("/api/auth/logout", { method: "POST" });
 
 /** Apaga a conta do usuário logado e todos os logs dele. */
-export async function deleteAccount(): Promise<void> {
-  const res = await fetch("/api/auth/account", { method: "DELETE" });
+/** Apaga a conta e todos os logs. O servidor só apaga se `confirm` for o nome da própria conta. */
+export async function deleteAccount(confirm: string): Promise<void> {
+  const res = await fetch("/api/auth/account", { method: "DELETE", headers: { "content-type": "application/json" }, body: JSON.stringify({ confirm }) });
   if (!res.ok) throw apiErrorFrom(res.status, await res.json().catch(() => null));
 }
 

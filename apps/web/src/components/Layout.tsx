@@ -5,7 +5,7 @@ import { NavLink, Outlet, useMatches } from "react-router-dom";
 import { deleteAccount, logout, useOwner, useViewer } from "../lib/api";
 import { spaceBase, spaceId } from "../lib/space";
 import { setLang, useLang, useT } from "../lib/i18n";
-import { Button, Empty, Segmented, cx } from "./ui";
+import { Button, Empty, Input, Segmented, cx } from "./ui";
 
 const NAV = [
   { to: ROUTES.overview, label: "nav.overview", icon: Home, end: true },
@@ -42,6 +42,7 @@ function AccountMenu({ name }: { name: string }) {
   const [open, setOpen] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [typed, setTyped] = useState("");
   const item = "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted transition hover:bg-surface-2 hover:text-text";
   const leave = (action: () => Promise<unknown>) => {
     setBusy(true);
@@ -57,11 +58,12 @@ function AccountMenu({ name }: { name: string }) {
           {confirming ? (
             <div className="space-y-2 p-2 text-xs text-bad">
               <p>{t("account.deleteWarn")}</p>
+              <Input label={t("account.deleteType", { name })} value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" />
               <div className="flex gap-2">
-                <Button size="sm" onClick={() => leave(deleteAccount)} disabled={busy}>
+                <Button size="sm" onClick={() => leave(() => deleteAccount(typed))} disabled={busy || typed !== name}>
                   {t("account.deleteConfirm")}
                 </Button>
-                <Button size="sm" variant="ghost" onClick={() => setConfirming(false)} disabled={busy}>
+                <Button size="sm" variant="ghost" onClick={() => (setConfirming(false), setTyped(""))} disabled={busy}>
                   {t("account.cancel")}
                 </Button>
               </div>
@@ -75,7 +77,7 @@ function AccountMenu({ name }: { name: string }) {
       )}
       <button
         className={cx(item, "justify-between font-medium text-text")}
-        onClick={() => (setOpen(!open), setConfirming(false))}
+        onClick={() => (setOpen(!open), setConfirming(false), setTyped(""))}
         aria-expanded={open}
       >
         <span className="flex min-w-0 items-center gap-2">
