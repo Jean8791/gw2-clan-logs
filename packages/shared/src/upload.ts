@@ -5,6 +5,13 @@ import type { UploadResult } from "./index.js";
 /** Tamanho máximo de um log, em MB (o servidor recusa acima disso). */
 export const MAX_UPLOAD_MB = 80;
 
+/**
+ * Tamanho máximo de um .json enviado, em MB. O JSON é lido inteiro na memória e ocupa ~30 vezes o tamanho do arquivo (20 MB chegaram a
+ * ~635 MiB, e o container da produção tem 800 MiB): sem este limite, um envio derrubava o servidor. Medido com o Elite Insights do projeto:
+ * um log de 29,6 MB (o maior do clã) gera 35 MB de JSON, e um de 0,4 MB gera 2,7 MB. Quem tem um JSON maior envia o .zevtc, que o site processa.
+ */
+export const MAX_JSON_MB = 15;
+
 /** Espera entre uma tentativa e outra quando a fila do servidor está cheia. */
 export const QUEUE_RETRY_MS = 15_000;
 /** Quantas esperas seguidas por um mesmo arquivo antes de desistir (15 s × 40 = 10 minutos). */

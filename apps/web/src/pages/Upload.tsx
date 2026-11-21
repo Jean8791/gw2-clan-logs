@@ -2,7 +2,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, CircleDashed, FileUp, Info, KeyRound, ListChecks, Loader2, PauseCircle, XCircle } from "lucide-react";
 import { useMemo, useRef, useState, type DragEvent } from "react";
 import { Link } from "react-router-dom";
-import { MAX_UPLOAD_MB, MAX_ZIP_LOGS, MAX_ZIP_MB, retentionCutoff, ROUTES, readLogsFromZip, sendInOrder, ZipError, type ItemState } from "@gw2logs/shared";
+import { MAX_JSON_MB, MAX_UPLOAD_MB, MAX_ZIP_LOGS, MAX_ZIP_MB, retentionCutoff, ROUTES, readLogsFromZip, sendInOrder, ZipError, type ItemState } from "@gw2logs/shared";
 import { RetentionNotice } from "../components/RetentionNotice";
 import { Button, Card, ErrorBox, PageHeader, Rich, cx } from "../components/ui";
 import { createToken, uploadLog, useConfig, useFights } from "../lib/api";
@@ -19,11 +19,13 @@ interface Item {
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 const MB = 1024 * 1024;
-const tooBigItem = (file: File): Item => ({ file, state: { kind: "error", code: "tooBig" } });
+const isJson = (name: string) => name.toLowerCase().endsWith(".json");
+/** Acima do tamanho máximo: o .json tem limite próprio (e mensagem própria), bem menor que o do log original. */
+const tooBigItem = (file: File): Item => ({ file, state: { kind: "error", code: isJson(file.name) ? "jsonTooBig" : "tooBig" } });
 
 /** Itens de um arquivo escolhido. Um .zip vira um item por log de dentro, ou um item de erro se não der para abri-lo. */
 async function itemsOf(file: File): Promise<Item[]> {
-  if (!file.name.toLowerCase().endsWith(".zip")) return [file.size > MAX_UPLOAD_MB * MB ? tooBigItem(file) : { file, state: { kind: "pending" } }];
+  if (!file.name.toLowerCase().endsWith(".zip")) return [file.size > (isJson(file.name) ? MAX_JSON_MB : MAX_UPLOAD_MB) * MB ? tooBigItem(file) : { file, state: { kind: "pending" } }];
   if (file.size > MAX_ZIP_MB * MB) return [{ file, state: { kind: "error", code: "zipTooBig" } }];
   try {
     const { logs, tooBig } = readLogsFromZip(new Uint8Array(await file.arrayBuffer()));
@@ -226,7 +228,7 @@ export function UploadPage() {
               <Rich text={t("upload.limits.types")} />
             </p>
             <p>
-              <Rich text={t("upload.limits.size", { file: MAX_UPLOAD_MB, zip: MAX_ZIP_MB, logs: MAX_ZIP_LOGS })} />
+              <Rich text={t("upload.limits.size", { file: MAX_UPLOAD_MB, json: MAX_JSON_MB, zip: MAX_ZIP_MB, logs: MAX_ZIP_LOGS })} />
             </p>
             {cfg && (
               <p>
