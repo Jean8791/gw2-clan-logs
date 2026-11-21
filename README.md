@@ -11,21 +11,22 @@ Histórico de **WvW de Guild Wars 2** para clãs e alianças. Os logs do ArcDPS 
 | **Visão geral** | Resumo do período: lutas, tempo, abates, mortes, os melhores de dano, strips, cleanses e cura por minuto (com botão de detalhe) e as lutas recentes |
 | **Dias** | Cada dia de batalha, das 06:00 às 06:00 (Brasília): uma noite que passa da meia-noite continua no mesmo dia |
 | **Lutas** e **Luta** | Lista das lutas e o detalhe de cada uma: squad × inimigos, gráfico de dano e tabelas de Dano, Suporte, Boons, Uptime e Defesa, por jogador, por guilda e por grupo |
-| **Ranking** | Todos os jogadores, com filtros por período, dia, guilda, só a aliança, função, classe, tamanho do squad, duração e mapa. Mostra total, por minuto ou por segundo, ordena por qualquer coluna e deixa escolher as colunas. Os filtros ficam no link, então dá para mandar no Discord |
+| **Ranking** | Todos os jogadores, com filtros por período, dia, guilda, só a aliança, função, classe, tamanho do squad, duração e mapa. Mostra total, por minuto ou por segundo, ordena por qualquer coluna e deixa escolher as colunas. Os filtros ficam no link, então dá para mandar no Discord. Quem jogou de mais de uma classe aparece com todas, com as lutas de cada uma |
 | **Perfil** | O histórico do jogador, a evolução luta a luta, habilidades e a comparação com a média de quem joga na mesma função |
 | **Comparar** | Até 4 jogadores lado a lado, com radar e tabela |
-| **Guildas** | A guilda de cada jogador vem do log; nome e tag vêm da API oficial do GW2. Marque com ★ as da sua aliança |
+| **Guildas** | A guilda de cada jogador vem do log; nome e tag vêm da API oficial do GW2. Quem administra o site (`ADMIN_DISCORD_IDS`) marca com ★ as da aliança; os demais veem a estrela |
+| **Importar logs** | Só para o dono, logado: arraste os logs (ou um `.zip`), acompanhe o processamento e gere o token do script de envio. O envio continua se você trocar de tela |
 
 Métricas: dano, abates e downs (só contra jogadores inimigos), strips, cleanses, **cura e barreira** (total, no grupo, em si mesmo e em quem está caído), **boons gerados** para o squad, o grupo ou só para si, **uptime** dos boons recebidos e defesa. Veja [Como as métricas são calculadas](#como-as-métricas-são-calculadas).
 
 ## Como funciona
 
 ```
-ArcDPS (.zevtc) ──scripts/enviar-logs.sh──▶ API ──▶ fila ──▶ Elite Insights ──▶ SQLite ──▶ site (React)
-                       (com chave)          Fastify         (.NET)           + JSON guardado
+ArcDPS (.zevtc) ──site (Importar logs) ou scripts/enviar-logs.sh──▶ API ──▶ fila ──▶ Elite Insights ──▶ SQLite ──▶ site (React)
+                   (login com Discord)   (token pessoal)          Fastify         (.NET)           + JSON guardado
 ```
 
-- **Não há tela de envio.** Os logs entram só pela API, com uma chave, usando o script `scripts/enviar-logs.sh` (veja [Enviar logs](#enviar-logs)).
+- **Cada usuário tem o próprio espaço** (`/u/<id>`), só com os seus logs. Entra-se com o **Discord**, e os logs vão pela tela *Importar logs* ou pelo script `scripts/enviar-logs.sh`, com o token pessoal (veja [Enviar logs](#enviar-logs)). Quem tem o link de um espaço o vê sem login (só leitura); o dono troca o link no menu da conta (*Gerar novo link*), e o antigo deixa de funcionar.
 - O mesmo log enviado duas vezes pelo mesmo usuário é ignorado enquanto a luta ainda está guardada; depois de apagada, pode ser importado de novo. Se outro usuário já enviou o mesmo arquivo e a luta está pronta, ela é copiada do banco, sem rodar o Elite Insights de novo (só o limite por hora vale nesse caso). O site também aceita o `.json` do Elite Insights ou do dps.report (até 15 MB: o JSON ocupa muita memória; acima disso, envie o `.zevtc`).
 - Depois de processar uma luta, o servidor guarda só o que foi para o banco (cerca de 0,2 MB por luta): o log enviado e o JSON do Elite Insights são apagados. Se o processamento falhar, o log enviado fica para diagnóstico. Por isso uma métrica nova só vale para as lutas enviadas depois dela; as antigas precisam ser enviadas de novo.
 - **O site não é um arquivo de logs:** ele só personaliza a visualização, e quem usa precisa guardar os originais em outro lugar. A tela de importação e a de entrada avisam isso, com o prazo em `RETENTION_DAYS`.
@@ -44,7 +45,7 @@ apps/api/         API REST, fila de processamento e extração das estatísticas
   src/queries.ts  ranking, perfil, comparação e filtros em SQL
 apps/web/         site em React
 packages/shared/  tipos, métricas, filtros e textos (pt/en) usados pelos dois lados
-scripts/          envio de logs, backup e download do Elite Insights
+scripts/          envio de logs, backups (local e para o Google Drive) e download do Elite Insights
 ```
 
 ## Rodar localmente
@@ -119,6 +120,8 @@ Variáveis de ambiente do servidor. No Docker Compose, as principais vêm do arq
 | `RETENTION_DAYS` | Dias que as lutas ficam guardadas (0 = para sempre). No Compose o padrão é 30 | `0` |
 | `PORT` / `HOST` | Endereço do servidor | `5080` / `127.0.0.1` |
 | `EI_DIR` | Pasta do Elite Insights CLI | `./tools/GW2EICLI` |
+| `DOTNET` | Comando que roda o Elite Insights (.NET) | `dotnet` |
+| `WEB_DIR` | Pasta do site compilado | `./apps/web/dist` |
 | `GW2_API` | `off` desliga a busca de nomes de guildas e mapas | ligado |
 
 <details>
@@ -127,10 +130,11 @@ Variáveis de ambiente do servidor. No Docker Compose, as principais vêm do arq
 | Variável | Para quê | Padrão |
 |---|---|---|
 | `EI_HTML` | `true` gera o relatório HTML do Elite Insights (botão "Relatório completo"). Custa 40 a 50 MB de disco e ~300 MB de memória a mais por luta grande, então fica desligado | `false` |
-| `TRUST_PROXY` | `true` atrás do Caddy: conta o IP real do cliente nos bloqueios. O Compose já liga | `false` |
-| `UPLOAD_MAX_FAILS` / `UPLOAD_BLOCK_MIN` | Erros de senha seguidos do mesmo IP até bloquear, e por quantos minutos | `5` / `15` |
+| `TRUST_PROXY` | `true` atrás do Caddy: conta o IP real do cliente nos bloqueios e no limite de pedidos. O Compose já liga | `false` |
+| `UPLOAD_MAX_FAILS` / `UPLOAD_BLOCK_MIN` | Erros de token ou de senha de administrador seguidos do mesmo IP até bloquear, e por quantos minutos | `5` / `15` |
 | `UPLOAD_MAX_QUEUE` | Logs esperando ou em processamento; acima disso o envio é recusado | `30` |
-| `UPLOAD_MAX_PER_HOUR` | Logs novos aceitos por hora | `500` |
+| `UPLOAD_MAX_PER_HOUR` | Logs novos aceitos por hora, no total | `500` |
+| `UPLOAD_MAX_QUEUE_USER` / `UPLOAD_MAX_PER_HOUR_USER` | O mesmo, por usuário: logs esperando ou em processamento, e logs novos por hora | `10` / `200` |
 | `UPLOAD_MAX_DISK_MB` | Espaço máximo dos logs enviados que ainda esperam processamento | `4096` |
 | `DOMINIO` (Compose) | Nome do site, usado pelo Caddy para o HTTPS | obrigatório |
 | `APP_MEM_LIMIT` (Compose) | Teto de memória do container; em VM de 1 GB use `800m` | `1500m` |
@@ -147,13 +151,13 @@ O site precisa de disco que não se perde e de ~1 GB de memória, então serviç
 2. **Swap (VM de 1 GB):** `sudo fallocate -l 3G /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile` (e uma linha no `/etc/fstab` para sobreviver ao reinício).
 3. **Docker:** `sudo apt install docker.io docker-compose-v2 git` e `sudo usermod -aG docker $USER` (saia e entre de novo).
 4. **Endereço:** use um domínio seu apontando para o IP da VM. Sem domínio, `IP-COM-HÍFENS.sslip.io` (por exemplo `203-0-113-7.sslip.io`) já aponta para o IP e o Caddy emite o certificado.
-5. **Projeto:** `git clone https://github.com/Jean8791/gw2-clan-logs && cd gw2-clan-logs && git checkout release`, depois `cp .env.example .env` e edite o `.env` (endereço e senhas fortes e diferentes entre si; `openssl rand -hex 24` gera uma boa).
+5. **Projeto:** `git clone https://github.com/Jean8791/gw2-clan-logs && cd gw2-clan-logs && git checkout release`, depois `cp .env.example .env`, `chmod 600 .env` e edite o `.env`: o endereço (`DOMINIO`), o aplicativo do Discord (`DISCORD_CLIENT_ID` e `DISCORD_CLIENT_SECRET`), **pelo menos uma lista de acesso** (`DISCORD_USER_IDS` ou `DISCORD_GUILD_IDS`: sem as duas o servidor não sobe) e, para administrar as guildas, `ADMIN_DISCORD_IDS`. O `.env` guarda segredos: não o coloque no Git nem em chat.
 6. **Subir:** `docker compose up -d --build`. O primeiro build leva alguns minutos, e o certificado HTTPS sai sozinho na primeira visita.
-7. **Enviar os logs** com o script, a partir do seu computador.
+7. **Entrar e enviar os logs:** abra o site, entre com o Discord e use *Importar logs*, ou gere o token pessoal e use o script (veja [Enviar logs](#enviar-logs)).
 
 ### Operação
 
-- **Atualizar:** na branch `release`, `git pull && docker compose up -d --build`. Se a extração mudou (`SCHEMA_VERSION` em `apps/api/src/db.ts`), `reingest` só alcança as lutas que ainda têm o JSON guardado (`docker compose exec app node apps/api/dist/scripts/reingest.js`; o total impresso no fim mostra quantas foram). (com `sudo` se o seu usuário não estiver no grupo `docker`). Lutas novas já saem certas.
+- **Atualizar:** na branch `release`, `git pull && docker compose up -d --build`. Depois de editar o `.env`, recrie o container com `docker compose up -d`: o `restart` **não** relê o `.env`. Se a extração mudou (`SCHEMA_VERSION` em `apps/api/src/db.ts`), `reingest` só alcança as lutas que ainda têm o JSON guardado (`docker compose exec app node apps/api/dist/scripts/reingest.js`; o total impresso no fim mostra quantas foram). (com `sudo` se o seu usuário não estiver no grupo `docker`). Lutas novas já saem certas.
 - **Backup fora da VM (Google Drive, criptografado):** `scripts/backup-drive.sh` faz uma cópia consistente do banco, confere a integridade, envia **cifrada** ao Drive com o rclone, confere o tamanho no destino e só então apaga as cópias com mais de 30 dias (`BACKUP_DIAS`). Cron do root, depois do backup local das 04:00: `15 4 * * * RCLONE_CONFIG=/home/ubuntu/.config/rclone/rclone.conf /home/ubuntu/gw2-clan-logs/scripts/backup-drive.sh >> /var/log/gw2-backup-drive.log 2>&1` (o log mostra uma linha `ok` por dia; sem ela, o backup falhou).
   - **Configurar (uma vez):**
     1. `sudo apt install rclone`, na VM e no seu computador.
@@ -169,10 +173,10 @@ O site precisa de disco que não se perde e de ~1 GB de memória, então serviç
 - **Contêiner sem root:** o app roda como o usuário `gw2logs` (uid 10001), sem capacidades (`cap_drop: [ALL]`), sem ganhar privilégios (`no-new-privileges`) e com o sistema de arquivos somente leitura: só `/data` (o volume `dados`) e `/tmp` são graváveis. **Numa VM que já tem o volume `dados` criado pelo root**, faça uma vez, antes do primeiro `up` com esta versão: `docker compose run --rm --no-deps --user root --cap-add CHOWN --entrypoint chown app -R 10001:10001 /data` (o `--cap-add CHOWN` é necessário porque o serviço descarta todas as capacidades, até as do root). Volumes novos, ainda vazios, já nascem com o dono certo. Se o app não subir com `EACCES: permission denied, mkdir '/data/uploads'`, é isto.
 - **Atualizar o Elite Insights:** o `Dockerfile` só aceita o `GW2EICLI.zip` cujo SHA-256 bate com `EI_SHA256`. Troque a versão e o hash **juntos**: baixe o zip da versão nova em https://github.com/baaron4/GW2-Elite-Insights-Parser/releases (numa pasta separada), rode `sha256sum GW2EICLI.zip` e ponha o resultado em `EI_SHA256` (e a versão em `EI_VERSION`) no `Dockerfile`. Também dá para passar `--build-arg EI_VERSION=... --build-arg EI_SHA256=...` no build. Versão e hash que não combinam fazem o build falhar, de propósito.
 - **Quem foi barrado no login:** cada login negado deixa uma linha no log do servidor, com o ID do Discord, o nome e o motivo: `docker compose logs app | grep 'login negado'`. `notAllowed` é quem não está em `DISCORD_USER_IDS`; `notInGuild` é quem não está no servidor de `DISCORD_GUILD_IDS`. Para liberar alguém, copie o ID da linha para a lista no `.env` (separado por vírgula) e rode `docker compose up -d`: o `restart` não relê o `.env`. O ID aparece só no log do servidor, nunca na resposta do site, e identifica uma pessoa: não o cole em lugar público.
-- **Backup diário:** `crontab -e` e `0 4 * * * cd ~/gw2-clan-logs && scripts/backup.sh`. Guarda as últimas 7 cópias do banco em `/data/backup`, dentro do mesmo disco: copie para fora se o histórico for importante. Confira o espaço do disco de vez em quando.
+- **Backup diário:** `crontab -e` e `0 4 * * * cd ~/gw2-clan-logs && scripts/backup.sh`. Guarda as últimas 7 cópias do banco em `/data/backup`, dentro do mesmo disco: por isso existe também o backup para o Google Drive, acima. Confira o espaço do disco de vez em quando.
 - **Acompanhar:** `docker compose logs -f app`, `docker stats`, e a tela Lutas mostra a fila e os erros de processamento. Cada log processado registra `eiMs` (Elite Insights) e `totalMs` no log "luta processada", e o total fica em `fights.process_ms` (vazio nas lutas copiadas e nas antigas): `SELECT COUNT(*), AVG(process_ms), MAX(process_ms) FROM fights WHERE process_ms IS NOT NULL` dá a média e o pico para estimar quantos logs por hora o servidor aguenta.
 - **Alerta de fora do ar:** `GET /api/health` responde o estado e o tamanho da fila. O workflow `.github/workflows/uptime.yml` o consulta a cada 15 minutos e o GitHub avisa por e-mail se falhar; defina a variável `SITE_URL` do repositório (Settings, Secrets and variables, Variables).
-- **Segurança:** o SSH deve aceitar só chave (sem senha) e pode usar `fail2ban`. O site é de leitura aberta; enviar logs e marcar guildas exigem as chaves.
+- **Segurança:** o SSH só aceita chave, sem login de root, sem encaminhamento de portas, de X11 e de agente (`PermitRootLogin no`, `AllowTcpForwarding no` e afins num arquivo em `/etc/ssh/sshd_config.d/`, com nome começando por `00-`, porque o primeiro valor vence), com `fail2ban` e atualizações automáticas (pode reiniciar sozinho de madrugada). Deixe abertas só as portas 22, 80 e 443, e confira também o firewall da rede da nuvem (*Security List*). No site: quem tem o link de um espaço o vê (só leitura) e o dono pode trocá-lo; enviar logs exige login ou o token pessoal; marcar guildas exige ser administrador (`ADMIN_DISCORD_IDS`) ou a `ADMIN_KEY`, por script.
 
 ## Branches e lançamento
 
