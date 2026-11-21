@@ -57,8 +57,8 @@ describe("MediaStore", () => {
     const f = fakeFetch();
     const store = new MediaStore(db, f.fn);
 
-    expect(await store.ensure("buff:1122", ICON)).toBe(true);
-    expect(await store.ensure("buff:1122", ICON)).toBe(true);
+    expect(await store.ensure("buff:1122", ICON, true)).toBe(true);
+    expect(await store.ensure("buff:1122", ICON, true)).toBe(true);
 
     expect(f.calls).toEqual([ICON]);
     expect(store.get("buff:1122")?.contentType).toBe("image/png");
@@ -69,18 +69,18 @@ describe("MediaStore", () => {
     const f = fakeFetch();
     const store = new MediaStore(db, f.fn);
     const NOVO = "https://render.guildwars2.com/file/BBBB2222/102835.png";
-    await store.ensure("buff:1122", ICON);
+    await store.ensure("buff:1122", ICON, true);
 
-    expect(await store.ensure("buff:1122", NOVO)).toBe(true);
+    expect(await store.ensure("buff:1122", NOVO, true)).toBe(true);
 
     expect(f.calls).toEqual([ICON, NOVO]);
     expect((db.prepare("SELECT source_url AS u FROM media WHERE key = 'buff:1122'").get() as { u: string }).u).toBe(NOVO);
   });
 
   it("se o link novo falhar, mantém o ícone antigo", async () => {
-    await new MediaStore(db, fakeFetch().fn).ensure("buff:1122", ICON);
+    await new MediaStore(db, fakeFetch().fn).ensure("buff:1122", ICON, true);
 
-    const ok = await new MediaStore(db, fakeFetch({ ok: false }).fn).ensure("buff:1122", "https://render.guildwars2.com/file/BBBB2222/1.png");
+    const ok = await new MediaStore(db, fakeFetch({ ok: false }).fn).ensure("buff:1122", "https://render.guildwars2.com/file/BBBB2222/1.png", true);
 
     expect(ok).toBe(false);
     expect(new MediaStore(db).get("buff:1122")?.bytes.equals(PNG)).toBe(true);
@@ -90,7 +90,7 @@ describe("MediaStore", () => {
     const f = fakeFetch();
     const store = new MediaStore(db, f.fn);
 
-    expect(await store.ensure("buff:1", "http://169.254.169.254/x.png")).toBe(false);
+    expect(await store.ensure("buff:1", "http://169.254.169.254/x.png", true)).toBe(false);
 
     expect(f.calls).toEqual([]);
     expect(store.get("buff:1")).toBeNull();
@@ -104,7 +104,7 @@ describe("MediaStore", () => {
   ])("não guarda quando há %s", async (_nome, res) => {
     const store = new MediaStore(db, fakeFetch(res).fn);
 
-    expect(await store.ensure("buff:2", ICON)).toBe(false);
+    expect(await store.ensure("buff:2", ICON, true)).toBe(false);
 
     expect(store.get("buff:2")).toBeNull();
   });
@@ -114,7 +114,7 @@ describe("MediaStore", () => {
       throw new Error("sem rede");
     }) as unknown as typeof fetch);
 
-    expect(await store.ensure("buff:3", ICON)).toBe(false);
+    expect(await store.ensure("buff:3", ICON, true)).toBe(false);
   });
 });
 
@@ -140,7 +140,7 @@ describe("collectBuffIcons", () => {
 describe("GET /api/media/:key", () => {
   it("serve a imagem guardada com tipo fixo e nosniff", async () => {
     const app = await buildApp(loadConfig({ DATA_DIR: dir, GW2_API: "off", WEB_DIR: path.join(dir, "sem-site") }));
-    await new MediaStore(app.db, fakeFetch().fn).ensure("buff:1122", ICON);
+    await new MediaStore(app.db, fakeFetch().fn).ensure("buff:1122", ICON, true);
 
     const res = await app.server.inject({ url: "/api/media/buff:1122" });
 
@@ -153,7 +153,7 @@ describe("GET /api/media/:key", () => {
 
   it("manda ETag, sempre revalida, e responde 304 se a imagem não mudou", async () => {
     const app = await buildApp(loadConfig({ DATA_DIR: dir, GW2_API: "off", WEB_DIR: path.join(dir, "sem-site") }));
-    await new MediaStore(app.db, fakeFetch().fn).ensure("buff:1122", ICON);
+    await new MediaStore(app.db, fakeFetch().fn).ensure("buff:1122", ICON, true);
 
     const first = await app.server.inject({ url: "/api/media/buff:1122" });
     const etag = String(first.headers.etag);

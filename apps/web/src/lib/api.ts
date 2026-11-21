@@ -43,7 +43,6 @@ export interface Meta {
 
 export interface AppConfig {
   loginAvailable: boolean;
-  adminKeyRequired: boolean;
   eliteInsights: boolean;
   retentionDays: number;
   /** Limites de envio de cada usuário. */
@@ -111,10 +110,11 @@ export const useCompare = (accounts: string[], f: Filters) =>
     queryFn: () => get<{ players: PlayerProfile[]; baseline: Aggregate }>(withFilters(`${spaceApi}/compare`, f, { accounts: accounts.join(",") })),
   });
 
-export async function setGuildAlliance(id: string, inAlliance: boolean, key: string) {
+/** Marca ou desmarca uma guilda da aliança. Só vale para quem administra pelo login. */
+export async function setGuildAlliance(id: string, inAlliance: boolean) {
   const res = await fetch(`/api/guilds/${encodeURIComponent(id)}`, {
     method: "PUT",
-    headers: { "Content-Type": "application/json", ...(key ? { "X-Upload-Key": key } : {}) },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ inAlliance }),
   });
   if (!res.ok) throw apiErrorFrom(res.status, await res.json().catch(() => null));
@@ -129,22 +129,49 @@ export interface SpaceUser {
 /** Dono do espaço que está aberto. */
 export const useOwner = () => useQuery({ queryKey: ["owner"], queryFn: () => get<SpaceUser>(spaceApi), retry: false, staleTime: Infinity });
 
-/** Quem está logado neste navegador (null = ninguém). */
-export const useViewer = () =>
+/** Quem está logado: além do espaço, diz se pode administrar (marcar guildas da aliança). */
+export interface Viewer extends SpaceUser {
+  isAdmin: boolean;
+}
+
+interface ViewerState {
+  user: Viewer | null;
+  /** A sessão existe, mas a conferência dos servidores do Discord venceu: é só entrar de novo. */
+  expired: boolean;
+}
+
+const viewerQuery = <T>(select: (v: ViewerState) => T) =>
   useQuery({
     queryKey: ["viewer"],
-    queryFn: async (): Promise<SpaceUser | null> => {
+    queryFn: async (): Promise<ViewerState> => {
       const res = await fetch("/api/auth/me");
-      return res.ok ? ((await res.json()) as SpaceUser) : null;
+      if (res.ok) return { user: (await res.json()) as Viewer, expired: false };
+      const body = res.status === 401 ? await res.json().catch(() => null) : null;
+      return { user: null, expired: body?.code === "loginExpired" };
     },
     staleTime: 60_000,
+    select,
   });
+
+/** Quem está logado neste navegador (null = ninguém). */
+export const useViewer = () => viewerQuery((v) => v.user);
+
+/** A sessão venceu e a pessoa precisa entrar de novo (a tela inicial avisa; sem redirecionar sozinha, para não prender quem cancela o login). */
+export const useLoginExpired = () => viewerQuery((v) => v.expired).data === true;
 
 export const logout = () => fetch("/api/auth/logout", { method: "POST" });
 
+/** Troca o link de compartilhar do usuário logado: o antigo deixa de funcionar. Devolve o id do link novo. */
+export async function rotateShareLink(): Promise<string> {
+  const res = await fetch("/api/auth/share-link/rotate", { method: "POST" });
+  if (!res.ok) throw apiErrorFrom(res.status, await res.json().catch(() => null));
+  return ((await res.json()) as { publicId: string }).publicId;
+}
+
 /** Apaga a conta do usuário logado e todos os logs dele. */
-export async function deleteAccount(): Promise<void> {
-  const res = await fetch("/api/auth/account", { method: "DELETE" });
+/** Apaga a conta e todos os logs. O servidor só apaga se `confirm` for o nome da própria conta. */
+export async function deleteAccount(confirm: string): Promise<void> {
+  const res = await fetch("/api/auth/account", { method: "DELETE", headers: { "content-type": "application/json" }, body: JSON.stringify({ confirm }) });
   if (!res.ok) throw apiErrorFrom(res.status, await res.json().catch(() => null));
 }
 
@@ -171,9 +198,9 @@ export function uploadLog(file: File, onProgress: (pct: number) => void): Promis
   });
 }
 
-/** Gera o token pessoal do script de envio (o anterior deixa de valer). O valor só aparece nesta resposta. */
-export async function createToken(): Promise<string> {
+/** Gera o token pessoal do script de envio (o anterior deixa de valer). O valor só aparece nesta resposta; `expiresAt` é até quando ele vale. */
+export async function createToken(): Promise<{ token: string; expiresAt: string }> {
   const res = await fetch("/api/auth/token", { method: "POST" });
   if (!res.ok) throw apiErrorFrom(res.status, await res.json().catch(() => null));
-  return ((await res.json()) as { token: string }).token;
+  return (await res.json()) as { token: string; expiresAt: string };
 }

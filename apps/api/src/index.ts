@@ -1,16 +1,30 @@
-import { loadConfig, paths } from "./config.js";
-import { purgeExpiredSessions } from "./auth.js";
+import { assertLoginRestricted, loadConfig, paths } from "./config.js";
+import { giveDeadlineToApiTokens, purgeExpiredSessions, revokeAccessOutsideList } from "./auth.js";
 import { eiAvailable } from "./elite-insights.js";
 import { purgeOldFights } from "./retention.js";
 import { buildApp } from "./server.js";
 
 const cfg = loadConfig();
+try {
+  assertLoginRestricted(cfg);
+} catch (err) {
+  console.error(`ERRO: ${(err as Error).message}`);
+  process.exit(1);
+}
 const { server, db, worker } = await buildApp(cfg, { logger: true });
 
 if (!eiAvailable(cfg.eiDir)) {
   server.log.warn(`Elite Insights não encontrado em ${cfg.eiDir}: só arquivos .json do EI serão aceitos. Rode scripts/baixar-elite-insights.sh.`);
 }
 worker.resume();
+
+// quem saiu de DISCORD_USER_IDS enquanto o servidor estava parado perde a sessão e o token agora, não só no próximo login
+if (cfg.discord.userIds.length > 0) {
+  server.log.info(`Lista de usuários do Discord: ${revokeAccessOutsideList(db, cfg.discord.userIds)} sessão(ões) de quem não está na lista apagada(s).`);
+}
+// tokens de API de antes da validade existir (sem prazo) ganham API_TOKEN_DAYS a partir de agora
+const legacyTokens = giveDeadlineToApiTokens(db, cfg.apiTokenDays);
+if (legacyTokens > 0) server.log.info(`${legacyTokens} token(s) de API sem prazo passaram a valer ${cfg.apiTokenDays} dias.`);
 
 if (cfg.retentionDays > 0) {
   const purge = () =>

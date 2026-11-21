@@ -1,11 +1,12 @@
-import { BarChart3, CalendarDays, ChevronUp, GitCompareArrows, Home, Link2, LogOut, Shield, Swords, Trash2, Upload, UserRound } from "lucide-react";
+import { BarChart3, CalendarDays, ChevronUp, GitCompareArrows, Home, Link2, LogOut, RefreshCw, Shield, Swords, Trash2, Upload, UserRound } from "lucide-react";
 import { useState } from "react";
 import { ROUTES, isSpaceOwner } from "@gw2logs/shared";
 import { NavLink, Outlet, useMatches } from "react-router-dom";
-import { deleteAccount, logout, useOwner, useViewer } from "../lib/api";
+import { deleteAccount, logout, rotateShareLink, useMeta, useOwner, useViewer } from "../lib/api";
+import { useMe } from "../lib/hooks";
 import { spaceBase, spaceId } from "../lib/space";
 import { setLang, useLang, useT } from "../lib/i18n";
-import { Button, Empty, Segmented, cx } from "./ui";
+import { Button, Empty, Input, Segmented, cx } from "./ui";
 
 const NAV = [
   { to: ROUTES.overview, label: "nav.overview", icon: Home, end: true },
@@ -40,12 +41,24 @@ function LangToggle() {
 function AccountMenu({ name }: { name: string }) {
   const t = useT();
   const [open, setOpen] = useState(false);
-  const [confirming, setConfirming] = useState(false);
+  // só uma confirmação aberta por vez: trocar o link de compartilhar ou apagar a conta
+  const [mode, setMode] = useState<"link" | "delete" | null>(null);
   const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const [typed, setTyped] = useState("");
   const item = "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted transition hover:bg-surface-2 hover:text-text";
   const leave = (action: () => Promise<unknown>) => {
     setBusy(true);
     void action().then(() => window.location.assign("/"), () => setBusy(false));
+  };
+  // o link antigo deixa de funcionar na hora; quem trocou vai direto para o novo
+  const renewLink = () => {
+    setBusy(true);
+    setFailed(false);
+    void rotateShareLink().then(
+      (publicId) => window.location.assign(`/u/${publicId}`),
+      () => (setBusy(false), setFailed(true)),
+    );
   };
   return (
     <div className="flex flex-col gap-1">
@@ -54,20 +67,39 @@ function AccountMenu({ name }: { name: string }) {
           <button className={item} onClick={() => leave(logout)} disabled={busy}>
             <LogOut className="size-4" /> {t("space.signOut")}
           </button>
-          {confirming ? (
-            <div className="space-y-2 p-2 text-xs text-bad">
-              <p>{t("account.deleteWarn")}</p>
+          {mode === "link" ? (
+            <div className="space-y-2 p-2 text-xs text-muted">
+              <p>{t("account.newLinkWarn")}</p>
+              {failed && <p className="text-bad">{t("account.newLinkError")}</p>}
               <div className="flex gap-2">
-                <Button size="sm" onClick={() => leave(deleteAccount)} disabled={busy}>
-                  {t("account.deleteConfirm")}
+                <Button size="sm" onClick={renewLink} disabled={busy}>
+                  {t("account.newLinkConfirm")}
                 </Button>
-                <Button size="sm" variant="ghost" onClick={() => setConfirming(false)} disabled={busy}>
+                <Button size="sm" variant="ghost" onClick={() => (setMode(null), setFailed(false))} disabled={busy}>
                   {t("account.cancel")}
                 </Button>
               </div>
             </div>
           ) : (
-            <button className={cx(item, "hover:text-bad")} onClick={() => setConfirming(true)}>
+            <button className={item} onClick={() => (setMode("link"), setTyped(""))}>
+              <RefreshCw className="size-4" /> {t("account.newLink")}
+            </button>
+          )}
+          {mode === "delete" ? (
+            <div className="space-y-2 p-2 text-xs text-bad">
+              <p>{t("account.deleteWarn")}</p>
+              <Input label={t("account.deleteType", { name })} value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" />
+              <div className="flex gap-2">
+                <Button size="sm" onClick={() => leave(() => deleteAccount(typed))} disabled={busy || typed !== name}>
+                  {t("account.deleteConfirm")}
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => (setMode(null), setTyped(""))} disabled={busy}>
+                  {t("account.cancel")}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <button className={cx(item, "hover:text-bad")} onClick={() => (setMode("delete"), setFailed(false))}>
               <Trash2 className="size-4" /> {t("account.delete")}
             </button>
           )}
@@ -75,7 +107,7 @@ function AccountMenu({ name }: { name: string }) {
       )}
       <button
         className={cx(item, "justify-between font-medium text-text")}
-        onClick={() => (setOpen(!open), setConfirming(false))}
+        onClick={() => (setOpen(!open), setMode(null), setFailed(false), setTyped(""))}
         aria-expanded={open}
       >
         <span className="flex min-w-0 items-center gap-2">
@@ -85,6 +117,25 @@ function AccountMenu({ name }: { name: string }) {
         <ChevronUp className={cx("size-4 shrink-0 transition", !open && "rotate-180")} />
       </button>
     </div>
+  );
+}
+
+/** O texto de um item do menu. O "Meu perfil", depois de a pessoa escolher quem ela é, mostra o nome do jogador escolhido. */
+function NavLabel({ label }: { label: string }) {
+  const t = useT();
+  const me = useMe();
+  return label === ME.label && me ? <MyName account={me} /> : <>{t(label)}</>;
+}
+
+/** Nome do jogador escolhido (o da luta mais recente dele neste espaço). Enquanto a lista carrega, ou se ele não está aqui, fica "Meu perfil". */
+function MyName({ account }: { account: string }) {
+  const t = useT();
+  const { data } = useMeta();
+  const name = data?.players.find((p) => p.account === account)?.name;
+  return (
+    <span className="truncate" title={t("nav.myProfile")}>
+      {name ?? t("nav.myProfile")}
+    </span>
   );
 }
 
@@ -132,7 +183,7 @@ export function Layout() {
   const t = useT();
   const link = (active: boolean) =>
     cx(
-      "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition",
+      "flex min-w-0 items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition",
       active ? "bg-gold-soft text-gold" : "text-muted hover:bg-surface-2 hover:text-text",
     );
 
@@ -146,7 +197,7 @@ export function Layout() {
         <nav className="mt-8 flex flex-col gap-1">
           {nav.map(({ to, label, icon: Icon, end }) => (
             <NavLink key={to} to={to} end={end} className={({ isActive }) => link(isActive)}>
-              <Icon className="size-4" /> {t(label)}
+              <Icon className="size-4" /> <NavLabel label={label} />
             </NavLink>
           ))}
         </nav>
@@ -157,7 +208,7 @@ export function Layout() {
             // enquanto o login ainda carrega, nada aparece embaixo (evita piscar o Meu Perfil para o dono)
             !viewer.isLoading && (
               <NavLink to={ME.to} className={({ isActive }) => link(isActive)}>
-                <ME.icon className="size-4" /> {t(ME.label)}
+                <ME.icon className="size-4" /> <NavLabel label={ME.label} />
               </NavLink>
             )
           )}
@@ -176,7 +227,7 @@ export function Layout() {
         <nav className="flex gap-1 overflow-x-auto px-3 pb-2">
           {mobileNav.map(({ to, label, icon: Icon, end }) => (
             <NavLink key={to} to={to} end={end} className={({ isActive }) => cx(link(isActive), "shrink-0 px-2.5 py-1.5 text-xs")}>
-              <Icon className="size-3.5" /> {t(label)}
+              <Icon className="size-3.5" /> <NavLabel label={label} />
             </NavLink>
           ))}
         </nav>

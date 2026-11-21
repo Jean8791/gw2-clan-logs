@@ -127,7 +127,7 @@ describe("agregação: média ponderada pelo tempo ativo", () => {
 
   const ingest = (id: string, json: any) => {
     db.prepare("INSERT INTO fights (id, sha256, status, uploaded_at) VALUES (?, ?, 'parsing', ?)").run(id, "sha-" + id, new Date().toISOString());
-    return ingestJson(db, new Gw2Api(db, false), new MediaStore(db, offline), id, json, false);
+    return ingestJson(db, new Gw2Api(db, false), new MediaStore(db, offline), id, json, false, true);
   };
 
   it("10 min a 80% e 20 min a 20% dão 40%, e não 50%", async () => {
