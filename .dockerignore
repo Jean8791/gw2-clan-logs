@@ -6,3 +6,5 @@ tools
 .git
 *.zevtc
 *.evtc
+.env*
+!.env.example
