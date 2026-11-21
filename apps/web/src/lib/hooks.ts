@@ -69,30 +69,3 @@ export function useMe(): string | null {
     () => null,
   );
 }
-
-export function useSessionValue(key: string): [string, (v: string) => void] {
-  const get = () => {
-    try {
-      return sessionStorage.getItem(key) ?? "";
-    } catch {
-      return "";
-    }
-  };
-  const value = useSyncExternalStore(
-    (cb) => {
-      listeners.add(cb);
-      return () => listeners.delete(cb);
-    },
-    get,
-    () => "",
-  );
-  const set = (v: string) => {
-    try {
-      sessionStorage.setItem(key, v);
-    } catch {
-      /* ignora */
-    }
-    listeners.forEach((l) => l());
-  };
-  return [value, set];
-}

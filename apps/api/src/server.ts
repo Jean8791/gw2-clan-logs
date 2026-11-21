@@ -4,11 +4,12 @@ import { createWriteStream, existsSync } from "node:fs";
 import path from "node:path";
 import { pipeline } from "node:stream/promises";
 import { Transform } from "node:stream";
-import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
+import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest, type FastifyServerOptions } from "fastify";
 import multipart from "@fastify/multipart";
+import rateLimit from "@fastify/rate-limit";
 import fastifyStatic from "@fastify/static";
 import { MAX_JSON_MB, MAX_UPLOAD_MB, parseFilters, type Filters, type UploadResult } from "@gw2logs/shared";
-import { userByPublicId, type User } from "./auth.js";
+import { isAdmin, userByPublicId, type User } from "./auth.js";
 import { apiUser, registerAuthRoutes, sessionUser } from "./auth-routes.js";
 import { paths, type Config } from "./config.js";
 import { openDb, type DB } from "./db.js";
@@ -18,6 +19,7 @@ import { AttemptLimiter, folderBytes, safeEqual } from "./guards.js";
 import { MEDIA_KEY, MediaStore } from "./media.js";
 import * as q from "./queries.js";
 import { removeFights } from "./retention.js";
+import { isCrossSite, reportForSandbox, SAFE_METHODS, securityHeaders } from "./security.js";
 import { copyFight } from "./store.js";
 import { LogWorker } from "./worker.js";
 
@@ -43,7 +45,7 @@ declare module "fastify" {
 }
 
 /** `fetch` é trocável para os testes não falarem com o Discord de verdade. */
-export async function buildApp(cfg: Config, opts: { logger?: boolean; fetch?: typeof fetch } = {}): Promise<App> {
+export async function buildApp(cfg: Config, opts: { logger?: FastifyServerOptions["logger"]; fetch?: typeof fetch } = {}): Promise<App> {
   const p = paths(cfg.dataDir);
   await fs.mkdir(p.uploads, { recursive: true });
   await fs.mkdir(p.fights, { recursive: true });
@@ -58,6 +60,37 @@ export async function buildApp(cfg: Config, opts: { logger?: boolean; fetch?: ty
   const server = Fastify({ logger: opts.logger ?? false, bodyLimit: 1024 * 1024, trustProxy: cfg.trustProxy });
   const worker = new LogWorker(db, api, media, cfg, server.log);
 
+  // Pedido que muda estado vindo de outro site é recusado (só o cookie SameSite=Lax não basta dentro do mesmo site); cabeçalhos de segurança em
+  // toda resposta. Registrados antes das rotas e dos plugins, para valerem para todos.
+  const publicHost = new URL(cfg.publicUrl).host;
+  server.addHook("onRequest", async (req, reply) => {
+    if (!SAFE_METHODS.has(req.method) && isCrossSite(req.headers, publicHost)) {
+      return reply.code(403).send({ error: "Request blocked: it does not come from this site.", code: "badOrigin" });
+    }
+  });
+  const REPORT = /\/fights\/[^/?]+\/report(\?|$)/; // o relatório HTML do Elite Insights traz scripts próprios: a CSP do site o quebraria
+  server.addHook("onSend", async (req, reply, payload) => {
+    const html = String(reply.getHeader("content-type") ?? "").startsWith("text/html");
+    reply.headers(securityHeaders({ https: cfg.publicUrl.startsWith("https://"), html, report: REPORT.test(req.url) }));
+    return payload;
+  });
+
+  // Limite de pedidos por IP (o IP do X-Forwarded-For só vale com TRUST_PROXY). Só a API conta: o site (HTML, JS e CSS), os ícones e o alerta de
+  // fora do ar ficam de fora, para uma página que faz dezenas de pedidos, ou vários usuários atrás do mesmo IP, não esbarrem no limite.
+  // O login e o retorno do Discord têm um limite próprio e mais baixo (ver auth-routes.ts).
+  if (cfg.rateLimit.perMin > 0 || cfg.rateLimit.authPerMin > 0) {
+    await server.register(rateLimit, {
+      global: cfg.rateLimit.perMin > 0,
+      max: cfg.rateLimit.perMin,
+      timeWindow: "1 minute",
+      // vale a rota que o Fastify casou, não o texto da URL: `/%61pi/config` chega à mesma rota que `/api/config` e tem de contar igual
+      allowList: (req) => {
+        const route = req.routeOptions?.url ?? "";
+        return !route.startsWith("/api/") || route === "/api/health" || route.startsWith("/api/media/");
+      },
+      errorResponseBuilder: () => ({ statusCode: 429, error: "Too many requests. Try again in a moment.", code: "tooManyRequests" }),
+    });
+  }
   await server.register(multipart, { limits: { fileSize: MAX_UPLOAD, files: 50 } });
 
   const attempts = new AttemptLimiter(cfg.limits.maxFailedKeys, cfg.limits.blockMinutes * 60_000);
@@ -70,26 +103,36 @@ export async function buildApp(cfg: Config, opts: { logger?: boolean; fetch?: ty
     return true;
   };
 
-  /** Confere a senha de administrador. Sem ADMIN_KEY configurada a administração fica desligada, nunca aberta. */
+  /**
+   * Quem pode administrar (marcar guildas da aliança): a sessão do navegador de quem está em ADMIN_DISCORD_IDS, ou a ADMIN_KEY no cabeçalho
+   * (script). Sem nenhuma das duas configuradas a administração fica desligada, nunca aberta. Só a ADMIN_KEY errada conta como tentativa falha.
+   */
   const checkAdmin = (req: FastifyRequest, reply: FastifyReply): boolean => {
-    if (cfg.adminKey === "") {
-      reply.code(403).send({ error: "Administration is disabled: set ADMIN_KEY.", code: "adminDisabled" });
+    if (cfg.adminKey === "" && cfg.adminDiscordIds.length === 0) {
+      reply.code(403).send({ error: "Administration is disabled: set ADMIN_DISCORD_IDS or ADMIN_KEY.", code: "adminDisabled" });
       return false;
     }
-    if (ipBlocked(req, reply)) return false;
-    if (safeEqual(String(req.headers["x-upload-key"] ?? ""), cfg.adminKey)) {
-      attempts.reset(req.ip);
-      return true;
+    const user = sessionUser(db, cfg, req);
+    if (user && isAdmin(user, cfg)) return true;
+    if (cfg.adminKey !== "" && String(req.headers["x-upload-key"] ?? "") !== "") {
+      if (ipBlocked(req, reply)) return false;
+      if (safeEqual(String(req.headers["x-upload-key"]), cfg.adminKey)) {
+        attempts.reset(req.ip);
+        return true;
+      }
+      attempts.fail(req.ip);
+      reply.code(401).send({ error: "Wrong admin password.", code: "adminKey" });
+      return false;
     }
-    attempts.fail(req.ip);
-    reply.code(401).send({ error: "Wrong admin password.", code: "adminKey" });
+    if (user) reply.code(403).send({ error: "Only administrators can do this.", code: "notAdmin" });
+    else reply.code(401).send({ error: "Not signed in.", code: "notSignedIn" });
     return false;
   };
 
   /** Quem está enviando: a sessão do navegador ou o token pessoal. Token errado conta como tentativa falha. */
   const uploadUser = (req: FastifyRequest, reply: FastifyReply): User | null => {
     if (ipBlocked(req, reply)) return null;
-    const user = sessionUser(db, req) ?? apiUser(db, req);
+    const user = sessionUser(db, cfg, req) ?? apiUser(db, cfg, req);
     if (user) {
       attempts.reset(req.ip);
       return user;
@@ -202,7 +245,6 @@ export async function buildApp(cfg: Config, opts: { logger?: boolean; fetch?: ty
 
   server.get("/api/config", async () => ({
     loginAvailable: cfg.discord.clientId !== "" && cfg.discord.clientSecret !== "",
-    adminKeyRequired: cfg.adminKey !== "",
     eliteInsights: eiAvailable(cfg.eiDir),
     retentionDays: cfg.retentionDays,
     // só o que vale para cada usuário (os limites do servidor todo não são da conta de ninguém); tamanho por arquivo e por zip são constantes do shared
@@ -266,7 +308,7 @@ export async function buildApp(cfg: Config, opts: { logger?: boolean; fetch?: ty
         const mine = db.prepare("SELECT 1 FROM fights WHERE id = ? AND owner_id = ?").get(id, req.owner.id);
         const file = path.join(p.fightDir(id), "report.html");
         if (!mine || !existsSync(file)) return reply.code(404).send({ error: "Report not available for this fight.", code: "noReport" });
-        return reply.type("text/html; charset=utf-8").send(await fs.readFile(file));
+        return reply.type("text/html; charset=utf-8").send(reportForSandbox(await fs.readFile(file, "utf8")));
       });
 
       scope.get("/ranking", async (req) => {

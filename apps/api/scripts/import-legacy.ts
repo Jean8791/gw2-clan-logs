@@ -34,7 +34,7 @@ for (const r of rows) {
   db.prepare("INSERT INTO fights (id, sha256, status, uploaded_at, uploader, file_name) VALUES (?, ?, 'parsing', ?, ?, ?)").run(
     r.id, r.sha256, r.uploaded_at, r.uploader, r.file_name,
   );
-  await ingestJson(db, api, media, r.id, await readEiJsonGz(gz), existsSync(path.join(p.fightDir(r.id), "report.html")));
+  await ingestJson(db, api, media, r.id, await readEiJsonGz(gz), existsSync(path.join(p.fightDir(r.id), "report.html")), false); // false: JSON antigo, não troca nomes e ícones já salvos
   imported++;
 }
 const named = await api.resolvePendingGuilds(500);

@@ -20,14 +20,17 @@ export function parseJsonBuffer(buf: Buffer): any {
 
 export const readEiJsonGz = async (file: string) => parseJsonBuffer(zlib.gunzipSync(await fs.readFile(file)));
 
-/** Extrai e grava uma luta a partir do JSON do EI já carregado. */
-export async function ingestJson(db: DB, api: Gw2Api, media: MediaStore, id: string, json: any, hasReport: boolean) {
+/**
+ * Extrai e grava uma luta a partir do JSON do EI já carregado. `trusted` é verdadeiro só quando o JSON saiu do nosso Elite Insights; num
+ * .json enviado pelo usuário, nomes de habilidade e ícones já guardados (que valem para o site todo) não são trocados.
+ */
+export async function ingestJson(db: DB, api: Gw2Api, media: MediaStore, id: string, json: any, hasReport: boolean, trusted: boolean) {
   const f = extractFight(json);
   const mapName = await api.mapName(f.mapId);
-  saveFight(db, id, f, mapName, hasReport);
+  saveFight(db, id, f, mapName, hasReport, trusted);
   // ícones novos; falha aqui não invalida a luta (ensure nunca lança)
   const skillIds = new Set(f.players.flatMap((p) => p.skills.map((s) => s.id)));
-  await ensureMany(media, [...collectBuffIcons(json), ...collectSkillIcons(json, skillIds)]);
+  await ensureMany(media, [...collectBuffIcons(json), ...collectSkillIcons(json, skillIds)], trusted);
   await ensureProfessionIcons(api, media, f.players.map((p) => p.profession));
 }
 
@@ -36,7 +39,7 @@ async function ensureProfessionIcons(api: Gw2Api, media: MediaStore, professions
   const names = [...new Set(professions)].filter((n): n is string => !!n && /^\w+$/.test(n));
   if (!names.length) return;
   const icons = await api.professionIcons();
-  for (const name of names) if (icons[name]) await media.ensure(`prof:${name}`, icons[name]);
+  for (const name of names) if (icons[name]) await media.ensure(`prof:${name}`, icons[name], true); // vem da API oficial, não do JSON do usuário
 }
 
 export class LogWorker {
@@ -134,7 +137,7 @@ export class LogWorker {
 
       const json = parseJsonBuffer(await fs.readFile(jsonFile));
       if (html) await fs.rename(html, path.join(outDir, "report.html"));
-      await ingestJson(this.db, this.api, this.media, id, json, existsSync(path.join(outDir, "report.html")));
+      await ingestJson(this.db, this.api, this.media, id, json, existsSync(path.join(outDir, "report.html")), eiMs !== null);
 
       // o que importa já está no banco: o log enviado não precisa ficar. Em caso de erro ele fica, para tentar de novo.
       await fs.rm(src, { force: true });

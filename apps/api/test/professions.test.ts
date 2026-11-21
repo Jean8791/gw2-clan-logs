@@ -81,7 +81,7 @@ describe("ingestJson guarda os ícones das classes da luta", () => {
     const media = new MediaStore(db, f.fn);
     newFight("luta1");
 
-    await ingestJson(db, new Gw2Api(db, true, f.fn), media, "luta1", wvwFixture(), false);
+    await ingestJson(db, new Gw2Api(db, true, f.fn), media, "luta1", wvwFixture(), false, true);
 
     expect(media.get("prof:Firebrand")).not.toBeNull();
     expect(media.get("prof:Reaper")).not.toBeNull();
@@ -92,10 +92,10 @@ describe("ingestJson guarda os ícones das classes da luta", () => {
   it("troca o ícone antigo guardado quando a API aponta outro", async () => {
     const f = fakeFetch();
     const media = new MediaStore(db, f.fn);
-    await media.ensure("prof:Firebrand", icon("FIRE-LINHA")); // ícone errado, de uma versão anterior
+    await media.ensure("prof:Firebrand", icon("FIRE-LINHA"), true); // ícone errado, de uma versão anterior
     newFight("luta1");
 
-    await ingestJson(db, new Gw2Api(db, true, f.fn), media, "luta1", wvwFixture(), false);
+    await ingestJson(db, new Gw2Api(db, true, f.fn), media, "luta1", wvwFixture(), false, true);
 
     expect((db.prepare("SELECT source_url AS u FROM media WHERE key = 'prof:Firebrand'").get() as { u: string }).u).toBe(icon("FIRE"));
   });
@@ -106,11 +106,11 @@ describe("ingestJson guarda os ícones das classes da luta", () => {
     const api = new Gw2Api(db, true, f.fn);
     newFight("luta1");
     newFight("luta2");
-    await ingestJson(db, api, media, "luta1", wvwFixture(), false);
+    await ingestJson(db, api, media, "luta1", wvwFixture(), false, true);
     const consultas = () => f.calls.filter((u) => /\/v2\/(professions|specializations)/.test(u)).length;
     const antes = consultas();
 
-    await ingestJson(db, api, media, "luta2", wvwFixture(), false);
+    await ingestJson(db, api, media, "luta2", wvwFixture(), false, true);
 
     expect(antes).toBeGreaterThan(0);
     expect(consultas()).toBe(antes);
@@ -120,7 +120,7 @@ describe("ingestJson guarda os ícones das classes da luta", () => {
     const f = fakeFetch({ apiDown: true });
     newFight("luta1");
 
-    await ingestJson(db, new Gw2Api(db, true, f.fn), new MediaStore(db, f.fn), "luta1", wvwFixture(), false);
+    await ingestJson(db, new Gw2Api(db, true, f.fn), new MediaStore(db, f.fn), "luta1", wvwFixture(), false, true);
 
     expect((db.prepare("SELECT status FROM fights WHERE id = 'luta1'").get() as { status: string }).status).toBe("done");
   });

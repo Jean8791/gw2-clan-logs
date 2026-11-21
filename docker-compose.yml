@@ -5,14 +5,25 @@ services:
     build: .
     restart: unless-stopped
     environment:
-      ADMIN_KEY: ${ADMIN_KEY:?defina ADMIN_KEY no .env}
+      # quem administra o site (marcar guildas da aliança): IDs do Discord separados por vírgula, pelo login
+      ADMIN_DISCORD_IDS: ${ADMIN_DISCORD_IDS:-}
+      # opcional, só para script: senha de administrador no cabeçalho x-upload-key. Sem ela e sem ADMIN_DISCORD_IDS a administração fica desligada
+      ADMIN_KEY: ${ADMIN_KEY:-}
       # login com o Discord: o retorno é https://DOMINIO/api/auth/callback (cadastre no portal de desenvolvedores do Discord)
       DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID:?defina DISCORD_CLIENT_ID no .env}
       DISCORD_CLIENT_SECRET: ${DISCORD_CLIENT_SECRET:?defina DISCORD_CLIENT_SECRET no .env}
-      # opcional: IDs dos servidores do Discord do clã, separados por vírgula; vazio = qualquer conta do Discord entra
+      # IDs dos servidores do Discord do clã, separados por vírgula. Preencha esta lista e/ou a de usuários: com as duas vazias o servidor
+      # não sobe (qualquer conta do Discord entraria), a menos que ALLOW_ANY_DISCORD=true
       DISCORD_GUILD_IDS: ${DISCORD_GUILD_IDS:-}
-      # opcional: IDs dos usuários do Discord com acesso, separados por vírgula; vale junto com a lista de servidores; vazio = não restringe
+      # IDs dos usuários do Discord com acesso, separados por vírgula; vale junto com a lista de servidores; vazia = não restringe
       DISCORD_USER_IDS: ${DISCORD_USER_IDS:-}
+      # só com as duas listas vazias: true libera o login a qualquer conta do Discord, de propósito
+      ALLOW_ANY_DISCORD: ${ALLOW_ANY_DISCORD:-}
+      # opcional: pedidos por IP por minuto na API (vazio = 600; 0 desliga) e no login do Discord (vazio = 30)
+      RATE_LIMIT_PER_MIN: ${RATE_LIMIT_PER_MIN:-}
+      RATE_LIMIT_AUTH_PER_MIN: ${RATE_LIMIT_AUTH_PER_MIN:-}
+      # opcional: dias de validade do token pessoal do script de envio (vazio = 90)
+      API_TOKEN_DAYS: ${API_TOKEN_DAYS:-}
       PUBLIC_URL: https://${DOMINIO:?defina DOMINIO no .env}
       RETENTION_DAYS: ${RETENTION_DAYS:-30}
       # só o Caddy chega no app (a porta não é publicada), então o IP do X-Forwarded-For é confiável
@@ -20,6 +31,14 @@ services:
     # o Elite Insights usa até ~1,5 GB num log grande: sem teto, um envio ruim derruba a VM inteira.
     # Em VM de 1 GB, defina APP_MEM_LIMIT=800m no .env (logs grandes então falham com erro, sem derrubar o site).
     mem_limit: ${APP_MEM_LIMIT:-1500m}
+    # endurecimento: o app (e o Elite Insights, que processa arquivo de terceiros) roda sem root (usuário gw2logs, uid 10001, no Dockerfile),
+    # sem capacidades do Linux, sem ganhar privilégios e sem escrever fora de /data e /tmp. O /tmp em memória conta no mem_limit: por isso é pequeno.
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
     volumes:
       - dados:/data
 
