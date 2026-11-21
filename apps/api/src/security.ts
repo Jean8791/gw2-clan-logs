@@ -18,18 +18,41 @@ const CSP = [
   "frame-ancestors 'none'",
 ].join("; ");
 
+/**
+ * Relatório HTML do Elite Insights: tem scripts próprios (a CSP do site os quebraria) e é gerado a partir de um arquivo enviado por terceiros.
+ * `sandbox` sem `allow-same-origin` o põe numa origem opaca: roda scripts, mas não alcança o cookie da sessão nem a API do site.
+ */
+const REPORT_CSP = "sandbox allow-scripts";
+
+/**
+ * O relatório do Elite Insights lê `window.localStorage` (tema) sem tratar erro, e na origem opaca do sandbox esse acesso lança SecurityError:
+ * sem isto o relatório trava em "Loading data...". Anulado, ele segue sem guardar o tema (o código dele já trata a falta de storage).
+ */
+const NO_STORAGE_SHIM = '<script>try{window.localStorage}catch(e){Object.defineProperty(window,"localStorage",{value:null,configurable:true})}</script>';
+
+/**
+ * Põe o script acima logo depois do `<head>` do relatório, antes de qualquer script dele. Sem `<head>` (`<header>` não conta), entra depois do
+ * doctype, que tem de continuar na primeira linha para o navegador não cair em quirks mode, ou no começo se não houver doctype.
+ */
+export const reportForSandbox = (html: string): string => {
+  const inHead = html.replace(/<head(\s[^>]*)?>/i, (head) => head + NO_STORAGE_SHIM);
+  if (inHead !== html) return inHead;
+  const at = /^\s*<!doctype[^>]*>/i.exec(html)?.[0].length ?? 0;
+  return html.slice(0, at) + NO_STORAGE_SHIM + html.slice(at);
+};
+
 /** 180 dias, sem subdomínios e sem preload: o navegador que já viu o site em https não volta para http. */
 const HSTS = "max-age=15552000";
 
-/** Cabeçalhos de toda resposta. A CSP só vai nas páginas HTML do site (o relatório do Elite Insights tem scripts próprios e fica de fora). */
-export function securityHeaders(o: { https: boolean; html: boolean }): Record<string, string> {
+/** Cabeçalhos de toda resposta. A CSP do site só vai nas páginas HTML do site; o relatório do Elite Insights (`report`) leva só o sandbox. */
+export function securityHeaders(o: { https: boolean; html: boolean; report: boolean }): Record<string, string> {
   return {
     "x-content-type-options": "nosniff",
     "x-frame-options": "DENY",
     "referrer-policy": "no-referrer", // o endereço do espaço de um usuário tem um ID que não deve vazar
     "permissions-policy": "camera=(), microphone=(), geolocation=()",
     ...(o.https ? { "strict-transport-security": HSTS } : {}),
-    ...(o.html ? { "content-security-policy": CSP } : {}),
+    ...(o.html ? { "content-security-policy": o.report ? REPORT_CSP : CSP } : {}),
   };
 }
 

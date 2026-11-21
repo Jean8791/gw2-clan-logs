@@ -3,5 +3,7 @@
 	request_body {
 		max_size 85MB
 	}
+	# o Caddy anuncia "Server: Caddy" em toda resposta; não há por que dizer qual servidor está na frente
+	header -Server
 	reverse_proxy app:8080
 }
