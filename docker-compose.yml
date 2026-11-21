@@ -19,6 +19,9 @@ services:
       DISCORD_USER_IDS: ${DISCORD_USER_IDS:-}
       # só com as duas listas vazias: true libera o login a qualquer conta do Discord, de propósito
       ALLOW_ANY_DISCORD: ${ALLOW_ANY_DISCORD:-}
+      # opcional: pedidos por IP por minuto na API (vazio = 600; 0 desliga) e no login do Discord (vazio = 30)
+      RATE_LIMIT_PER_MIN: ${RATE_LIMIT_PER_MIN:-}
+      RATE_LIMIT_AUTH_PER_MIN: ${RATE_LIMIT_AUTH_PER_MIN:-}
       # opcional: dias de validade do token pessoal do script de envio (vazio = 90)
       API_TOKEN_DAYS: ${API_TOKEN_DAYS:-}
       PUBLIC_URL: https://${DOMINIO:?defina DOMINIO no .env}
