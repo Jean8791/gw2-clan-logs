@@ -1,5 +1,5 @@
-// Reprocessa todas as lutas a partir do JSON guardado (data/fights/<id>/ei.json.gz).
-// Use depois de mudar a extração (src/ingest.ts): não precisa reenviar os logs.
+// Reprocessa as lutas que ainda têm o JSON guardado (data/fights/<id>/ei.json.gz), sem reenviar os logs.
+// As lutas processadas depois de o servidor parar de guardar o JSON não entram (o total impresso no fim mostra quantas foram).
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { loadConfig, paths } from "../src/config.js";

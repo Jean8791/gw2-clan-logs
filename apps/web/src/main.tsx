@@ -12,6 +12,10 @@ import { PlayerPage, MePage } from "./pages/Player";
 import { ComparePage } from "./pages/Compare";
 import { GuildsPage } from "./pages/Guilds";
 import { DaysPage } from "./pages/Days";
+import { UploadPage } from "./pages/Upload";
+import { LandingPage } from "./pages/Landing";
+import { OwnerOnly } from "./components/OwnerOnly";
+import { spaceBase, spaceId } from "./lib/space";
 import { Empty } from "./components/ui";
 import { t } from "./lib/i18n";
 import "./index.css";
@@ -25,28 +29,32 @@ function NotFound() {
   return novo ? <Navigate to={`${novo}${search}${hash}`} replace /> : <Empty title={t("notfound.title")} />;
 }
 
-const router = createBrowserRouter([
+const routes = [
   {
     element: <Layout />,
     children: [
       { path: ROUTES.overview, element: <OverviewPage /> },
       { path: ROUTES.days, element: <DaysPage /> },
-      { path: ROUTES.fights, element: <FightsPage /> },
+      { path: ROUTES.fights, element: <FightsPage />, handle: { fill: true } },
       { path: `${ROUTES.fights}/:id`, element: <FightPage /> },
-      { path: ROUTES.ranking, element: <RankingPage /> },
+      { path: ROUTES.ranking, element: <RankingPage />, handle: { fill: true } },
       { path: "/players/:account", element: <PlayerPage /> },
       { path: ROUTES.me, element: <MePage /> },
       { path: ROUTES.compare, element: <ComparePage /> },
-      { path: ROUTES.guilds, element: <GuildsPage /> },
+      { path: ROUTES.guilds, element: <GuildsPage />, handle: { fill: true } },
+      { path: ROUTES.import, element: <OwnerOnly><UploadPage /></OwnerOnly> },
       { path: "*", element: <NotFound /> },
     ],
   },
-]);
+];
+
+/** Fora de um espaço (/u/:id) só existe a página inicial; dentro dele, o roteador usa o espaço como base dos links. */
+const router = spaceId ? createBrowserRouter(routes, { basename: spaceBase }) : null;
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
+      {router ? <RouterProvider router={router} /> : <LandingPage />}
     </QueryClientProvider>
   </StrictMode>,
 );

@@ -6,6 +6,7 @@ import { AttemptLimiter } from "../src/guards.js";
 import { loadConfig } from "../src/config.js";
 import { buildApp, type App } from "../src/server.js";
 import { wvwFixture } from "./fixture.js";
+import { criarUsuario } from "./usuarios.js";
 
 function multipart(files: { name: string; content: string }[]) {
   const boundary = "----teste" + Math.random().toString(16).slice(2);
@@ -18,10 +19,12 @@ function multipart(files: { name: string; content: string }[]) {
 const fightJson = (n: number) => JSON.stringify({ ...wvwFixture(), fightName: `Luta ${n}` });
 
 let app: App | undefined;
+let token = ""; // token pessoal do usuário de teste
 let dir = "";
 async function start(env: Record<string, string> = {}) {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), "gw2logs-lim-"));
-  app = await buildApp(loadConfig({ DATA_DIR: dir, UPLOAD_KEY: "segredo", GW2_API: "off", WEB_DIR: path.join(dir, "sem-site"), ...env }));
+  app = await buildApp(loadConfig({ DATA_DIR: dir, GW2_API: "off", WEB_DIR: path.join(dir, "sem-site"), ...env }));
+  token = criarUsuario(app, "1").token;
   return app;
 }
 afterEach(async () => {
@@ -32,7 +35,7 @@ afterEach(async () => {
   dir = "";
 });
 
-const upload = (a: App, files: { name: string; content: string }[], key: string | null = "segredo", extra: Record<string, unknown> = {}) => {
+const upload = (a: App, files: { name: string; content: string }[], key: string | null = token, extra: Record<string, unknown> = {}) => {
   const m = multipart(files);
   return a.server.inject({ method: "POST", url: "/api/upload", payload: m.payload, headers: { ...m.headers, ...(key ? { "x-upload-key": key } : {}) }, ...extra });
 };
@@ -82,7 +85,7 @@ describe("envio: senha errada repetida", () => {
     const a = await start({ UPLOAD_MAX_FAILS: "3" });
     for (let i = 0; i < 3; i++) expect((await upload(a, [{ name: "a.json", content: "{}" }], "errada")).statusCode).toBe(401);
 
-    const res = await upload(a, [{ name: "a.json", content: fightJson(1) }], "segredo");
+    const res = await upload(a, [{ name: "a.json", content: fightJson(1) }], token);
 
     expect(res.statusCode).toBe(429);
     expect(res.json().code).toBe("tooManyAttempts");
@@ -94,14 +97,14 @@ describe("envio: senha errada repetida", () => {
     const from = (ip: string) => ({ remoteAddress: ip });
     for (let i = 0; i < 3; i++) await upload(a, [{ name: "a.json", content: "{}" }], "errada", from("9.9.9.9"));
 
-    const outro = await upload(a, [{ name: "a.json", content: fightJson(1) }], "segredo", from("8.8.8.8"));
+    const outro = await upload(a, [{ name: "a.json", content: fightJson(1) }], token, from("8.8.8.8"));
     expect(outro.statusCode).toBe(200);
 
     await upload(a, [{ name: "a.json", content: "{}" }], "errada", from("7.7.7.7"));
     await upload(a, [{ name: "a.json", content: "{}" }], "errada", from("7.7.7.7"));
-    expect((await upload(a, [{ name: "a.json", content: fightJson(2) }], "segredo", from("7.7.7.7"))).statusCode).toBe(200);
+    expect((await upload(a, [{ name: "a.json", content: fightJson(2) }], token, from("7.7.7.7"))).statusCode).toBe(200);
     await upload(a, [{ name: "a.json", content: "{}" }], "errada", from("7.7.7.7"));
-    expect((await upload(a, [{ name: "a.json", content: fightJson(3) }], "segredo", from("7.7.7.7"))).statusCode).toBe(200);
+    expect((await upload(a, [{ name: "a.json", content: fightJson(3) }], token, from("7.7.7.7"))).statusCode).toBe(200);
   });
 
   it("atrás do proxy (TRUST_PROXY) conta o IP do X-Forwarded-For, e sem ele não confia no cabeçalho", async () => {
@@ -113,8 +116,8 @@ describe("envio: senha errada repetida", () => {
     await send("5.5.5.5", "errada");
     await send("5.5.5.5", "errada");
 
-    expect((await send("5.5.5.5", "segredo")).statusCode).toBe(429);
-    expect((await send("6.6.6.6", "segredo")).statusCode).not.toBe(429);
+    expect((await send("5.5.5.5", token)).statusCode).toBe(429);
+    expect((await send("6.6.6.6", token)).statusCode).not.toBe(429);
   });
 
   it("sem TRUST_PROXY, um X-Forwarded-For inventado não escapa do bloqueio", async () => {
@@ -125,7 +128,7 @@ describe("envio: senha errada repetida", () => {
     await send("1.1.1.1", "errada");
     await send("2.2.2.2", "errada");
 
-    expect((await send("3.3.3.3", "segredo")).statusCode).toBe(429);
+    expect((await send("3.3.3.3", token)).statusCode).toBe(429);
   });
 
   it("a senha de administrador também conta nos erros", async () => {
@@ -210,11 +213,35 @@ describe("envio: limites de capacidade", () => {
   });
 });
 
+describe("envio: limites por usuário (um não esgota a cota dos outros)", () => {
+  const donoDe = (a: App, discordId: string) => (a.db.prepare("SELECT id FROM users WHERE discord_id = ?").get(discordId) as { id: number }).id;
+  const putOwned = (a: App, id: string, status: string, owner: number) =>
+    a.db.prepare("INSERT INTO fights (id, sha256, status, uploaded_at, owner_id) VALUES (?, ?, ?, ?, ?)").run(id, "sha-" + id, status, new Date().toISOString(), owner);
+
+  it("fila cheia de um usuário recusa só ele; o outro continua enviando", async () => {
+    const a = await start({ UPLOAD_MAX_QUEUE_USER: "1" });
+    const beto = criarUsuario(a, "2", "beto");
+    putOwned(a, "q1", "queued", donoDe(a, "1"));
+
+    expect((await upload(a, [{ name: "a.json", content: fightJson(1) }])).json()[0]).toMatchObject({ code: "queueFull" });
+    expect((await upload(a, [{ name: "b.json", content: fightJson(2) }], beto.token)).json()[0].status).toBe("queued");
+  });
+
+  it("limite por hora de um usuário recusa só ele", async () => {
+    const a = await start({ UPLOAD_MAX_PER_HOUR_USER: "1" });
+    const beto = criarUsuario(a, "2", "beto");
+    putOwned(a, "d1", "done", donoDe(a, "1"));
+
+    expect((await upload(a, [{ name: "a.json", content: fightJson(1) }])).json()[0]).toMatchObject({ code: "hourlyLimit" });
+    expect((await upload(a, [{ name: "b.json", content: fightJson(2) }], beto.token)).json()[0].status).toBe("queued");
+  });
+});
+
 describe("configuração dos limites", () => {
   it("valores padrão sensatos", () => {
     const c = loadConfig({});
 
-    expect(c.limits).toEqual({ maxFailedKeys: 5, blockMinutes: 15, maxQueue: 30, maxPerHour: 500, maxUploadsMb: 4096 });
+    expect(c.limits).toEqual({ maxFailedKeys: 5, blockMinutes: 15, maxQueue: 30, maxPerHour: 500, maxUploadsMb: 4096, maxQueuePerUser: 10, maxPerHourPerUser: 200 });
     expect(c.trustProxy).toBe(false);
   });
 

@@ -1,5 +1,13 @@
+import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
+
+/** Compara textos em tempo constante (senha, state). */
+export const safeEqual = (a: string, b: string) => {
+  const x = Buffer.from(a);
+  const y = Buffer.from(b);
+  return x.length === y.length && crypto.timingSafeEqual(x, y);
+};
 
 interface Attempts {
   fails: number;
