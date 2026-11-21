@@ -7,6 +7,7 @@ import { RetentionNotice } from "../components/RetentionNotice";
 import { Button, Card, ErrorBox, PageHeader, Rich, cx } from "../components/ui";
 import { createToken, uploadLog, useConfig, useFights } from "../lib/api";
 import { codeText, fightErrorText } from "../lib/errors";
+import { date } from "../lib/format";
 import { t } from "../lib/i18n";
 
 const ACCEPT = [".zevtc", ".evtc", ".zip", ".json"];
@@ -267,14 +268,14 @@ export function UploadPage() {
 
 /** Gera o token do script de envio e mostra, uma vez só, as duas linhas de configuração. */
 export function ScriptCard() {
-  const [token, setToken] = useState<string | null>(null);
+  const [created, setCreated] = useState<{ token: string; expiresAt: string } | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [copied, setCopied] = useState(false);
-  const config = token ? `GW2LOGS_URL=${window.location.origin}\nGW2LOGS_KEY=${token}` : "";
+  const config = created ? `GW2LOGS_URL=${window.location.origin}\nGW2LOGS_KEY=${created.token}` : "";
 
   const generate = () => {
     setError(null);
-    createToken().then(setToken, setError);
+    createToken().then(setCreated, setError);
   };
   const copy = () => {
     void navigator.clipboard?.writeText(config).then(() => {
@@ -287,10 +288,11 @@ export function ScriptCard() {
     <Card title={<span className="inline-flex items-center gap-2"><KeyRound className="size-4 text-gold" /> {t("upload.script.title")}</span>}>
       <div className="space-y-3 px-5 py-4 text-sm text-muted">
         <p>{t("upload.script.help")}</p>
-        {token && (
+        {created && (
           <>
             <pre className="overflow-x-auto rounded-lg bg-surface-3 p-3 text-xs text-text">{config}</pre>
             <p className="text-gold">{t("upload.script.once")}</p>
+            <p>{t("upload.script.expires", { date: date(created.expiresAt) })}</p>
             <Button size="sm" onClick={copy}>
               {copied ? t("upload.script.copied") : t("upload.script.copy")}
             </Button>
@@ -298,8 +300,8 @@ export function ScriptCard() {
         )}
         {error != null && <ErrorBox error={error} />}
         <div>
-          <Button size="sm" variant={token ? "outline" : "primary"} onClick={generate}>
-            {token ? t("upload.script.regenerate") : t("upload.script.generate")}
+          <Button size="sm" variant={created ? "outline" : "primary"} onClick={generate}>
+            {created ? t("upload.script.regenerate") : t("upload.script.generate")}
           </Button>
         </div>
       </div>

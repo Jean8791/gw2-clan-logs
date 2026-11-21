@@ -13,6 +13,8 @@ services:
       DISCORD_GUILD_IDS: ${DISCORD_GUILD_IDS:-}
       # opcional: IDs dos usuários do Discord com acesso, separados por vírgula; vale junto com a lista de servidores; vazio = não restringe
       DISCORD_USER_IDS: ${DISCORD_USER_IDS:-}
+      # opcional: dias de validade do token pessoal do script de envio (vazio = 90)
+      API_TOKEN_DAYS: ${API_TOKEN_DAYS:-}
       PUBLIC_URL: https://${DOMINIO:?defina DOMINIO no .env}
       RETENTION_DAYS: ${RETENTION_DAYS:-30}
       # só o Caddy chega no app (a porta não é publicada), então o IP do X-Forwarded-For é confiável
