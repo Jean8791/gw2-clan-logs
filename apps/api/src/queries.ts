@@ -15,6 +15,7 @@ import {
   type PlayerOptions,
   type PlayerProfile,
   type PlayerSkill,
+  type ProfessionCount,
   type RankingRow,
 } from "@gw2logs/shared";
 import { STAT_COL, type DB } from "./db.js";
@@ -150,10 +151,10 @@ export function fightDetail(db: DB, id: string, owner: number): FightDetail | nu
 
 export function ranking(db: DB, fl: Filters): RankingRow[] {
   const { where, params } = combined(fl);
-  // SQLite: com um único MAX(), as colunas "soltas" vêm da linha da luta mais recente (nome, classe e guilda atuais)
+  // SQLite: com um único MAX(), as colunas "soltas" vêm da linha da luta mais recente (nome e guilda atuais; a classe é tratada à parte, abaixo)
   const rows = db
     .prepare(
-      `SELECT ps.account, MAX(f.time_start) AS lastSeen, ps.name, ps.profession, ps.guild_id AS guildId,
+      `SELECT ps.account, MAX(f.time_start) AS lastSeen, ps.name, ps.guild_id AS guildId,
               SUM(ps.role = 'support') AS supportFights, ${AGG_SELECT}
        FROM player_stats ps JOIN fights f ON f.id = ps.fight_id
        WHERE ${where}
@@ -161,7 +162,34 @@ export function ranking(db: DB, fl: Filters): RankingRow[] {
        ORDER BY "damage" DESC`,
     )
     .all(params) as any[];
-  return rows.map((r) => ({ ...toAggregate(r), account: r.account, name: r.name, profession: r.profession, guildId: r.guildId, supportFights: r.supportFights }));
+  // O nome e a guilda são os da luta mais recente (os atuais). A classe não: quem jogou de duas classes teria as lutas das duas somadas
+  // nos totais, mas só a classe da última na linha. Por isso a linha leva todas, da mais jogada para a menos (empate: a mais recente).
+  const classes = new Map<string, ProfessionCount[]>();
+  const perClass = db
+    .prepare(
+      `SELECT ps.account, ps.profession, COUNT(*) AS fights
+       FROM player_stats ps JOIN fights f ON f.id = ps.fight_id
+       WHERE ${where} AND ps.profession IS NOT NULL
+       GROUP BY ps.account, ps.profession
+       ORDER BY fights DESC, MAX(f.time_start) DESC`,
+    )
+    .all(params) as { account: string; profession: string; fights: number }[];
+  for (const c of perClass) {
+    if (!classes.has(c.account)) classes.set(c.account, []);
+    classes.get(c.account)!.push({ profession: c.profession, fights: c.fights });
+  }
+  return rows.map((r) => {
+    const professions = classes.get(r.account) ?? [];
+    return {
+      ...toAggregate(r),
+      account: r.account,
+      name: r.name,
+      profession: professions[0]?.profession ?? null,
+      professions,
+      guildId: r.guildId,
+      supportFights: r.supportFights,
+    };
+  });
 }
 
 /** Soma de todas as linhas de jogador com os filtros (base para "média do squad" por minuto). */
