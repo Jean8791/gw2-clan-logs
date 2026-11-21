@@ -39,6 +39,8 @@ export interface Config {
   trustProxy: boolean;
   /** Dias que o token pessoal de envio vale; depois é preciso gerar outro no site. */
   apiTokenDays: number;
+  /** Limite de pedidos por IP por minuto: `perMin` para a API toda (0 desliga) e `authPerMin` para o login e o retorno do Discord (0 = só o geral). */
+  rateLimit: { perMin: number; authPerMin: number };
   /** Gerar o relatório HTML do Elite Insights (40 a 50 MB de disco e ~300 MB de memória a mais por luta grande). */
   eiHtml: boolean;
   limits: UploadLimits;
@@ -61,6 +63,12 @@ export interface UploadLimits {
 const positive = (raw: string | undefined, fallback: number) => {
   const n = Number(raw);
   return raw !== undefined && raw !== "" && Number.isFinite(n) && n > 0 ? n : fallback;
+};
+
+/** Número inteiro, zero ou positivo, da variável de ambiente (0 desliga); vazio, decimal ou inválido usa o padrão (0,5 não pode virar 0 sem querer). */
+const nonNegative = (raw: string | undefined, fallback: number) => {
+  const n = Number(raw);
+  return raw !== undefined && raw.trim() !== "" && Number.isInteger(n) && n >= 0 ? n : fallback;
 };
 
 /** Lista de IDs separados por vírgula: tira espaços e ignora vazios. */
@@ -88,6 +96,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     gw2Api: env.GW2_API !== "off",
     trustProxy: env.TRUST_PROXY === "true",
     apiTokenDays: positive(env.API_TOKEN_DAYS, DEFAULT_API_TOKEN_DAYS),
+    rateLimit: { perMin: nonNegative(env.RATE_LIMIT_PER_MIN, 600), authPerMin: nonNegative(env.RATE_LIMIT_AUTH_PER_MIN, 30) },
     eiHtml: env.EI_HTML === "true",
     limits: {
       maxFailedKeys: positive(env.UPLOAD_MAX_FAILS, 5),

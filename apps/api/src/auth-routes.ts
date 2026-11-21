@@ -50,7 +50,10 @@ export function registerAuthRoutes(server: FastifyInstance, db: DB, cfg: Config,
   /** Erro no retorno do Discord: volta para a página inicial com o aviso (quem está no navegador não vê JSON) e limpa o state para a próxima tentativa. */
   const backToStart = (reply: FastifyReply, erro: "badState" | "loginFailed") => reply.header("set-cookie", clear(STATE_COOKIE, "/api/auth")).redirect(`/?erro=${erro}`);
 
-  server.get("/api/auth/login", async (_req, reply) => {
+  // o login e o retorno chamam o Discord: limite próprio e mais baixo por IP (uma pessoa normal não chega perto)
+  const authLimit = cfg.rateLimit.authPerMin > 0 ? { config: { rateLimit: { max: cfg.rateLimit.authPerMin, timeWindow: "1 minute" } } } : {};
+
+  server.get("/api/auth/login", authLimit, async (_req, reply) => {
     if (!enabled) return reply.code(503).send({ error: "Login is not configured.", code: "loginOff" });
     const state = crypto.randomBytes(16).toString("base64url");
     const url = new URL("/oauth2/authorize", DISCORD);
@@ -58,7 +61,7 @@ export function registerAuthRoutes(server: FastifyInstance, db: DB, cfg: Config,
     return reply.header("set-cookie", cookieHeader(STATE_COOKIE, state, { secure, maxAgeSec: STATE_MINUTES * 60, path: "/api/auth" })).redirect(url.toString());
   });
 
-  server.get<{ Querystring: { code?: string; state?: string; error?: string } }>("/api/auth/callback", async (req, reply) => {
+  server.get<{ Querystring: { code?: string; state?: string; error?: string } }>("/api/auth/callback", authLimit, async (req, reply) => {
     const { code, state, error } = req.query;
     // quem cancela na tela do Discord volta sem código (error=access_denied): é só voltar para a entrada, sem sessão
     if (error) return reply.header("set-cookie", clear(STATE_COOKIE, "/api/auth")).redirect("/");

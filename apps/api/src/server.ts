@@ -6,6 +6,7 @@ import { pipeline } from "node:stream/promises";
 import { Transform } from "node:stream";
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest, type FastifyServerOptions } from "fastify";
 import multipart from "@fastify/multipart";
+import rateLimit from "@fastify/rate-limit";
 import fastifyStatic from "@fastify/static";
 import { MAX_JSON_MB, MAX_UPLOAD_MB, parseFilters, type Filters, type UploadResult } from "@gw2logs/shared";
 import { isAdmin, userByPublicId, type User } from "./auth.js";
@@ -74,6 +75,22 @@ export async function buildApp(cfg: Config, opts: { logger?: FastifyServerOption
     return payload;
   });
 
+  // Limite de pedidos por IP (o IP do X-Forwarded-For só vale com TRUST_PROXY). Só a API conta: o site (HTML, JS e CSS), os ícones e o alerta de
+  // fora do ar ficam de fora, para uma página que faz dezenas de pedidos, ou vários usuários atrás do mesmo IP, não esbarrem no limite.
+  // O login e o retorno do Discord têm um limite próprio e mais baixo (ver auth-routes.ts).
+  if (cfg.rateLimit.perMin > 0 || cfg.rateLimit.authPerMin > 0) {
+    await server.register(rateLimit, {
+      global: cfg.rateLimit.perMin > 0,
+      max: cfg.rateLimit.perMin,
+      timeWindow: "1 minute",
+      // vale a rota que o Fastify casou, não o texto da URL: `/%61pi/config` chega à mesma rota que `/api/config` e tem de contar igual
+      allowList: (req) => {
+        const route = req.routeOptions?.url ?? "";
+        return !route.startsWith("/api/") || route === "/api/health" || route.startsWith("/api/media/");
+      },
+      errorResponseBuilder: () => ({ statusCode: 429, error: "Too many requests. Try again in a moment.", code: "tooManyRequests" }),
+    });
+  }
   await server.register(multipart, { limits: { fileSize: MAX_UPLOAD, files: 50 } });
 
   const attempts = new AttemptLimiter(cfg.limits.maxFailedKeys, cfg.limits.blockMinutes * 60_000);
