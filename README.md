@@ -35,7 +35,7 @@ ArcDPS (.zevtc) ──site (Importar logs) ou scripts/enviar-logs.sh──▶ AP
 | Parte | Tecnologia |
 |---|---|
 | API | Node 22 + TypeScript, Fastify, SQLite (better-sqlite3) |
-| Site | React 19 + Vite, Tailwind CSS 4, TanStack Query, Recharts |
+| Site | React 19 + Vite, Tailwind CSS 4, TanStack Query, Recharts; as fontes (Inter e Cinzel, licença OFL) saem do próprio site, em `apps/web/public/fonts`, sem chamar o Google |
 | Parser | [Elite Insights](https://github.com/baaron4/GW2-Elite-Insights-Parser) CLI (.NET), chamado pela API |
 | Testes e CI | Vitest, GitHub Actions |
 

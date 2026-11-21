@@ -57,14 +57,14 @@ describe("cabeçalhos de segurança", () => {
     expect(hsts).toBe("max-age=15552000");
   });
 
-  it("a página HTML do site traz a CSP: só o próprio site, o Google Fonts e nada de enquadrar o site", async () => {
+  it("a página HTML do site traz a CSP: só o próprio site (fontes incluídas) e nada de enquadrar o site", async () => {
     for (const url of ["/", "/ranking"]) {
       const csp = cabecalho(await app.server.inject(url), "content-security-policy")!;
 
       expect(csp).toContain("default-src 'self'");
       expect(csp).toContain("frame-ancestors 'none'");
-      expect(csp).toContain("https://fonts.googleapis.com");
-      expect(csp).toContain("https://fonts.gstatic.com");
+      expect(csp).toContain("font-src 'self'");
+      expect(csp).not.toMatch(/googleapis|gstatic/); // as fontes são do próprio site: nada do Google na política
       expect(csp).toContain("object-src 'none'");
       expect(csp).toMatch(/script-src 'self'(;|$)/); // sem 'unsafe-inline' nos scripts
     }

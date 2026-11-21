@@ -2,14 +2,14 @@
 import type { IncomingHttpHeaders } from "node:http";
 
 /**
- * Política de conteúdo das páginas HTML: só o próprio site, mais as fontes do Google (o index.html as carrega), estilos inline (os gráficos
- * usam) e nada de enquadrar o site em outro (clickjacking). Scripts só do próprio site, sem `unsafe-inline`.
+ * Política de conteúdo das páginas HTML: só o próprio site (as fontes também são dele), estilos inline (os gráficos usam) e nada de
+ * enquadrar o site em outro (clickjacking). Scripts só do próprio site, sem `unsafe-inline`.
  */
 const CSP = [
   "default-src 'self'",
   "script-src 'self'",
-  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-  "font-src https://fonts.gstatic.com",
+  "style-src 'self' 'unsafe-inline'",
+  "font-src 'self'",
   "img-src 'self' data:",
   "connect-src 'self'",
   "object-src 'none'",
