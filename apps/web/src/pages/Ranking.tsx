@@ -48,7 +48,27 @@ export function RankingPage() {
     },
     { id: "pos", header: "#", align: "right", cell: (_r, i) => <span className="text-faint">{i + 1}</span> },
     { id: "player", header: t("table.player"), sticky: true, fixed: true, sort: (r) => r.name ?? r.account, cell: (r) => <PlayerLink account={r.account} name={r.name} /> },
-    { id: "prof", header: t("table.class"), sort: (r) => r.profession ?? "", cell: (r) => <Profession profession={r.profession} /> },
+    {
+      id: "prof",
+      header: t("table.class"),
+      sort: (r) => r.profession ?? "",
+      // quem jogou de mais de uma classe no período mostra todas, com as lutas de cada uma (a primeira é a mais jogada)
+      cell: (r) =>
+        r.professions.length > 1 ? (
+          <span className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
+            {r.professions.map((p) => (
+              <span key={p.profession} className="inline-flex items-center gap-1">
+                <Profession profession={p.profession} />
+                <span className="tabular text-xs text-faint" title={t("ranking.classFights", { n: p.fights })}>
+                  {p.fights}
+                </span>
+              </span>
+            ))}
+          </span>
+        ) : (
+          <Profession profession={r.profession} />
+        ),
+    },
     { id: "guild", header: t("table.guild"), cell: (r) => <GuildTag id={r.guildId} /> },
     { id: "fights", header: t("table.fights"), align: "right", sort: (r) => r.fights, cell: (r) => r.fights },
     { id: "time", header: t("table.time"), align: "right", sort: (r) => r.activeMs, cell: (r) => <span className="text-muted">{duration(r.activeMs)}</span> },

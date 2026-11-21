@@ -284,10 +284,19 @@ export interface Aggregate extends Stats {
   activeMs: number;
 }
 
+/** Quantas lutas o jogador fez com uma classe. */
+export interface ProfessionCount {
+  profession: string;
+  fights: number;
+}
+
 export interface RankingRow extends Aggregate {
   account: string;
   name: string | null;
+  /** A classe que o jogador mais jogou no período (empate: a mais recente). */
   profession: string | null;
+  /** Todas as classes do jogador no período, da mais jogada para a menos. Quem jogou de uma só tem uma. */
+  professions: ProfessionCount[];
   guildId: string | null;
   supportFights: number;
 }
