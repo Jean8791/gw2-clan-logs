@@ -22,6 +22,8 @@ export interface Config {
    * Preenchidas as duas, valem juntas. Vazia, a lista não restringe.
    */
   discord: { clientId: string; clientSecret: string; guildIds: string[]; userIds: string[] };
+  /** Liberar de propósito o login a qualquer conta do Discord (as duas listas vazias). Sem isto o servidor não sobe nessa situação. */
+  allowAnyDiscord: boolean;
   /** Pasta com o site compilado (apps/web/dist). */
   webDir: string;
   /** Dias que as lutas ficam guardadas. 0 = guardar para sempre. */
@@ -72,6 +74,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       guildIds: idList(env.DISCORD_GUILD_IDS),
       userIds: idList(env.DISCORD_USER_IDS),
     },
+    allowAnyDiscord: env.ALLOW_ANY_DISCORD === "true",
     webDir: path.resolve(env.WEB_DIR ?? path.join(repoRoot, "apps", "web", "dist")),
     retentionDays: Number(env.RETENTION_DAYS ?? 0),
     gw2Api: env.GW2_API !== "off",
@@ -87,6 +90,19 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       maxPerHourPerUser: positive(env.UPLOAD_MAX_PER_HOUR_USER, 200),
     },
   };
+}
+
+/**
+ * Com o login ligado, as duas listas vazias deixam entrar e enviar logs qualquer conta do Discord. Isso tem que ser escolha, não esquecimento:
+ * quem sobe o servidor assim sem `ALLOW_ANY_DISCORD=true` recebe o erro. Roda no index.ts (não no buildApp, que os testes usam sem listas).
+ */
+export function assertLoginRestricted(cfg: Config): void {
+  const loginOn = cfg.discord.clientId !== "" && cfg.discord.clientSecret !== "";
+  if (!loginOn || cfg.allowAnyDiscord || cfg.discord.userIds.length > 0 || cfg.discord.guildIds.length > 0) return;
+  throw new Error(
+    "Login do Discord ligado sem restrição: qualquer conta do Discord entraria e enviaria logs. Preencha DISCORD_USER_IDS ou DISCORD_GUILD_IDS, " +
+      "ou defina ALLOW_ANY_DISCORD=true se for isso mesmo que você quer.",
+  );
 }
 
 export const paths = (dataDir: string) => ({
