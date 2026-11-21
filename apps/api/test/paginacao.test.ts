@@ -34,19 +34,20 @@ interface Luta {
   name?: string | null;
   file?: string | null;
   uploader?: string | null;
+  recordedBy?: string | null;
 }
 
 /** Insere lutas direto no banco (sem passar pelo Elite Insights). Devolve os ids. */
 function inserir(owner: number, lutas: Luta[]) {
   const ins = app.db.prepare(
-    `INSERT INTO fights (id, sha256, status, uploaded_at, uploader, file_name, fight_name, map_id, time_start, duration_ms, squad_count, squad_damage, squad_kills, squad_deaths, enemy_deaths, owner_id)
-     VALUES (@id, @sha, @status, @up, @uploader, @file, @name, @map, @time, @dur, @squad, @damage, @kills, @deaths, @enemyDeaths, @owner)`,
+    `INSERT INTO fights (id, sha256, status, uploaded_at, uploader, recorded_by, file_name, fight_name, map_id, time_start, duration_ms, squad_count, squad_damage, squad_kills, squad_deaths, enemy_deaths, owner_id)
+     VALUES (@id, @sha, @status, @up, @uploader, @recordedBy, @file, @name, @map, @time, @dur, @squad, @damage, @kills, @deaths, @enemyDeaths, @owner)`,
   );
   app.db.transaction(() => {
     for (const l of lutas) {
       ins.run({
         id: l.id, sha: "sha-" + l.id, status: l.status ?? "done", up: new Date().toISOString(),
-        uploader: l.uploader ?? null, file: l.file ?? null, name: l.name === undefined ? l.id : l.name,
+        uploader: l.uploader ?? null, recordedBy: l.recordedBy ?? null, file: l.file ?? null, name: l.name === undefined ? l.id : l.name,
         map: l.mapId ?? 38, time: l.time === undefined ? null : l.time, dur: l.duration ?? 60_000, squad: l.squad === undefined ? 10 : l.squad,
         damage: l.damage === undefined ? 1000 : l.damage, kills: l.kills ?? null, deaths: l.deaths ?? null, enemyDeaths: l.enemyDeaths ?? null, owner,
       });
@@ -206,6 +207,18 @@ describe("lutas: ordenação vale para todas as lutas, não só para a página",
 
     expect(ids((await listar(ana.publicId, "?sort=name&dir=asc")).lutas)).toEqual(["n1", "n0", "n2"]);
     expect(ids((await listar(ana.publicId, "?sort=up&dir=asc")).lutas)).toEqual(["n2", "n1", "n0"]);
+  });
+
+  it("quem gravou o log ordena como texto, sem diferenciar maiúsculas, e sem gravador vem antes na ordem crescente", async () => {
+    const ana = criarUsuario(app, "1", "ana");
+    inserir(ana.id, [
+      { id: "r0", time: "2026-11-01T00:00:00Z", recordedBy: "Zeta Char" },
+      { id: "r1", time: "2026-11-02T00:00:00Z", recordedBy: "alfa char" },
+      { id: "r2", time: "2026-11-03T00:00:00Z", recordedBy: null },
+    ]);
+
+    expect(ids((await listar(ana.publicId, "?sort=rec&dir=asc")).lutas)).toEqual(["r2", "r1", "r0"]);
+    expect(ids((await listar(ana.publicId, "?sort=rec&dir=desc")).lutas)).toEqual(["r0", "r1", "r2"]);
   });
 
   it("coluna desconhecida ou com cara de SQL cai na ordem padrão (data, da mais nova), sem erro e sem tocar no banco", async () => {

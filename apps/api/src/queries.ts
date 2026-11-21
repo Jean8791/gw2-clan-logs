@@ -96,6 +96,7 @@ const toAggregate = (r: any): Aggregate => {
 const FIGHT_SORT_SQL: Record<FightSortKey, string> = {
   time: "COALESCE(f.time_start, f.uploaded_at)",
   name: "COALESCE(f.fight_name, f.file_name, '') COLLATE NOCASE",
+  rec: "COALESCE(f.recorded_by, '') COLLATE NOCASE",
   dur: "f.duration_ms",
   size: "f.squad_count",
   kd: "COALESCE(f.enemy_deaths, f.squad_kills, 0) - COALESCE(f.squad_deaths, 0)",
