@@ -1,23 +1,18 @@
-import { useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, CircleDashed, FileUp, Info, KeyRound, ListChecks, Loader2, PauseCircle, XCircle } from "lucide-react";
 import { useMemo, useRef, useState, type DragEvent } from "react";
 import { Link } from "react-router-dom";
-import { MAX_JSON_MB, MAX_UPLOAD_MB, MAX_ZIP_LOGS, MAX_ZIP_MB, retentionCutoff, ROUTES, readLogsFromZip, sendInOrder, ZipError, type ItemState } from "@gw2logs/shared";
+import { MAX_JSON_MB, MAX_UPLOAD_MB, MAX_ZIP_LOGS, MAX_ZIP_MB, retentionCutoff, ROUTES, readLogsFromZip, ZipError, type ItemState, type QueueItem } from "@gw2logs/shared";
 import { RetentionNotice } from "../components/RetentionNotice";
 import { Button, Card, ErrorBox, PageHeader, Rich, cx } from "../components/ui";
-import { createToken, uploadLog, useConfig, useFights } from "../lib/api";
+import { createToken, useConfig, useFights } from "../lib/api";
 import { codeText, fightErrorText } from "../lib/errors";
 import { date } from "../lib/format";
 import { t } from "../lib/i18n";
+import { uploadQueue, useUploadQueue } from "../lib/upload-queue";
 
 const ACCEPT = [".zevtc", ".evtc", ".zip", ".json"];
 
-interface Item {
-  file: File;
-  state: ItemState;
-}
-
-const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+type Item = QueueItem<File>;
 
 const MB = 1024 * 1024;
 const isJson = (name: string) => name.toLowerCase().endsWith(".json");
@@ -42,14 +37,11 @@ async function itemsOf(file: File): Promise<Item[]> {
 
 export function UploadPage() {
   const { data: cfg } = useConfig();
-  const [items, setItems] = useState<Item[]>([]);
+  // a lista e o envio moram na fila global: sair desta página não os interrompe, e ao voltar a lista está aqui
+  const { items, running, pct } = useUploadQueue();
   const [drag, setDrag] = useState(false);
-  const [running, setRunning] = useState(false);
   const [opening, setOpening] = useState(false);
-  const [pct, setPct] = useState(0);
-  const stop = useRef(false);
   const input = useRef<HTMLInputElement>(null);
-  const qc = useQueryClient();
   // acompanha o processamento das lutas já enviadas (atualiza sozinho enquanto houver fila)
   const fights = useFights({}, 100);
   const fightOf = (id?: string) => fights.data?.find((f) => f.id === id);
@@ -62,28 +54,7 @@ export function UploadPage() {
   const isExpired = (it: Item) => it.state.kind === "done" && !!it.state.result.id && expiredIds.has(it.state.result.id);
   const expiredCount = retentionDays > 0 ? items.filter(isExpired).length : 0;
 
-  const send = async (batch: Item[]) => {
-    const todo = batch.filter((it) => it.state.kind === "pending" || it.state.kind === "skipped");
-    if (!todo.length) return;
-    stop.current = false;
-    setRunning(true);
-    try {
-      await sendInOrder(todo, {
-        send: (it) => uploadLog(it.file, setPct),
-        wait: sleep,
-        shouldStop: () => stop.current,
-        onState: (i, state) => {
-          setPct(0);
-          setItems((cur) => cur.map((it) => (it.file === todo[i]!.file ? { ...it, state } : it)));
-        },
-      });
-    } finally {
-      setRunning(false);
-      await qc.invalidateQueries({ queryKey: ["fights"] });
-    }
-  };
-
-  /** Escolher ou soltar os arquivos já valida e começa a importar. */
+  /** Escolher ou soltar os arquivos já valida e começa a importar (a fila ignora o que já está na lista). */
   const add = async (list: FileList | null) => {
     if (!list || running || opening) return;
     // copia já: o seletor esvazia a lista assim que o evento termina
@@ -91,14 +62,8 @@ export function UploadPage() {
     setOpening(true);
     try {
       const fresh: Item[] = [];
-      for (const file of chosen) {
-        for (const it of await itemsOf(file)) {
-          if (![...items, ...fresh].some((c) => c.file.name === it.file.name && c.file.size === it.file.size)) fresh.push(it);
-        }
-      }
-      if (!fresh.length) return;
-      setItems((cur) => [...cur, ...fresh]);
-      void send(fresh);
+      for (const file of chosen) fresh.push(...(await itemsOf(file)));
+      void uploadQueue.add(fresh);
     } finally {
       setOpening(false);
     }
@@ -181,18 +146,18 @@ export function UploadPage() {
             {running ? (
               <>
                 <Loader2 className="size-4 animate-spin text-info" />
-                <Button onClick={() => (stop.current = true)}>{t("upload.stop")}</Button>
+                <Button onClick={() => uploadQueue.stop()}>{t("upload.stop")}</Button>
               </>
             ) : (
               waiting > 0 && (
-                <Button variant="primary" onClick={() => void send(items)}>
+                <Button variant="primary" onClick={() => void uploadQueue.sendAll()}>
                   <FileUp className="size-4" />
                   {t("upload.send")}
                 </Button>
               )
             )}
             {!running && items.length > 0 && (
-              <Button variant="ghost" size="sm" onClick={() => setItems([])}>
+              <Button variant="ghost" size="sm" onClick={() => uploadQueue.clear()}>
                 {t("common.clear")}
               </Button>
             )}

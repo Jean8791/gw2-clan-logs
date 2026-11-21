@@ -1,6 +1,6 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { createBrowserRouter, Navigate, RouterProvider, useLocation } from "react-router-dom";
 import { legacyRoute, ROUTES } from "@gw2logs/shared";
 import { Layout } from "./components/Layout";
@@ -18,9 +18,8 @@ import { OwnerOnly } from "./components/OwnerOnly";
 import { spaceBase, spaceId } from "./lib/space";
 import { Empty } from "./components/ui";
 import { t } from "./lib/i18n";
+import { queryClient } from "./lib/query-client";
 import "./index.css";
-
-const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: 15_000, refetchOnWindowFocus: false } } });
 
 /** Link antigo em português: leva ao caminho em inglês, com a busca e o hash. */
 function NotFound() {
