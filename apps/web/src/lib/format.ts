@@ -59,6 +59,10 @@ export function duration(ms: number | null | undefined): string {
   return `${m}m ${String(ss).padStart(2, "0")}s`;
 }
 
+/** Data e hora com segundos: na lista de lutas, para separar duas gravações da mesma luta feitas por pessoas diferentes. */
+export const dateTimeSeconds = (iso: string | null | undefined) =>
+  iso ? new Intl.DateTimeFormat(locale(), { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(new Date(iso)) : "—";
+
 export const dateTime = (iso: string | null | undefined) =>
   iso ? new Intl.DateTimeFormat(locale(), { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }).format(new Date(iso)) : "—";
 export const date = (iso: string | null | undefined) =>

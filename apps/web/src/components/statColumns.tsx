@@ -1,11 +1,11 @@
-import { BOON_SCOPES, isUptimeStat, perMinute, perSecond, STAT_GROUPS, STAT_META, statsOfGroup, statText, uptimeValue, type BoonScope, type StatGroup, type StatKey, type Stats } from "@gw2logs/shared";
+import { BOON_SCOPES, isUptimeStat, STAT_GROUPS, STAT_META, statsOfGroup, statText, statValue, type BoonScope, type StatGroup, type StatKey, type Stats, type ValueMode } from "@gw2logs/shared";
 import { BuffIcon } from "./MediaIcon";
 import type { Column } from "./DataTable";
 import { Segmented, cx } from "./ui";
 import { stat } from "../lib/format";
 import { getLang, t } from "../lib/i18n";
 
-export type ValueMode = "total" | "perMin" | "perSec";
+export type { ValueMode };
 
 /** Colunas de métricas de um grupo (Dano, Suporte…), em total ou por minuto, com destaque do melhor valor. */
 export function statColumns<T extends Stats & { activeMs: number }>(group: StatGroup, mode: ValueMode, rows: T[], scope: BoonScope = "squad"): Column<T>[] {
@@ -13,10 +13,9 @@ export function statColumns<T extends Stats & { activeMs: number }>(group: StatG
     const meta = STAT_META[k];
     const text = statText(k, getLang());
     // uptime é % do tempo ativo (ou média de pilhas) nos dois modos: o "por minuto" não se aplica
-    const uptime = isUptimeStat(k);
-    const isRate = mode !== "total" && meta.format !== "volume" && !uptime;
+    const isRate = mode !== "total" && meta.format !== "volume" && !isUptimeStat(k);
     const perSec = mode === "perSec";
-    const value = (r: T) => (uptime ? uptimeValue(k, r[k], r.activeMs) : isRate ? (perSec ? perSecond(r[k], r.activeMs) : perMinute(r[k], r.activeMs)) : r[k]);
+    const value = (r: T) => statValue(k, mode, r);
     const values = rows.map(value);
     const best = values.length ? (meta.higherIsBetter ? Math.max(...values) : Math.min(...values)) : 0;
     const label = meta.buffId ? (

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ROUTES, legacyRoute } from "@gw2logs/shared";
+import { ROUTES, isSpaceOwner, legacyRoute } from "@gw2logs/shared";
 
 describe("legacyRoute: links antigos em português levam às rotas em inglês", () => {
   it.each([
@@ -44,5 +44,18 @@ describe("ROUTES: as rotas do site, todas em inglês", () => {
   it("nenhuma rota nova tem palavra em português", () => {
     const todas = [ROUTES.days, ROUTES.fights, ROUTES.ranking, ROUTES.compare, ROUTES.guilds, ROUTES.me, ROUTES.fight("x"), ROUTES.player("x")];
     expect(todas.filter((r) => /dias|lutas|jogadores|comparar|guildas|enviar|\/eu\b/.test(r))).toEqual([]);
+  });
+});
+
+describe("isSpaceOwner: só o dono logado vê o que é do dono (importar logs e menu da conta)", () => {
+  it("o dono logado no próprio espaço é o dono", () => {
+    expect(isSpaceOwner("abc123", "abc123")).toBe(true);
+  });
+
+  it("outro usuário logado, visitante sem login e página fora de um espaço não são o dono", () => {
+    expect(isSpaceOwner("outro", "abc123")).toBe(false);
+    expect(isSpaceOwner(undefined, "abc123")).toBe(false);
+    expect(isSpaceOwner("abc123", null)).toBe(false);
+    expect(isSpaceOwner(undefined, null)).toBe(false);
   });
 });

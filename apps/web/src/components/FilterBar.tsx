@@ -1,6 +1,6 @@
 import { RotateCcw, SlidersHorizontal } from "lucide-react";
 import { useState } from "react";
-import type { Filters, Role } from "@gw2logs/shared";
+import type { Filters, PlayerOptions, Role } from "@gw2logs/shared";
 import { useDays, useGuilds, useMeta } from "../lib/api";
 import { dayLabel, instantToLocal, localToInstant } from "../lib/format";
 import { useT } from "../lib/i18n";
@@ -17,11 +17,20 @@ const SIZES = [
 
 const sizeId = (f: Filters) => SIZES.find((s) => s.min === f.minSquad && s.max === f.maxSquad)?.id ?? "custom";
 
-export function FilterBar({ value, onChange, fields }: { value: Filters; onChange: (f: Filters) => void; fields: Field[] }) {
+/** A lista com o valor escolhido (da URL) no fim, se ele não estiver nela: o seletor nunca fica em branco. */
+const withCurrent = <T extends string>(list: T[], current: T | undefined): T[] => (current && !list.includes(current) ? [...list, current] : list);
+
+/**
+ * `options` (página do jogador): troca as listas fixas de função e de classe e a lista de dias do espaço pelas que o jogador jogou.
+ */
+export function FilterBar({ value, onChange, fields, options }: { value: Filters; onChange: (f: Filters) => void; fields: Field[]; options?: PlayerOptions }) {
   const t = useT();
   const { data: meta } = useMeta();
   const { data: guilds } = useGuilds();
-  const { data: days } = useDays({ ...value, day: undefined }, fields.includes("day"));
+  const { data: spaceDays } = useDays({ ...value, day: undefined }, fields.includes("day") && !options);
+  const days = options?.days ?? spaceDays;
+  const roles = withCurrent<Role>(options?.roles ?? ["dps", "support"], value.role);
+  const professions = withCurrent(options?.professions ?? meta?.professions ?? [], value.profession);
   const [open, setOpen] = useState(false);
   const has = (f: Field) => fields.includes(f);
   const set = (patch: Partial<Filters>) => onChange({ ...value, ...patch });
@@ -69,6 +78,7 @@ export function FilterBar({ value, onChange, fields }: { value: Filters; onChang
           >
             <option value="">{t("filter.day.all")}</option>
             {(value.day?.length ?? 0) > 1 && <option value="varios">{t("filter.day.many", { n: value.day!.length })}</option>}
+            {value.day?.length === 1 && !(days ?? []).some((d) => d.day === value.day![0]) && <option value={value.day[0]}>{dayLabel(value.day[0]!)}</option>}
             {(days ?? []).map((d) => (
               <option key={d.day} value={d.day}>
                 {dayLabel(d.day)} · {t("filter.day.fights", { n: d.fights })}
@@ -109,14 +119,17 @@ export function FilterBar({ value, onChange, fields }: { value: Filters; onChang
         {has("role") && (
           <Select label={t("filter.role")} value={value.role ?? ""} onChange={(e) => set({ role: (e.target.value || undefined) as Role | undefined })}>
             <option value="">{t("filter.role.all")}</option>
-            <option value="dps">{t("filter.role.dps")}</option>
-            <option value="support">{t("filter.role.support")}</option>
+            {roles.map((r) => (
+              <option key={r} value={r}>
+                {t(`filter.role.${r}`)}
+              </option>
+            ))}
           </Select>
         )}
         {has("profession") && (
           <Select label={t("filter.class")} value={value.profession ?? ""} onChange={(e) => set({ profession: e.target.value || undefined })}>
             <option value="">{t("filter.class.all")}</option>
-            {meta?.professions.map((p) => (
+            {professions.map((p) => (
               <option key={p}>{p}</option>
             ))}
           </Select>

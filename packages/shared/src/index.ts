@@ -3,6 +3,11 @@
 export * from "./i18n.js";
 export * from "./routes.js";
 export * from "./boons.js";
+export * from "./upload.js";
+export * from "./zip.js";
+export * from "./pagination.js";
+export * from "./search.js";
+export * from "./retention.js";
 import { BOON_BASES, type ScopedKey } from "./boons.js";
 
 export type Mode = "wvw" | "pve";
@@ -204,6 +209,16 @@ export function uptimeValue(k: StatKey, ms: number, activeMs: number): number {
 export const statsOfGroup = (g: StatGroup, scope: BoonScope = "squad"): StatKey[] =>
   STAT_KEYS.filter((k) => STAT_META[k].group === g && (g !== "boons" || (STAT_META[k].scope ?? "squad") === scope));
 
+/** Primeira métrica de um grupo (nos boons, no alcance pedido): para onde o gráfico vai quando o grupo muda. */
+export const metricForGroup = (g: StatGroup, scope: BoonScope = "squad"): StatKey => statsOfGroup(g, scope)[0]!;
+
+/** A mesma métrica de boon em outro alcance (stabOut vira stabGroup ou stabSelf); métricas que não são de boon não mudam. */
+export function inScope(k: StatKey, scope: BoonScope): StatKey {
+  if (STAT_META[k].group !== "boons") return k;
+  const base = BOON_BASES.find((b) => k.startsWith(b));
+  return base ? (`${base}${scope === "squad" ? "Out" : scope === "group" ? "Group" : "Self"}` as StatKey) : k;
+}
+
 export const emptyStats = (): Stats => Object.fromEntries(STAT_KEYS.map((k) => [k, 0])) as Stats;
 
 // ---------- Entidades da API ----------
@@ -283,6 +298,14 @@ export interface PlayerHistoryRow extends PlayerFight {
   fightName: string | null;
 }
 
+/** O que o jogador jogou, para as listas dos filtros da página dele: só funções, classes e dias que existem nos logs dele. */
+export interface PlayerOptions {
+  roles: Role[];
+  professions: string[];
+  /** Dias de batalha em que ele jogou, do mais novo para o mais antigo, com quantas lutas ELE fez em cada um. */
+  days: { day: string; fights: number }[];
+}
+
 export interface PlayerProfile {
   account: string;
   name: string | null;
@@ -352,6 +375,8 @@ export interface Filters {
   profession?: string;
   /** dias de batalha (AAAA-MM-DD, ver battleDay): vale a união dos dias escolhidos */
   day?: string[];
+  /** id do dono das lutas. Só o servidor preenche (vem da URL /u/:id), nunca da query string. */
+  owner?: number;
 }
 
 export const FILTER_KEYS = [
@@ -468,6 +493,47 @@ export const professionColor = (p: string | null | undefined): string =>
 /** Valor por minuto de tempo ativo em luta. */
 export const perMinute = (value: number, activeMs: number): number => (activeMs > 0 ? (value * 60000) / activeMs : 0);
 
+/**
+ * Valor mostrado de uma métrica numa soma de lutas: uptime em %, boon por luta e o resto por minuto de tempo ativo.
+ * É sempre soma sobre soma (valores sobre tempo, ou sobre lutas), então uma luta curta pesa só o que durou, e conta como luta.
+ */
+export const statRate = (a: Aggregate, k: StatKey): number =>
+  isUptimeStat(k) ? uptimeValue(k, a[k], a.activeMs) : STAT_META[k].format === "volume" ? (a.fights ? a[k] / a.fights : 0) : perMinute(a[k], a.activeMs);
+
+/** Métricas que definem o papel de um jogador. Ficam de fora as raras ou de resultado (ressurreição, abates, mortes…), que dariam razões enormes por acaso. */
+const ROLE_METRICS: StatKey[] = [
+  "damage", "strips", "cleanses", "healing", "downedHealing", "barrier",
+  "stabOut", "quickOut", "alacOut", "protOut", "mightOut", "aegisOut", "resistOut", "resolOut", "furyOut", "superspeedOut",
+];
+
+/**
+ * Métrica para abrir o gráfico de um dia: aquela em que o jogador mais se destaca frente ao squad (razão entre o valor dele e o da média).
+ * Só entram métricas que os dois têm; empate fica com a primeira da lista (dano). Sem média ou sem nada a comparar, dano.
+ */
+export function suggestMetric(player: Aggregate, squad: Aggregate | undefined): StatKey {
+  if (!squad) return "damage";
+  let best: StatKey = "damage";
+  let bestRatio = 0;
+  for (const k of ROLE_METRICS) {
+    const mine = statRate(player, k);
+    const theirs = statRate(squad, k);
+    if (mine <= 0 || theirs <= 0) continue;
+    if (mine / theirs > bestRatio) [best, bestRatio] = [k, mine / theirs];
+  }
+  return best;
+}
+
+/** Função principal num conjunto de lutas: suporte se passou de metade do TEMPO jogado como suporte (sem tempo, vale a contagem de lutas). */
+export function mainRole(history: { role: Role; activeMs: number }[]): Role {
+  const total = history.reduce((a, h) => a + h.activeMs, 0);
+  if (total <= 0) return history.filter((h) => h.role === "support").length > history.length / 2 ? "support" : "dps";
+  return history.reduce((a, h) => a + (h.role === "support" ? h.activeMs : 0), 0) > total / 2 ? "support" : "dps";
+}
+
+/** Abaixo disto de tempo ativo a luta é de "pouca participação" (o jogador morreu cedo): o ponto do gráfico é marcado, o valor não muda. */
+export const SHORT_PARTICIPATION_MS = 30_000;
+export const isShortParticipation = (activeMs: number): boolean => activeMs < SHORT_PARTICIPATION_MS;
+
 /** Valor por segundo de tempo ativo em luta (o "DPS"). */
 /**
  * Os `n` jogadores com mais `key` por minuto de tempo ativo, do maior para o menor. Ignora quem lutou menos de `minActiveMs`
@@ -482,6 +548,31 @@ export function topByRate<T extends Stats & { activeMs: number }>(rows: T[], key
 }
 
 export const perSecond = (value: number, activeMs: number): number => (activeMs > 0 ? (value * 1000) / activeMs : 0);
+
+/** Como mostrar uma métrica: o total, ou por minuto, ou por segundo de tempo ativo. */
+export type ValueMode = "total" | "perMin" | "perSec";
+
+/**
+ * Valor de uma métrica de um jogador (ou de uma soma) no modo escolhido: o mesmo na tabela e no gráfico da luta.
+ * Uptime é % do tempo ativo e boon gerado é volume por luta, então o modo não se aplica a eles.
+ */
+export function statValue(k: StatKey, mode: ValueMode, r: Stats & { activeMs: number }): number {
+  if (isUptimeStat(k)) return uptimeValue(k, r[k], r.activeMs);
+  if (mode === "total" || STAT_META[k].format === "volume") return r[k];
+  return mode === "perSec" ? perSecond(r[k], r.activeMs) : perMinute(r[k], r.activeMs);
+}
+
+/**
+ * Os jogadores do gráfico da luta: os `n` maiores valores da métrica, do maior para o menor, sem quem tem 0 (cura, por exemplo, quase
+ * sempre é 0). Mesmo para métricas em que menos é melhor (mortes): o gráfico mostra quem tem mais. Cada linha leva o valor já calculado.
+ */
+export function topByStat<T extends Stats & { activeMs: number }>(rows: T[], k: StatKey, mode: ValueMode, n = 20): (T & { value: number })[] {
+  return rows
+    .map((r) => ({ ...r, value: statValue(k, mode, r) }))
+    .filter((r) => r.value > 0)
+    .sort((a, b) => b.value - a.value)
+    .slice(0, n);
+}
 
 // ---------- Colunas escolhidas na tabela ----------
 

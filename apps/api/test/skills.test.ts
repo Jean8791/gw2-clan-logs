@@ -9,6 +9,7 @@ import { extractFight } from "../src/ingest.js";
 import { MediaStore } from "../src/media.js";
 import * as q from "../src/queries.js";
 import { buildApp } from "../src/server.js";
+import { criarUsuario } from "./usuarios.js";
 import { ingestJson } from "../src/worker.js";
 import { wvwFixture } from "./fixture.js";
 
@@ -199,10 +200,11 @@ describe("GET /api/players/:account/skills", () => {
   it("devolve as habilidades do jogador", async () => {
     const app = await buildApp(loadConfig({ DATA_DIR: dir, GW2_API: "off", WEB_DIR: path.join(dir, "sem-site") }));
     const appApi = new Gw2Api(app.db, false);
-    app.db.prepare("INSERT INTO fights (id, sha256, status, uploaded_at) VALUES ('l1', 's1', 'parsing', ?)").run(new Date().toISOString());
+    const ana = criarUsuario(app, "1");
+    app.db.prepare("INSERT INTO fights (id, sha256, status, uploaded_at, owner_id) VALUES ('l1', 's1', 'parsing', ?, ?)").run(new Date().toISOString(), ana.id);
     await ingestJson(app.db, appApi, new MediaStore(app.db, fakeFetch), "l1", fightWithSkills(), false);
 
-    const res = await app.server.inject({ url: `/api/players/${ACCOUNT}/skills` });
+    const res = await app.server.inject({ url: `/api/u/${ana.publicId}/players/${ACCOUNT}/skills` });
 
     expect(res.statusCode).toBe(200);
     expect(res.json().map((r: any) => r.name)).toEqual(["Skill B", "Skill A"]);
