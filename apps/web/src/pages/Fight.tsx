@@ -2,17 +2,17 @@ import { ArrowLeft, ExternalLink } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { emptyStats, professionColor, ROUTES, STAT_KEYS, type BoonScope, type PlayerFight, type StatGroup, type Stats } from "@gw2logs/shared";
+import { emptyStats, isUptimeStat, professionColor, ROUTES, STAT_KEYS, STAT_META, statsOfGroup, statText, topByStat, type BoonScope, type PlayerFight, type StatGroup, type StatKey, type Stats } from "@gw2logs/shared";
 import { DataTable, type Column } from "../components/DataTable";
 import { defaultSort, GroupTabs, pickerView, ModeToggle, statColumns, type ValueMode } from "../components/statColumns";
 import { GuildTag, PlayerLink, Profession } from "../components/badges";
 import { AXIS, GRID, TOOLTIP } from "../components/charts";
 import { fightKills, KillDeath } from "../components/FightBits";
-import { Badge, Button, Card, ErrorBox, Kpi, Loading, PageHeader, Segmented, Select } from "../components/ui";
+import { Badge, Button, Card, Empty, ErrorBox, Kpi, Loading, PageHeader, Segmented, Select } from "../components/ui";
 import { useFight } from "../lib/api";
 import { useMe } from "../lib/hooks";
-import { accountShort, axis, compact, dateTime, duration, int } from "../lib/format";
-import { t } from "../lib/i18n";
+import { accountShort, axis, compact, dateTime, duration, int, stat } from "../lib/format";
+import { getLang, t } from "../lib/i18n";
 import { spaceApi } from "../lib/space";
 
 interface GroupRow extends Stats {
@@ -37,6 +37,8 @@ export function FightPage() {
   const [mode, setMode] = useState<ValueMode>("total");
   const [view, setView] = useState<"players" | "guilds" | "groups">("players");
   const [guild, setGuild] = useState("");
+  // coluna que a pessoa ordenou na tabela de jogadores (guardada com o grupo e o alcance em que foi escolhida)
+  const [sortedBy, setSortedBy] = useState<{ view: string; id: string } | null>(null);
   const me = useMe();
   const nav = useNavigate();
 
@@ -114,10 +116,14 @@ export function FightPage() {
     ...statColumns(group, mode, groupRows.filter((g) => g.id !== "squad"), scope),
   ];
 
-  const chart = [...players]
-    .sort((a, b) => b.damage - a.damage)
-    .slice(0, 20)
-    .map((p) => ({ name: p.name ?? accountShort(p.account), damage: p.damage, color: professionColor(p.profession), account: p.account }));
+  // O gráfico segue a tabela: o mesmo grupo, alcance, modo e filtro de guilda, e a métrica que a tabela ordena (a principal do grupo até
+  // a pessoa clicar no cabeçalho de outra coluna).
+  const viewKey = pickerView(group, scope);
+  const sortedMetric = sortedBy && sortedBy.view === viewKey && (statsOfGroup(group, scope) as string[]).includes(sortedBy.id) ? (sortedBy.id as StatKey) : null;
+  const metric: StatKey = sortedMetric ?? defaultSort(group, scope).id;
+  const metricLabel = statText(metric, getLang()).label;
+  const isRate = mode !== "total" && STAT_META[metric].format !== "volume" && !isUptimeStat(metric);
+  const chart = topByStat(players, metric, mode).map((p) => ({ name: p.name ?? accountShort(p.account), value: p.value, color: professionColor(p.profession), account: p.account }));
 
   return (
     <>
@@ -155,15 +161,18 @@ export function FightPage() {
         />
       </div>
 
-      <Card className="mt-6" title={t("fight.chart.title")}>
+      <Card className="mt-6" title={t("fight.chart.byPlayer", { metric: metricLabel })} action={isRate && <span className="text-xs text-faint">{t(mode === "perSec" ? "rate.perSec" : "rate.perMin")}</span>}>
+        {chart.length === 0 ? (
+          <Empty title={t("fight.chart.empty")} />
+        ) : (
         <div className="h-72 px-2 py-4">
           <ResponsiveContainer>
             <BarChart data={chart} margin={{ left: 8, right: 8 }}>
               <CartesianGrid {...GRID} />
               <XAxis dataKey="name" {...AXIS} interval={0} angle={-35} textAnchor="end" height={70} />
               <YAxis {...AXIS} tickFormatter={axis} width={56} />
-              <Tooltip {...TOOLTIP} formatter={(v: number) => [compact(v), t("fight.chart.damage")]} />
-              <Bar dataKey="damage" radius={[6, 6, 0, 0]} onClick={(d: any) => nav(ROUTES.player(d.account))} className="cursor-pointer">
+              <Tooltip {...TOOLTIP} formatter={(v: number) => [stat(metric, v, mode !== "total", mode === "perSec"), metricLabel]} />
+              <Bar dataKey="value" radius={[6, 6, 0, 0]} onClick={(d: any) => nav(ROUTES.player(d.account))} className="cursor-pointer">
                 {chart.map((c) => (
                   <Cell key={c.account} fill={c.color} fillOpacity={c.account === me ? 1 : 0.75} stroke={c.account === me ? "#e0b25a" : undefined} strokeWidth={2} />
                 ))}
@@ -171,13 +180,18 @@ export function FightPage() {
             </BarChart>
           </ResponsiveContainer>
         </div>
+        )}
+        <p className="border-t border-line px-5 py-2.5 text-xs text-faint">{t("fight.chart.hint")}</p>
       </Card>
 
       <Card className="mt-6">
         <div className="flex flex-wrap items-center gap-3 border-b border-line px-4 py-3">
           <Segmented
             value={view}
-            onChange={setView}
+            onChange={(v) => {
+              setView(v);
+              setSortedBy(null); // a tabela de jogadores é refeita ao voltar, e começa na coluna principal
+            }}
             options={[
               { value: "players", label: t("fight.view.players") },
               { value: "guilds", label: t("fight.view.guilds") },
@@ -206,6 +220,7 @@ export function FightPage() {
             columns={playerCols}
             rowKey={(p) => p.account}
             initialSort={{ ...defaultSort(group, scope), desc: true }}
+            onSorted={(s) => setSortedBy({ view: viewKey, id: s.id })}
             rowClassName={(p) => (p.account === me ? "bg-gold/5" : undefined)}
             dense
           />
