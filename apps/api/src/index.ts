@@ -1,10 +1,16 @@
-import { loadConfig, paths } from "./config.js";
+import { assertLoginRestricted, loadConfig, paths } from "./config.js";
 import { purgeExpiredSessions } from "./auth.js";
 import { eiAvailable } from "./elite-insights.js";
 import { purgeOldFights } from "./retention.js";
 import { buildApp } from "./server.js";
 
 const cfg = loadConfig();
+try {
+  assertLoginRestricted(cfg);
+} catch (err) {
+  console.error(`ERRO: ${(err as Error).message}`);
+  process.exit(1);
+}
 const { server, db, worker } = await buildApp(cfg, { logger: true });
 
 if (!eiAvailable(cfg.eiDir)) {
