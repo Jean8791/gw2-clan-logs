@@ -1,0 +1,8 @@
+Fontes do site, servidas daqui (não do Google Fonts): Inter (texto) e Cinzel (títulos).
+Só o subconjunto "latin" (português, inglês e as letras acentuadas usuais), em fonte variável (um arquivo cobre os pesos).
+Licença: SIL Open Font License 1.1 (OFL-Inter.txt e OFL-Cinzel.txt). A licença acompanha os arquivos.
+
+Origem: os arquivos woff2 que o Google Fonts entrega para o subconjunto latin (Inter v20 e Cinzel v26), baixados em 2026-11-21.
+Para atualizar: peça o CSS de https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Cinzel:wght@600;700 com um
+User-Agent de navegador moderno, baixe os dois arquivos do bloco "/* latin */", confira que começam com "wOF2" e troque aqui.
+Caracteres fora do latin (por exemplo, nomes de jogadores em outros alfabetos) usam a fonte do sistema.
