@@ -449,7 +449,7 @@ describe("apagar a conta", () => {
 
     const cookie = `session=${createSession(app.db, ana.id, "web")}`;
     expect((await app.server.inject({ method: "DELETE", url: "/api/auth/account", headers: { "x-upload-key": ana.token } })).statusCode).toBe(401);
-    const res = await app.server.inject({ method: "DELETE", url: "/api/auth/account", headers: { cookie } });
+    const res = await app.server.inject({ method: "DELETE", url: "/api/auth/account", headers: { cookie }, payload: { confirm: "ana" } });
 
     expect(res.statusCode).toBe(200);
     expect(cookieDe(res, "session")).toContain("Max-Age=0");

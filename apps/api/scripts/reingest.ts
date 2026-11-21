@@ -20,7 +20,7 @@ for (const id of ids) {
   const gz = path.join(p.fightDir(id), "ei.json.gz");
   if (!existsSync(gz)) continue;
   try {
-    await ingestJson(db, api, media, id, await readEiJsonGz(gz), existsSync(path.join(p.fightDir(id), "report.html")));
+    await ingestJson(db, api, media, id, await readEiJsonGz(gz), existsSync(path.join(p.fightDir(id), "report.html")), false); // false: não dá para saber se o JSON guardado veio do nosso EI, então não troca nomes e ícones já salvos
     ok++;
   } catch (e) {
     console.error(`falha em ${id}:`, e instanceof Error ? e.message : e);

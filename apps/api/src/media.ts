@@ -40,12 +40,13 @@ export class MediaStore {
   }
 
   /**
-   * Garante que a mídia guardada é a do `url`: baixa se não existe e baixa de novo se o link mudou (o ícone foi trocado).
+   * Garante que a mídia guardada é a do `url`: baixa se não existe e, com `replace`, baixa de novo se o link mudou (o ícone foi trocado).
+   * Sem `replace` (link vindo de um .json enviado pelo usuário) uma chave que já existe nunca é trocada: a tabela é de todos.
    * Se o download falhar, o ícone antigo continua. Nunca lança erro: um ícone que falha não pode derrubar o processamento da luta.
    */
-  async ensure(key: string, url: string): Promise<boolean> {
+  async ensure(key: string, url: string, replace: boolean): Promise<boolean> {
     const stored = this.db.prepare("SELECT source_url AS url FROM media WHERE key = ?").get(key) as { url: string } | undefined;
-    if (stored?.url === url) return true;
+    if (stored && (stored.url === url || !replace)) return true;
     if (!isAllowedIconUrl(url)) return false;
     try {
       // redirect: "error" — um redirecionamento poderia levar o servidor a outro endereço
@@ -65,9 +66,9 @@ export class MediaStore {
 }
 
 /** Garante vários ícones, alguns por vez: o primeiro log traz centenas. Nunca lança erro. */
-export async function ensureMany(store: MediaStore, items: { key: string; url: string }[]): Promise<void> {
+export async function ensureMany(store: MediaStore, items: { key: string; url: string }[], replace: boolean): Promise<void> {
   for (let i = 0; i < items.length; i += CONCURRENCY) {
-    await Promise.all(items.slice(i, i + CONCURRENCY).map((it) => store.ensure(it.key, it.url)));
+    await Promise.all(items.slice(i, i + CONCURRENCY).map((it) => store.ensure(it.key, it.url, replace)));
   }
 }
 

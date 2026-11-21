@@ -9,10 +9,13 @@ services:
       # login com o Discord: o retorno é https://DOMINIO/api/auth/callback (cadastre no portal de desenvolvedores do Discord)
       DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID:?defina DISCORD_CLIENT_ID no .env}
       DISCORD_CLIENT_SECRET: ${DISCORD_CLIENT_SECRET:?defina DISCORD_CLIENT_SECRET no .env}
-      # opcional: IDs dos servidores do Discord do clã, separados por vírgula; vazio = qualquer conta do Discord entra
+      # IDs dos servidores do Discord do clã, separados por vírgula. Preencha esta lista e/ou a de usuários: com as duas vazias o servidor
+      # não sobe (qualquer conta do Discord entraria), a menos que ALLOW_ANY_DISCORD=true
       DISCORD_GUILD_IDS: ${DISCORD_GUILD_IDS:-}
-      # opcional: IDs dos usuários do Discord com acesso, separados por vírgula; vale junto com a lista de servidores; vazio = não restringe
+      # IDs dos usuários do Discord com acesso, separados por vírgula; vale junto com a lista de servidores; vazia = não restringe
       DISCORD_USER_IDS: ${DISCORD_USER_IDS:-}
+      # só com as duas listas vazias: true libera o login a qualquer conta do Discord, de propósito
+      ALLOW_ANY_DISCORD: ${ALLOW_ANY_DISCORD:-}
       # opcional: dias de validade do token pessoal do script de envio (vazio = 90)
       API_TOKEN_DAYS: ${API_TOKEN_DAYS:-}
       PUBLIC_URL: https://${DOMINIO:?defina DOMINIO no .env}
