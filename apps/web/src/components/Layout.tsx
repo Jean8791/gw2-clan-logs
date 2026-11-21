@@ -2,7 +2,8 @@ import { BarChart3, CalendarDays, ChevronUp, GitCompareArrows, Home, Link2, LogO
 import { useState } from "react";
 import { ROUTES, isSpaceOwner } from "@gw2logs/shared";
 import { NavLink, Outlet, useMatches } from "react-router-dom";
-import { deleteAccount, logout, rotateShareLink, useOwner, useViewer } from "../lib/api";
+import { deleteAccount, logout, rotateShareLink, useMeta, useOwner, useViewer } from "../lib/api";
+import { useMe } from "../lib/hooks";
 import { spaceBase, spaceId } from "../lib/space";
 import { setLang, useLang, useT } from "../lib/i18n";
 import { Button, Empty, Input, Segmented, cx } from "./ui";
@@ -119,6 +120,25 @@ function AccountMenu({ name }: { name: string }) {
   );
 }
 
+/** O texto de um item do menu. O "Meu perfil", depois de a pessoa escolher quem ela é, mostra o nome do jogador escolhido. */
+function NavLabel({ label }: { label: string }) {
+  const t = useT();
+  const me = useMe();
+  return label === ME.label && me ? <MyName account={me} /> : <>{t(label)}</>;
+}
+
+/** Nome do jogador escolhido (o da luta mais recente dele neste espaço). Enquanto a lista carrega, ou se ele não está aqui, fica "Meu perfil". */
+function MyName({ account }: { account: string }) {
+  const t = useT();
+  const { data } = useMeta();
+  const name = data?.players.find((p) => p.account === account)?.name;
+  return (
+    <span className="truncate" title={t("nav.myProfile")}>
+      {name ?? t("nav.myProfile")}
+    </span>
+  );
+}
+
 function Brand() {
   const t = useT();
   return (
@@ -163,7 +183,7 @@ export function Layout() {
   const t = useT();
   const link = (active: boolean) =>
     cx(
-      "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition",
+      "flex min-w-0 items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition",
       active ? "bg-gold-soft text-gold" : "text-muted hover:bg-surface-2 hover:text-text",
     );
 
@@ -177,7 +197,7 @@ export function Layout() {
         <nav className="mt-8 flex flex-col gap-1">
           {nav.map(({ to, label, icon: Icon, end }) => (
             <NavLink key={to} to={to} end={end} className={({ isActive }) => link(isActive)}>
-              <Icon className="size-4" /> {t(label)}
+              <Icon className="size-4" /> <NavLabel label={label} />
             </NavLink>
           ))}
         </nav>
@@ -188,7 +208,7 @@ export function Layout() {
             // enquanto o login ainda carrega, nada aparece embaixo (evita piscar o Meu Perfil para o dono)
             !viewer.isLoading && (
               <NavLink to={ME.to} className={({ isActive }) => link(isActive)}>
-                <ME.icon className="size-4" /> {t(ME.label)}
+                <ME.icon className="size-4" /> <NavLabel label={ME.label} />
               </NavLink>
             )
           )}
@@ -207,7 +227,7 @@ export function Layout() {
         <nav className="flex gap-1 overflow-x-auto px-3 pb-2">
           {mobileNav.map(({ to, label, icon: Icon, end }) => (
             <NavLink key={to} to={to} end={end} className={({ isActive }) => cx(link(isActive), "shrink-0 px-2.5 py-1.5 text-xs")}>
-              <Icon className="size-3.5" /> {t(label)}
+              <Icon className="size-3.5" /> <NavLabel label={label} />
             </NavLink>
           ))}
         </nav>
