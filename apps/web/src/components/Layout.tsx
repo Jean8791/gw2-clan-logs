@@ -1,8 +1,8 @@
-import { BarChart3, CalendarDays, ChevronUp, GitCompareArrows, Home, Link2, LogOut, Shield, Swords, Trash2, Upload, UserRound } from "lucide-react";
+import { BarChart3, CalendarDays, ChevronUp, GitCompareArrows, Home, Link2, LogOut, RefreshCw, Shield, Swords, Trash2, Upload, UserRound } from "lucide-react";
 import { useState } from "react";
 import { ROUTES, isSpaceOwner } from "@gw2logs/shared";
 import { NavLink, Outlet, useMatches } from "react-router-dom";
-import { deleteAccount, logout, useOwner, useViewer } from "../lib/api";
+import { deleteAccount, logout, rotateShareLink, useOwner, useViewer } from "../lib/api";
 import { spaceBase, spaceId } from "../lib/space";
 import { setLang, useLang, useT } from "../lib/i18n";
 import { Button, Empty, Input, Segmented, cx } from "./ui";
@@ -40,13 +40,24 @@ function LangToggle() {
 function AccountMenu({ name }: { name: string }) {
   const t = useT();
   const [open, setOpen] = useState(false);
-  const [confirming, setConfirming] = useState(false);
+  // só uma confirmação aberta por vez: trocar o link de compartilhar ou apagar a conta
+  const [mode, setMode] = useState<"link" | "delete" | null>(null);
   const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
   const [typed, setTyped] = useState("");
   const item = "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted transition hover:bg-surface-2 hover:text-text";
   const leave = (action: () => Promise<unknown>) => {
     setBusy(true);
     void action().then(() => window.location.assign("/"), () => setBusy(false));
+  };
+  // o link antigo deixa de funcionar na hora; quem trocou vai direto para o novo
+  const renewLink = () => {
+    setBusy(true);
+    setFailed(false);
+    void rotateShareLink().then(
+      (publicId) => window.location.assign(`/u/${publicId}`),
+      () => (setBusy(false), setFailed(true)),
+    );
   };
   return (
     <div className="flex flex-col gap-1">
@@ -55,7 +66,25 @@ function AccountMenu({ name }: { name: string }) {
           <button className={item} onClick={() => leave(logout)} disabled={busy}>
             <LogOut className="size-4" /> {t("space.signOut")}
           </button>
-          {confirming ? (
+          {mode === "link" ? (
+            <div className="space-y-2 p-2 text-xs text-muted">
+              <p>{t("account.newLinkWarn")}</p>
+              {failed && <p className="text-bad">{t("account.newLinkError")}</p>}
+              <div className="flex gap-2">
+                <Button size="sm" onClick={renewLink} disabled={busy}>
+                  {t("account.newLinkConfirm")}
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => (setMode(null), setFailed(false))} disabled={busy}>
+                  {t("account.cancel")}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <button className={item} onClick={() => (setMode("link"), setTyped(""))}>
+              <RefreshCw className="size-4" /> {t("account.newLink")}
+            </button>
+          )}
+          {mode === "delete" ? (
             <div className="space-y-2 p-2 text-xs text-bad">
               <p>{t("account.deleteWarn")}</p>
               <Input label={t("account.deleteType", { name })} value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" />
@@ -63,13 +92,13 @@ function AccountMenu({ name }: { name: string }) {
                 <Button size="sm" onClick={() => leave(() => deleteAccount(typed))} disabled={busy || typed !== name}>
                   {t("account.deleteConfirm")}
                 </Button>
-                <Button size="sm" variant="ghost" onClick={() => (setConfirming(false), setTyped(""))} disabled={busy}>
+                <Button size="sm" variant="ghost" onClick={() => (setMode(null), setTyped(""))} disabled={busy}>
                   {t("account.cancel")}
                 </Button>
               </div>
             </div>
           ) : (
-            <button className={cx(item, "hover:text-bad")} onClick={() => setConfirming(true)}>
+            <button className={cx(item, "hover:text-bad")} onClick={() => (setMode("delete"), setFailed(false))}>
               <Trash2 className="size-4" /> {t("account.delete")}
             </button>
           )}
@@ -77,7 +106,7 @@ function AccountMenu({ name }: { name: string }) {
       )}
       <button
         className={cx(item, "justify-between font-medium text-text")}
-        onClick={() => (setOpen(!open), setConfirming(false), setTyped(""))}
+        onClick={() => (setOpen(!open), setMode(null), setFailed(false), setTyped(""))}
         aria-expanded={open}
       >
         <span className="flex min-w-0 items-center gap-2">
