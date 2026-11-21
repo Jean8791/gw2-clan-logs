@@ -105,7 +105,7 @@ export async function buildApp(cfg: Config, opts: { logger?: boolean; fetch?: ty
   /** Quem está enviando: a sessão do navegador ou o token pessoal. Token errado conta como tentativa falha. */
   const uploadUser = (req: FastifyRequest, reply: FastifyReply): User | null => {
     if (ipBlocked(req, reply)) return null;
-    const user = sessionUser(db, req) ?? apiUser(db, req);
+    const user = sessionUser(db, cfg, req) ?? apiUser(db, cfg, req);
     if (user) {
       attempts.reset(req.ip);
       return user;

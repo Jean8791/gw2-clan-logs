@@ -129,16 +129,30 @@ export interface SpaceUser {
 /** Dono do espaço que está aberto. */
 export const useOwner = () => useQuery({ queryKey: ["owner"], queryFn: () => get<SpaceUser>(spaceApi), retry: false, staleTime: Infinity });
 
-/** Quem está logado neste navegador (null = ninguém). */
-export const useViewer = () =>
+interface ViewerState {
+  user: SpaceUser | null;
+  /** A sessão existe, mas a conferência dos servidores do Discord venceu: é só entrar de novo. */
+  expired: boolean;
+}
+
+const viewerQuery = <T>(select: (v: ViewerState) => T) =>
   useQuery({
     queryKey: ["viewer"],
-    queryFn: async (): Promise<SpaceUser | null> => {
+    queryFn: async (): Promise<ViewerState> => {
       const res = await fetch("/api/auth/me");
-      return res.ok ? ((await res.json()) as SpaceUser) : null;
+      if (res.ok) return { user: (await res.json()) as SpaceUser, expired: false };
+      const body = res.status === 401 ? await res.json().catch(() => null) : null;
+      return { user: null, expired: body?.code === "loginExpired" };
     },
     staleTime: 60_000,
+    select,
   });
+
+/** Quem está logado neste navegador (null = ninguém). */
+export const useViewer = () => viewerQuery((v) => v.user);
+
+/** A sessão venceu e a pessoa precisa entrar de novo (a tela inicial avisa; sem redirecionar sozinha, para não prender quem cancela o login). */
+export const useLoginExpired = () => viewerQuery((v) => v.expired).data === true;
 
 export const logout = () => fetch("/api/auth/logout", { method: "POST" });
 
@@ -172,9 +186,9 @@ export function uploadLog(file: File, onProgress: (pct: number) => void): Promis
   });
 }
 
-/** Gera o token pessoal do script de envio (o anterior deixa de valer). O valor só aparece nesta resposta. */
-export async function createToken(): Promise<string> {
+/** Gera o token pessoal do script de envio (o anterior deixa de valer). O valor só aparece nesta resposta; `expiresAt` é até quando ele vale. */
+export async function createToken(): Promise<{ token: string; expiresAt: string }> {
   const res = await fetch("/api/auth/token", { method: "POST" });
   if (!res.ok) throw apiErrorFrom(res.status, await res.json().catch(() => null));
-  return ((await res.json()) as { token: string }).token;
+  return (await res.json()) as { token: string; expiresAt: string };
 }

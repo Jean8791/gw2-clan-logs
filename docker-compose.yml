@@ -16,6 +16,8 @@ services:
       DISCORD_USER_IDS: ${DISCORD_USER_IDS:-}
       # só com as duas listas vazias: true libera o login a qualquer conta do Discord, de propósito
       ALLOW_ANY_DISCORD: ${ALLOW_ANY_DISCORD:-}
+      # opcional: dias de validade do token pessoal do script de envio (vazio = 90)
+      API_TOKEN_DAYS: ${API_TOKEN_DAYS:-}
       PUBLIC_URL: https://${DOMINIO:?defina DOMINIO no .env}
       RETENTION_DAYS: ${RETENTION_DAYS:-30}
       # só o Caddy chega no app (a porta não é publicada), então o IP do X-Forwarded-For é confiável

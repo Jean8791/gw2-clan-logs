@@ -5,6 +5,9 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 /** Raiz do repositório (funciona tanto em src/ quanto em dist/). */
 export const repoRoot = path.resolve(here, "..", "..", "..");
 
+/** Dias de validade do token pessoal de envio (API_TOKEN_DAYS). */
+export const DEFAULT_API_TOKEN_DAYS = 90;
+
 export interface Config {
   port: number;
   host: string;
@@ -32,6 +35,8 @@ export interface Config {
   gw2Api: boolean;
   /** Atrás de proxy (Caddy): vale o IP do X-Forwarded-For. Ligado sem proxy, qualquer um forjaria o IP. */
   trustProxy: boolean;
+  /** Dias que o token pessoal de envio vale; depois é preciso gerar outro no site. */
+  apiTokenDays: number;
   /** Gerar o relatório HTML do Elite Insights (40 a 50 MB de disco e ~300 MB de memória a mais por luta grande). */
   eiHtml: boolean;
   limits: UploadLimits;
@@ -79,6 +84,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     retentionDays: Number(env.RETENTION_DAYS ?? 0),
     gw2Api: env.GW2_API !== "off",
     trustProxy: env.TRUST_PROXY === "true",
+    apiTokenDays: positive(env.API_TOKEN_DAYS, DEFAULT_API_TOKEN_DAYS),
     eiHtml: env.EI_HTML === "true",
     limits: {
       maxFailedKeys: positive(env.UPLOAD_MAX_FAILS, 5),

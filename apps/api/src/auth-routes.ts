@@ -3,7 +3,7 @@ import crypto from "node:crypto";
 import { ROUTES } from "@gw2logs/shared";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { paths, type Config } from "./config.js";
-import { cookieHeader, createSession, deleteSession, readCookie, revokeAccessByDiscordId, upsertDiscordUser, userFromToken, type User } from "./auth.js";
+import { checkSession, cookieHeader, createSession, deleteSession, readCookie, revokeAccessByDiscordId, sessionExpiry, upsertDiscordUser, userFromToken, type User } from "./auth.js";
 import type { DB } from "./db.js";
 import { safeEqual } from "./guards.js";
 import { removeFights } from "./retention.js";
@@ -15,10 +15,10 @@ const STATE_MINUTES = 10;
 const WEB_COOKIE_SECONDS = 30 * 86_400;
 
 /** Usuário da sessão do navegador (cookie). */
-export const sessionUser = (db: DB, req: FastifyRequest): User | null => userFromToken(db, readCookie(req.headers.cookie, WEB_COOKIE), "web");
+export const sessionUser = (db: DB, cfg: Config, req: FastifyRequest): User | null => userFromToken(db, readCookie(req.headers.cookie, WEB_COOKIE), "web", cfg.discord);
 
 /** Usuário do token pessoal, enviado no cabeçalho x-upload-key pelo script de envio. */
-export const apiUser = (db: DB, req: FastifyRequest): User | null => userFromToken(db, String(req.headers["x-upload-key"] ?? ""), "api");
+export const apiUser = (db: DB, cfg: Config, req: FastifyRequest): User | null => userFromToken(db, String(req.headers["x-upload-key"] ?? ""), "api", cfg.discord);
 
 export function registerAuthRoutes(server: FastifyInstance, db: DB, cfg: Config, doFetch: typeof fetch) {
   const secure = cfg.publicUrl.startsWith("https://");
@@ -90,8 +90,11 @@ export function registerAuthRoutes(server: FastifyInstance, db: DB, cfg: Config,
   });
 
   server.get("/api/auth/me", async (req, reply) => {
-    const user = sessionUser(db, req);
-    return user ? { publicId: user.publicId, name: user.name, avatar: user.avatar } : reply.code(401).send({ error: "Not signed in.", code: "notSignedIn" });
+    const { user, needsNewLogin } = checkSession(db, readCookie(req.headers.cookie, WEB_COOKIE), "web", cfg.discord);
+    if (user) return { publicId: user.publicId, name: user.name, avatar: user.avatar };
+    // a conferência dos servidores do Discord venceu: a tela inicial pede para entrar de novo
+    if (needsNewLogin) return reply.code(401).send({ error: "Sign in again.", code: "loginExpired" });
+    return reply.code(401).send({ error: "Not signed in.", code: "notSignedIn" });
   });
 
   server.post("/api/auth/logout", async (req, reply) => {
@@ -101,7 +104,7 @@ export function registerAuthRoutes(server: FastifyInstance, db: DB, cfg: Config,
 
   // apagar a conta zera tudo do usuário: lutas (com os arquivos), sessões e o próprio cadastro. Só pela sessão do navegador.
   server.delete("/api/auth/account", async (req, reply) => {
-    const user = sessionUser(db, req);
+    const user = sessionUser(db, cfg, req);
     if (!user) return reply.code(401).send({ error: "Not signed in.", code: "notSignedIn" });
     // apaga tudo e não dá para desfazer: a pessoa digita o próprio nome (a tela pede), e um pedido sem isso não apaga nada
     const { confirm } = (req.body ?? {}) as { confirm?: unknown };
@@ -114,8 +117,9 @@ export function registerAuthRoutes(server: FastifyInstance, db: DB, cfg: Config,
 
   // token pessoal para o script de envio; o anterior deixa de valer e o novo só aparece nesta resposta
   server.post("/api/auth/token", async (req, reply) => {
-    const user = sessionUser(db, req);
+    const user = sessionUser(db, cfg, req);
     if (!user) return reply.code(401).send({ error: "Not signed in.", code: "notSignedIn" });
-    return { token: createSession(db, user.id, "api") };
+    const now = new Date();
+    return { token: createSession(db, user.id, "api", now, cfg.apiTokenDays), expiresAt: sessionExpiry("api", now, cfg.apiTokenDays) };
   });
 }

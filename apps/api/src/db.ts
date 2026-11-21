@@ -137,6 +137,12 @@ function migrate(db: DB) {
   if (!haveFights.has("process_ms")) db.exec("ALTER TABLE fights ADD COLUMN process_ms INTEGER");
   // dono da luta; as lutas anteriores ao login ficam sem dono até o primeiro usuário entrar
   if (!haveFights.has("owner_id")) db.exec("ALTER TABLE fights ADD COLUMN owner_id INTEGER REFERENCES users(id)");
+  // última vez que o login conferiu o Discord (listas de usuários e servidores); quem já existe começa a contar da migração
+  const haveUsers = new Set((db.pragma("table_info(users)") as { name: string }[]).map((c) => c.name));
+  if (!haveUsers.has("verified_at")) {
+    db.exec("ALTER TABLE users ADD COLUMN verified_at TEXT");
+    db.prepare("UPDATE users SET verified_at = ?").run(new Date().toISOString());
+  }
   dropGlobalShaUnique(db);
   db.exec(`
     CREATE INDEX IF NOT EXISTS ix_fights_time ON fights(time_start);

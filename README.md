@@ -73,7 +73,7 @@ O ArcDPS grava em `Documentos\Guild Wars 2\addons\arcdps\arcdps.cbtlogs\`. Para 
 Há duas formas de enviar, e as duas guardam os logs no seu espaço:
 
 1. **Pelo site**: entre com o Discord, abra *Importar logs* e arraste os arquivos, ou um `.zip` com vários logs (até 300 MB e 150 logs, o equivalente a uma semana de jogo; o zip é aberto no seu navegador e cada log vai como arquivo solto). Eles vão um de cada vez; se o servidor encher, o envio espera sozinho, e ao bater um limite ele para e avisa.
-2. **Por script**, que usa a API e o seu token pessoal. Na página *Importar logs*, o cartão *Envio por script* gera o token (ele só aparece uma vez, e o anterior deixa de valer).
+2. **Por script**, que usa a API e o seu token pessoal. Na página *Importar logs*, o cartão *Envio por script* gera o token (ele só aparece uma vez, o anterior deixa de valer e a data de validade aparece na tela; veja `API_TOKEN_DAYS`).
 
 No **Windows** (`scripts/enviar-logs.bat`, usa o `curl.exe` que já vem no Windows 10 e 11). Crie o arquivo `%APPDATA%\gw2logs\config.bat` com o endereço e o token:
 
@@ -97,7 +97,7 @@ scripts/enviar-logs.sh ~/Documentos/Guild\ Wars\ 2/addons/arcdps/arcdps.cbtlogs 
 
 - Não guarda registro do que já enviou: o servidor apaga os logs depois de um tempo, e o que sumiu pode ser enviado de novo (o que ainda está guardado é ignorado). Espera quando a fila do servidor está cheia e para com aviso ao bater um limite.
 - Nos dois scripts o token não vai na linha de comando (no `.sh` segue por entrada padrão; no `.bat` por um arquivo temporário seu, apagado no fim).
-- Quem tem o token envia logs no seu nome: trate-o como senha e gere outro no site se ele vazar (o anterior deixa de valer).
+- Quem tem o token envia logs no seu nome: trate-o como senha e gere outro no site se ele vazar (o anterior deixa de valer). O token expira: depois de `API_TOKEN_DAYS` os envios dão erro 401 e é preciso gerar outro no site.
 
 ## Configuração
 
@@ -106,9 +106,10 @@ Variáveis de ambiente do servidor. No Docker Compose, as principais vêm do arq
 | Variável | Para quê | Padrão |
 |---|---|---|
 | `DISCORD_CLIENT_ID` / `DISCORD_CLIENT_SECRET` | Aplicativo do Discord do login (portal de desenvolvedores). Sem os dois, o login fica desligado. O secret vai só no servidor | vazio |
-| `DISCORD_GUILD_IDS` | IDs dos servidores do Discord do clã, separados por vírgula. Preenchida, o login pede também o escopo `guilds` e só entra quem está em um deles; quem já tinha conta e saiu perde o token pessoal no próximo login. Vazia junto com `DISCORD_USER_IDS`, o servidor não sobe (veja `ALLOW_ANY_DISCORD`). Confere só os 200 primeiros servidores de cada pessoa | vazio |
-| `DISCORD_USER_IDS` | IDs dos usuários do Discord com acesso, separados por vírgula (Modo desenvolvedor, botão direito no usuário, *Copiar ID do usuário*). Preenchida, só esses usuários entram; vale **junto** com `DISCORD_GUILD_IDS` (precisa estar nas duas). Quem já tinha conta e saiu da lista perde o token pessoal no próximo login; as lutas ficam. Cuidado: um ID errado barra todo mundo, e para destravar basta esvaziar a variável e reiniciar. Os IDs identificam pessoas: ficam só no `.env` do servidor | vazio |
+| `DISCORD_GUILD_IDS` | IDs dos servidores do Discord do clã, separados por vírgula. Preenchida, o login pede também o escopo `guilds` e só entra quem está em um deles; quem já tinha conta e saiu perde o token pessoal no próximo login. O Discord só é consultado no login: por isso a sessão do navegador pede novo login depois de 7 dias (o site manda a pessoa para o Discord sozinho), e quem saiu do servidor deixa de entrar. Vazia junto com `DISCORD_USER_IDS`, o servidor não sobe (veja `ALLOW_ANY_DISCORD`). Confere só os 200 primeiros servidores de cada pessoa | vazio |
+| `DISCORD_USER_IDS` | IDs dos usuários do Discord com acesso, separados por vírgula (Modo desenvolvedor, botão direito no usuário, *Copiar ID do usuário*). Preenchida, só esses usuários entram; vale **junto** com `DISCORD_GUILD_IDS` (precisa estar nas duas). Quem saiu da lista perde a sessão e o token pessoal na hora (a lista é conferida a cada pedido e as sessões de quem está fora são apagadas quando o servidor sobe); as lutas ficam. Cuidado: um ID errado barra todo mundo, e para destravar basta esvaziar a variável e reiniciar. Os IDs identificam pessoas: ficam só no `.env` do servidor | vazio |
 | `ALLOW_ANY_DISCORD` | Com o login ligado e as duas listas acima vazias, qualquer conta do Discord entraria e enviaria logs: por isso o servidor **se recusa a subir** nessa situação, com uma mensagem no log. `true` libera de propósito (só esse texto vale). Login desligado (sem `DISCORD_CLIENT_ID`/`DISCORD_CLIENT_SECRET`) não é afetado | vazio |
+| `API_TOKEN_DAYS` | Dias que o token pessoal do script de envio vale (a data aparece ao gerar). Depois é preciso gerar outro no site. Os tokens de antes dessa regra ganham este prazo a partir da subida do servidor | `90` |
 | `PUBLIC_URL` | Endereço público do site (ex.: `https://logs.exemplo.com`): é o retorno do login do Discord (`/api/auth/callback`) e liga o cookie `Secure` quando é https | `http://localhost:5080` |
 | `ADMIN_KEY` | Senha para marcar as guildas da aliança. Vazio = qualquer um marca | vazio |
 | `DATA_DIR` | Banco SQLite, logs enviados e JSON das lutas | `./data` |
