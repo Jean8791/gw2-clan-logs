@@ -549,6 +549,31 @@ export function topByRate<T extends Stats & { activeMs: number }>(rows: T[], key
 
 export const perSecond = (value: number, activeMs: number): number => (activeMs > 0 ? (value * 1000) / activeMs : 0);
 
+/** Como mostrar uma métrica: o total, ou por minuto, ou por segundo de tempo ativo. */
+export type ValueMode = "total" | "perMin" | "perSec";
+
+/**
+ * Valor de uma métrica de um jogador (ou de uma soma) no modo escolhido: o mesmo na tabela e no gráfico da luta.
+ * Uptime é % do tempo ativo e boon gerado é volume por luta, então o modo não se aplica a eles.
+ */
+export function statValue(k: StatKey, mode: ValueMode, r: Stats & { activeMs: number }): number {
+  if (isUptimeStat(k)) return uptimeValue(k, r[k], r.activeMs);
+  if (mode === "total" || STAT_META[k].format === "volume") return r[k];
+  return mode === "perSec" ? perSecond(r[k], r.activeMs) : perMinute(r[k], r.activeMs);
+}
+
+/**
+ * Os jogadores do gráfico da luta: os `n` maiores valores da métrica, do maior para o menor, sem quem tem 0 (cura, por exemplo, quase
+ * sempre é 0). Mesmo para métricas em que menos é melhor (mortes): o gráfico mostra quem tem mais. Cada linha leva o valor já calculado.
+ */
+export function topByStat<T extends Stats & { activeMs: number }>(rows: T[], k: StatKey, mode: ValueMode, n = 20): (T & { value: number })[] {
+  return rows
+    .map((r) => ({ ...r, value: statValue(k, mode, r) }))
+    .filter((r) => r.value > 0)
+    .sort((a, b) => b.value - a.value)
+    .slice(0, n);
+}
+
 // ---------- Colunas escolhidas na tabela ----------
 
 const MAX_HIDDEN_COLUMNS = 100;
