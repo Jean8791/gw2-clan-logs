@@ -1,19 +1,17 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { KeyRound, Star } from "lucide-react";
+import { Star } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { guildMatches, PAGE_SIZE, ROUTES, type GuildSummary } from "@gw2logs/shared";
 import { DataTable, type Column } from "../components/DataTable";
 import { Badge, Card, Empty, ErrorBox, Input, Loading, PageHeader, cx } from "../components/ui";
-import { setGuildAlliance, useConfig, useGuilds } from "../lib/api";
-import { useSessionValue } from "../lib/hooks";
+import { setGuildAlliance, useGuilds, useViewer } from "../lib/api";
 import { date } from "../lib/format";
 import { t } from "../lib/i18n";
 
 export function GuildsPage() {
   const { data, error, isLoading } = useGuilds();
-  const { data: cfg } = useConfig();
-  const [key, setKey] = useSessionValue("gw2logs.adminKey");
+  const isAdmin = useViewer().data?.isAdmin === true;
   const [busy, setBusy] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [err, setErr] = useState<unknown>(null);
@@ -23,7 +21,7 @@ export function GuildsPage() {
     setBusy(g.id);
     setErr(null);
     try {
-      await setGuildAlliance(g.id, !g.inAlliance, key);
+      await setGuildAlliance(g.id, !g.inAlliance);
       await qc.invalidateQueries();
     } catch (e) {
       setErr(e);
@@ -41,16 +39,20 @@ export function GuildsPage() {
       header: t("guilds.col.alliance"),
       align: "center",
       sort: (g) => (g.inAlliance ? 1 : 0),
-      cell: (g) => (
-        <button
-          disabled={busy === g.id}
-          onClick={() => toggle(g)}
-          aria-label={g.inAlliance ? t("guilds.removeAlliance") : t("guilds.addAlliance")}
-          className={cx("rounded-md p-1.5 transition", g.inAlliance ? "text-gold hover:bg-gold-soft" : "text-faint hover:bg-surface-3 hover:text-text")}
-        >
-          <Star className={cx("size-4", g.inAlliance && "fill-gold")} />
-        </button>
-      ),
+      // quem não administra vê a estrela, sem o botão
+      cell: (g) =>
+        isAdmin ? (
+          <button
+            disabled={busy === g.id}
+            onClick={() => toggle(g)}
+            aria-label={g.inAlliance ? t("guilds.removeAlliance") : t("guilds.addAlliance")}
+            className={cx("rounded-md p-1.5 transition", g.inAlliance ? "text-gold hover:bg-gold-soft" : "text-faint hover:bg-surface-3 hover:text-text")}
+          >
+            <Star className={cx("size-4", g.inAlliance && "fill-gold")} />
+          </button>
+        ) : (
+          <Star className={cx("mx-auto size-4", g.inAlliance ? "fill-gold text-gold" : "text-faint")} />
+        ),
     },
     { id: "tag", header: t("guilds.col.tag"), sort: (g) => g.tag ?? "", cell: (g) => <Badge tone={g.inAlliance ? "gold" : "neutral"}>[{g.tag ?? "?"}]</Badge> },
     {
@@ -74,14 +76,6 @@ export function GuildsPage() {
         title={t("page.guilds.title")}
         subtitle={t("page.guilds.subtitle")}
       />
-      {cfg?.adminKeyRequired && (
-        <Card className="mb-4 max-w-md p-4">
-          <div className="flex items-end gap-2">
-            <KeyRound className="mb-2.5 size-4 text-faint" />
-            <Input className="flex-1" label={t("guilds.adminKey")} type="password" value={key} onChange={(e) => setKey(e.target.value)} placeholder={t("guilds.adminKeyHint")} />
-          </div>
-        </Card>
-      )}
       {err != null && (
         <div className="mb-4">
           <ErrorBox error={err} />

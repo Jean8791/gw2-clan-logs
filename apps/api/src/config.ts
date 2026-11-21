@@ -15,8 +15,10 @@ export interface Config {
   eiDir: string;
   /** Comando que roda o Elite Insights (dll .NET). */
   dotnet: string;
-  /** Senha para administrar (marcar guildas da aliança). Vazio = qualquer um administra. */
+  /** Senha para administrar por script (marcar guildas da aliança), no cabeçalho x-upload-key. Vazio = só a administração pelo login. */
   adminKey: string;
+  /** IDs do Discord de quem administra pelo login (sessão do navegador). Sem esta lista e sem `adminKey`, a administração fica desligada. */
+  adminDiscordIds: string[];
   /** Endereço público do site (ex.: https://logs.exemplo.com): vira o retorno do login e decide o cookie Secure. */
   publicUrl: string;
   /**
@@ -72,6 +74,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     eiDir: path.resolve(env.EI_DIR ?? path.join(repoRoot, "tools", "GW2EICLI")),
     dotnet: env.DOTNET ?? "dotnet",
     adminKey: env.ADMIN_KEY ?? "",
+    adminDiscordIds: idList(env.ADMIN_DISCORD_IDS),
     publicUrl: (env.PUBLIC_URL ?? `http://localhost:${env.PORT ?? 5080}`).replace(/\/+$/, ""),
     discord: {
       clientId: env.DISCORD_CLIENT_ID ?? "",

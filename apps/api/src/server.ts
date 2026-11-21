@@ -8,7 +8,7 @@ import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest }
 import multipart from "@fastify/multipart";
 import fastifyStatic from "@fastify/static";
 import { MAX_JSON_MB, MAX_UPLOAD_MB, parseFilters, type Filters, type UploadResult } from "@gw2logs/shared";
-import { userByPublicId, type User } from "./auth.js";
+import { isAdmin, userByPublicId, type User } from "./auth.js";
 import { apiUser, registerAuthRoutes, sessionUser } from "./auth-routes.js";
 import { paths, type Config } from "./config.js";
 import { openDb, type DB } from "./db.js";
@@ -86,19 +86,29 @@ export async function buildApp(cfg: Config, opts: { logger?: boolean; fetch?: ty
     return true;
   };
 
-  /** Confere a senha de administrador. Sem ADMIN_KEY configurada a administração fica desligada, nunca aberta. */
+  /**
+   * Quem pode administrar (marcar guildas da aliança): a sessão do navegador de quem está em ADMIN_DISCORD_IDS, ou a ADMIN_KEY no cabeçalho
+   * (script). Sem nenhuma das duas configuradas a administração fica desligada, nunca aberta. Só a ADMIN_KEY errada conta como tentativa falha.
+   */
   const checkAdmin = (req: FastifyRequest, reply: FastifyReply): boolean => {
-    if (cfg.adminKey === "") {
-      reply.code(403).send({ error: "Administration is disabled: set ADMIN_KEY.", code: "adminDisabled" });
+    if (cfg.adminKey === "" && cfg.adminDiscordIds.length === 0) {
+      reply.code(403).send({ error: "Administration is disabled: set ADMIN_DISCORD_IDS or ADMIN_KEY.", code: "adminDisabled" });
       return false;
     }
-    if (ipBlocked(req, reply)) return false;
-    if (safeEqual(String(req.headers["x-upload-key"] ?? ""), cfg.adminKey)) {
-      attempts.reset(req.ip);
-      return true;
+    const user = sessionUser(db, cfg, req);
+    if (user && isAdmin(user, cfg)) return true;
+    if (cfg.adminKey !== "" && String(req.headers["x-upload-key"] ?? "") !== "") {
+      if (ipBlocked(req, reply)) return false;
+      if (safeEqual(String(req.headers["x-upload-key"]), cfg.adminKey)) {
+        attempts.reset(req.ip);
+        return true;
+      }
+      attempts.fail(req.ip);
+      reply.code(401).send({ error: "Wrong admin password.", code: "adminKey" });
+      return false;
     }
-    attempts.fail(req.ip);
-    reply.code(401).send({ error: "Wrong admin password.", code: "adminKey" });
+    if (user) reply.code(403).send({ error: "Only administrators can do this.", code: "notAdmin" });
+    else reply.code(401).send({ error: "Not signed in.", code: "notSignedIn" });
     return false;
   };
 
@@ -218,7 +228,6 @@ export async function buildApp(cfg: Config, opts: { logger?: boolean; fetch?: ty
 
   server.get("/api/config", async () => ({
     loginAvailable: cfg.discord.clientId !== "" && cfg.discord.clientSecret !== "",
-    adminKeyRequired: cfg.adminKey !== "",
     eliteInsights: eiAvailable(cfg.eiDir),
     retentionDays: cfg.retentionDays,
     // só o que vale para cada usuário (os limites do servidor todo não são da conta de ninguém); tamanho por arquivo e por zip são constantes do shared

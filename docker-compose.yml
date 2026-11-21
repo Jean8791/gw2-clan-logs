@@ -5,7 +5,10 @@ services:
     build: .
     restart: unless-stopped
     environment:
-      ADMIN_KEY: ${ADMIN_KEY:?defina ADMIN_KEY no .env}
+      # quem administra o site (marcar guildas da aliança): IDs do Discord separados por vírgula, pelo login
+      ADMIN_DISCORD_IDS: ${ADMIN_DISCORD_IDS:-}
+      # opcional, só para script: senha de administrador no cabeçalho x-upload-key. Sem ela e sem ADMIN_DISCORD_IDS a administração fica desligada
+      ADMIN_KEY: ${ADMIN_KEY:-}
       # login com o Discord: o retorno é https://DOMINIO/api/auth/callback (cadastre no portal de desenvolvedores do Discord)
       DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID:?defina DISCORD_CLIENT_ID no .env}
       DISCORD_CLIENT_SECRET: ${DISCORD_CLIENT_SECRET:?defina DISCORD_CLIENT_SECRET no .env}

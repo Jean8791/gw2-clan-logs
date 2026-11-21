@@ -43,7 +43,6 @@ export interface Meta {
 
 export interface AppConfig {
   loginAvailable: boolean;
-  adminKeyRequired: boolean;
   eliteInsights: boolean;
   retentionDays: number;
   /** Limites de envio de cada usuário. */
@@ -111,10 +110,11 @@ export const useCompare = (accounts: string[], f: Filters) =>
     queryFn: () => get<{ players: PlayerProfile[]; baseline: Aggregate }>(withFilters(`${spaceApi}/compare`, f, { accounts: accounts.join(",") })),
   });
 
-export async function setGuildAlliance(id: string, inAlliance: boolean, key: string) {
+/** Marca ou desmarca uma guilda da aliança. Só vale para quem administra pelo login. */
+export async function setGuildAlliance(id: string, inAlliance: boolean) {
   const res = await fetch(`/api/guilds/${encodeURIComponent(id)}`, {
     method: "PUT",
-    headers: { "Content-Type": "application/json", ...(key ? { "X-Upload-Key": key } : {}) },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ inAlliance }),
   });
   if (!res.ok) throw apiErrorFrom(res.status, await res.json().catch(() => null));
@@ -129,8 +129,13 @@ export interface SpaceUser {
 /** Dono do espaço que está aberto. */
 export const useOwner = () => useQuery({ queryKey: ["owner"], queryFn: () => get<SpaceUser>(spaceApi), retry: false, staleTime: Infinity });
 
+/** Quem está logado: além do espaço, diz se pode administrar (marcar guildas da aliança). */
+export interface Viewer extends SpaceUser {
+  isAdmin: boolean;
+}
+
 interface ViewerState {
-  user: SpaceUser | null;
+  user: Viewer | null;
   /** A sessão existe, mas a conferência dos servidores do Discord venceu: é só entrar de novo. */
   expired: boolean;
 }
@@ -140,7 +145,7 @@ const viewerQuery = <T>(select: (v: ViewerState) => T) =>
     queryKey: ["viewer"],
     queryFn: async (): Promise<ViewerState> => {
       const res = await fetch("/api/auth/me");
-      if (res.ok) return { user: (await res.json()) as SpaceUser, expired: false };
+      if (res.ok) return { user: (await res.json()) as Viewer, expired: false };
       const body = res.status === 401 ? await res.json().catch(() => null) : null;
       return { user: null, expired: body?.code === "loginExpired" };
     },
