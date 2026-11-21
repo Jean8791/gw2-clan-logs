@@ -40,7 +40,7 @@ let media: MediaStore;
 const newFight = (id: string) => db.prepare("INSERT INTO fights (id, sha256, status, uploaded_at) VALUES (?, ?, 'parsing', ?)").run(id, "sha-" + id, new Date().toISOString());
 const ingest = (id: string, json: any) => {
   newFight(id);
-  return ingestJson(db, api, media, id, json, false);
+  return ingestJson(db, api, media, id, json, false, true);
 };
 
 beforeEach(() => {
@@ -153,7 +153,7 @@ describe("ingestJson: habilidades e ícones", () => {
 
   it("reprocessar a mesma luta não duplica linhas", async () => {
     await ingest("luta1", fightWithSkills());
-    await ingestJson(db, api, media, "luta1", fightWithSkills(), false);
+    await ingestJson(db, api, media, "luta1", fightWithSkills(), false, true);
 
     expect((db.prepare("SELECT COUNT(*) AS n FROM player_skills WHERE fight_id = 'luta1'").get() as { n: number }).n).toBe(2);
   });
@@ -202,7 +202,7 @@ describe("GET /api/players/:account/skills", () => {
     const appApi = new Gw2Api(app.db, false);
     const ana = criarUsuario(app, "1");
     app.db.prepare("INSERT INTO fights (id, sha256, status, uploaded_at, owner_id) VALUES ('l1', 's1', 'parsing', ?, ?)").run(new Date().toISOString(), ana.id);
-    await ingestJson(app.db, appApi, new MediaStore(app.db, fakeFetch), "l1", fightWithSkills(), false);
+    await ingestJson(app.db, appApi, new MediaStore(app.db, fakeFetch), "l1", fightWithSkills(), false, true);
 
     const res = await app.server.inject({ url: `/api/u/${ana.publicId}/players/${ACCOUNT}/skills` });
 

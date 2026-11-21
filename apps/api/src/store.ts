@@ -2,14 +2,19 @@ import { STAT_KEYS } from "@gw2logs/shared";
 import { STAT_COL, type DB } from "./db.js";
 import type { ExtractedFight } from "./ingest.js";
 
-/** Grava (ou regrava) o resultado da extração de uma luta. */
-export function saveFight(db: DB, id: string, f: ExtractedFight, mapName: string | null, hasReport: boolean) {
+/**
+ * Grava (ou regrava) o resultado da extração de uma luta. `trusted`: o JSON saiu do nosso Elite Insights; só então um nome diferente
+ * substitui o nome de habilidade já salvo. Num .json enviado pelo usuário o nome só entra se ainda estiver vazio (a tabela é de todos).
+ */
+export function saveFight(db: DB, id: string, f: ExtractedFight, mapName: string | null, hasReport: boolean, trusted: boolean) {
   const cols = ["fight_id", "account", "name", "profession", "guild_id", "grp", "commander", "role", "active_ms", "dist_to_com", ...STAT_KEYS.map((k) => STAT_COL[k])];
   const insertPlayer = db.prepare(`INSERT OR REPLACE INTO player_stats (${cols.join(",")}) VALUES (${cols.map(() => "?").join(",")})`);
   const insertGuild = db.prepare("INSERT OR IGNORE INTO guilds (id) VALUES (?)");
 
   const insertSkill = db.prepare("INSERT INTO player_skills (fight_id, account, skill_id, damage, hits, connected_hits) VALUES (?, ?, ?, ?, ?, ?)");
-  const upsertSkillName = db.prepare("INSERT INTO skills (id, name) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET name = COALESCE(excluded.name, name)");
+  const upsertSkillName = db.prepare(
+    `INSERT INTO skills (id, name) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET name = ${trusted ? "COALESCE(excluded.name, name)" : "COALESCE(NULLIF(name, ''), excluded.name)"}`,
+  );
 
   db.transaction(() => {
     db.prepare("DELETE FROM player_stats WHERE fight_id = ?").run(id);
