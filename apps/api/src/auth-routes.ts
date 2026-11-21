@@ -3,7 +3,7 @@ import crypto from "node:crypto";
 import { ROUTES } from "@gw2logs/shared";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { paths, type Config } from "./config.js";
-import { checkSession, cookieHeader, createSession, deleteSession, isAdmin, readCookie, revokeAccessByDiscordId, sessionExpiry, upsertDiscordUser, userFromToken, type User } from "./auth.js";
+import { checkSession, cookieHeader, createSession, deleteSession, isAdmin, readCookie, revokeAccessByDiscordId, rotatePublicId, sessionExpiry, upsertDiscordUser, userFromToken, type User } from "./auth.js";
 import type { DB } from "./db.js";
 import { safeEqual } from "./guards.js";
 import { removeFights } from "./retention.js";
@@ -120,6 +120,13 @@ export function registerAuthRoutes(server: FastifyInstance, db: DB, cfg: Config,
     await removeFights(db, paths(cfg.dataDir), ids);
     db.prepare("DELETE FROM users WHERE id = ?").run(user.id);
     return reply.header("set-cookie", clear(WEB_COOKIE)).send({ ok: true });
+  });
+
+  // se o link de compartilhar vazar, o dono troca: o antigo passa a dar 404. Só pela sessão do navegador (o token do script não troca link)
+  server.post("/api/auth/share-link/rotate", async (req, reply) => {
+    const user = sessionUser(db, cfg, req);
+    if (!user) return reply.code(401).send({ error: "Not signed in.", code: "notSignedIn" });
+    return { publicId: rotatePublicId(db, user.id) };
   });
 
   // token pessoal para o script de envio; o anterior deixa de valer e o novo só aparece nesta resposta

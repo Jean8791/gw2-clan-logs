@@ -161,6 +161,13 @@ export const useLoginExpired = () => viewerQuery((v) => v.expired).data === true
 
 export const logout = () => fetch("/api/auth/logout", { method: "POST" });
 
+/** Troca o link de compartilhar do usuário logado: o antigo deixa de funcionar. Devolve o id do link novo. */
+export async function rotateShareLink(): Promise<string> {
+  const res = await fetch("/api/auth/share-link/rotate", { method: "POST" });
+  if (!res.ok) throw apiErrorFrom(res.status, await res.json().catch(() => null));
+  return ((await res.json()) as { publicId: string }).publicId;
+}
+
 /** Apaga a conta do usuário logado e todos os logs dele. */
 /** Apaga a conta e todos os logs. O servidor só apaga se `confirm` for o nome da própria conta. */
 export async function deleteAccount(confirm: string): Promise<void> {
