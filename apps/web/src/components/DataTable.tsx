@@ -33,6 +33,7 @@ export function DataTable<T>({
   pageSize,
   fill,
   bar,
+  onSorted,
   onRowClick,
   rowClassName,
   footer,
@@ -58,6 +59,8 @@ export function DataTable<T>({
   fill?: boolean;
   /** Barra de baixo montada pelo pai (paginação no servidor). Recebe o botão "Colunas", para ficar nela; devolva null se não houver barra. */
   bar?: (picker: ReactNode) => ReactNode;
+  /** Avisa qual coluna a pessoa escolheu para ordenar; a tabela continua ordenando sozinha (diferente de `onSortChange`, em que o pai ordena). */
+  onSorted?: (sort: { id: string; desc: boolean }) => void;
   onRowClick?: (r: T) => void;
   rowClassName?: (r: T) => string | undefined;
   footer?: ReactNode;
@@ -73,6 +76,7 @@ export function DataTable<T>({
     if (external) return onSortChange(next);
     setLocalSort(next);
     setPage(1);
+    onSorted?.(next);
   };
   // mudou o conjunto de linhas (filtro): volta para a primeira página
   useEffect(() => setPage(1), [rows.length]);
