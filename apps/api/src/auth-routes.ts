@@ -47,6 +47,9 @@ export function registerAuthRoutes(server: FastifyInstance, db: DB, cfg: Config,
     return reply.header("set-cookie", clear(STATE_COOKIE, "/api/auth")).redirect(`/?erro=${reason}`);
   };
 
+  /** Erro no retorno do Discord: volta para a página inicial com o aviso (quem está no navegador não vê JSON) e limpa o state para a próxima tentativa. */
+  const backToStart = (reply: FastifyReply, erro: "badState" | "loginFailed") => reply.header("set-cookie", clear(STATE_COOKIE, "/api/auth")).redirect(`/?erro=${erro}`);
+
   server.get("/api/auth/login", async (_req, reply) => {
     if (!enabled) return reply.code(503).send({ error: "Login is not configured.", code: "loginOff" });
     const state = crypto.randomBytes(16).toString("base64url");
@@ -61,7 +64,7 @@ export function registerAuthRoutes(server: FastifyInstance, db: DB, cfg: Config,
     if (error) return reply.header("set-cookie", clear(STATE_COOKIE, "/api/auth")).redirect("/");
     const expected = readCookie(req.headers.cookie, STATE_COOKIE);
     if (!enabled || !code || !state || !expected || !safeEqual(state, expected)) {
-      return reply.code(400).send({ error: "Invalid login attempt. Try again.", code: "badState" });
+      return backToStart(reply, "badState");
     }
     try {
       const tokenRes = await doFetch(`${DISCORD}/api/oauth2/token`, {
@@ -89,7 +92,7 @@ export function registerAuthRoutes(server: FastifyInstance, db: DB, cfg: Config,
         .redirect(`/u/${user.publicId}${hasFights ? "" : ROUTES.import}`);
     } catch (e) {
       req.log.error({ err: e instanceof Error ? e.message : String(e) }, "falha no login com o Discord");
-      return reply.code(502).send({ error: "Could not sign in with Discord. Try again.", code: "loginFailed" });
+      return backToStart(reply, "loginFailed");
     }
   });
 

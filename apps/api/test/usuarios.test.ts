@@ -148,11 +148,19 @@ describe("login com o Discord", () => {
     expect(JSON.stringify(me.json())).not.toContain("777");
   });
 
-  it("recusa o retorno com state errado ou ausente", async () => {
+  it("recusa o retorno com state errado ou ausente e volta para a página inicial com o aviso (nunca mostra JSON)", async () => {
     const ida = await app.server.inject("/api/auth/login");
     const cookieState = cookieDe(ida, "oauth_state")!.split(";")[0]!;
-    expect((await app.server.inject({ url: "/api/auth/callback?code=abc&state=outro", headers: { cookie: cookieState } })).statusCode).toBe(400);
-    expect((await app.server.inject("/api/auth/callback?code=abc&state=outro")).statusCode).toBe(400);
+    for (const res of [
+      await app.server.inject({ url: "/api/auth/callback?code=abc&state=outro", headers: { cookie: cookieState } }),
+      await app.server.inject("/api/auth/callback?code=abc&state=outro"),
+    ]) {
+      expect(res.statusCode).toBe(302);
+      expect(res.headers.location).toBe("/?erro=badState");
+      expect(cookieDe(res, "session")).toBeUndefined();
+      expect(cookieDe(res, "oauth_state")).toContain("Max-Age=0"); // a próxima tentativa começa limpa
+    }
+    expect(app.db.prepare("SELECT COUNT(*) AS n FROM users").get()).toEqual({ n: 0 });
   });
 
   it("quem já tem lutas entra na visão geral, não na importação", async () => {
@@ -283,8 +291,8 @@ describe("login restrito aos servidores do Discord do clã", () => {
 
     const { volta } = await entrar();
 
-    expect(volta.statusCode).toBe(502);
-    expect(volta.json().code).toBe("loginFailed");
+    expect(volta.statusCode).toBe(302);
+    expect(volta.headers.location).toBe("/?erro=loginFailed"); // volta para a página inicial com o aviso, em vez de mostrar JSON
     expect(cookieDe(volta, "session")).toBeUndefined();
     expect(usuarios()).toBe(0);
   });
