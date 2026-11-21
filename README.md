@@ -111,7 +111,8 @@ Variáveis de ambiente do servidor. No Docker Compose, as principais vêm do arq
 | `ALLOW_ANY_DISCORD` | Com o login ligado e as duas listas acima vazias, qualquer conta do Discord entraria e enviaria logs: por isso o servidor **se recusa a subir** nessa situação, com uma mensagem no log. `true` libera de propósito (só esse texto vale). Login desligado (sem `DISCORD_CLIENT_ID`/`DISCORD_CLIENT_SECRET`) não é afetado | vazio |
 | `API_TOKEN_DAYS` | Dias que o token pessoal do script de envio vale (a data aparece ao gerar). Depois é preciso gerar outro no site. Os tokens de antes dessa regra ganham este prazo a partir da subida do servidor | `90` |
 | `PUBLIC_URL` | Endereço público do site (ex.: `https://logs.exemplo.com`): é o retorno do login do Discord (`/api/auth/callback`) e liga o cookie `Secure` quando é https | `http://localhost:5080` |
-| `ADMIN_KEY` | Senha para marcar as guildas da aliança. Vazio = qualquer um marca | vazio |
+| `ADMIN_DISCORD_IDS` | IDs do Discord de quem administra o site (marcar as guildas da aliança), separados por vírgula. Vale pela sessão do navegador: quem está na lista vê os controles na tela *Guildas*; os demais só veem a estrela. Sem esta lista e sem `ADMIN_KEY`, a administração fica desligada (nunca aberta). O ID não aparece em nenhuma resposta do site | vazio |
+| `ADMIN_KEY` | Opcional, só para script: senha enviada no cabeçalho `x-upload-key` em `PUT /api/guilds/:id`, com o mesmo limite de tentativas dos envios. O site não pede mais essa senha na tela. Vazio = só a administração pelo login | vazio |
 | `DATA_DIR` | Banco SQLite, logs enviados e JSON das lutas | `./data` |
 | `RETENTION_DAYS` | Dias que as lutas ficam guardadas (0 = para sempre). No Compose o padrão é 30 | `0` |
 | `PORT` / `HOST` | Endereço do servidor | `5080` / `127.0.0.1` |

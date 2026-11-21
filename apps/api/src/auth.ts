@@ -13,6 +13,8 @@ export interface DiscordProfile {
 
 export interface User {
   id: number;
+  /** Só para o servidor decidir permissões (administração): nunca vai numa resposta da API. */
+  discordId: string;
   publicId: string;
   name: string;
   avatar: string | null;
@@ -31,8 +33,9 @@ const sha256 = (s: string) => crypto.createHash("sha256").update(s).digest("hex"
 /** Id que vai na URL de compartilhar: aleatório, para não revelar nem permitir adivinhar o id do Discord. */
 const newPublicId = () => crypto.randomBytes(9).toString("base64url");
 
-const toUser = (r: { id: number; public_id: string; name: string; avatar: string | null }): User => ({
+const toUser = (r: { id: number; discord_id: string; public_id: string; name: string; avatar: string | null }): User => ({
   id: r.id,
+  discordId: r.discord_id,
   publicId: r.public_id,
   name: r.name,
   avatar: r.avatar,
@@ -55,6 +58,9 @@ export function upsertDiscordUser(db: DB, p: DiscordProfile): User {
     return toUser(db.prepare("SELECT * FROM users WHERE id = ?").get(id) as any);
   })();
 }
+
+/** Administra pelo login: o ID do Discord está em ADMIN_DISCORD_IDS. */
+export const isAdmin = (user: User, cfg: Pick<Config, "adminDiscordIds">): boolean => cfg.adminDiscordIds.includes(user.discordId);
 
 /** Quando uma sessão nova termina: a web dura 30 dias; o token de API, `apiTokenDays`. */
 export const sessionExpiry = (kind: SessionKind, now = new Date(), apiTokenDays = DEFAULT_API_TOKEN_DAYS): string =>

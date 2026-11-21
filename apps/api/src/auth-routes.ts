@@ -3,7 +3,7 @@ import crypto from "node:crypto";
 import { ROUTES } from "@gw2logs/shared";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { paths, type Config } from "./config.js";
-import { checkSession, cookieHeader, createSession, deleteSession, readCookie, revokeAccessByDiscordId, sessionExpiry, upsertDiscordUser, userFromToken, type User } from "./auth.js";
+import { checkSession, cookieHeader, createSession, deleteSession, isAdmin, readCookie, revokeAccessByDiscordId, sessionExpiry, upsertDiscordUser, userFromToken, type User } from "./auth.js";
 import type { DB } from "./db.js";
 import { safeEqual } from "./guards.js";
 import { removeFights } from "./retention.js";
@@ -91,7 +91,7 @@ export function registerAuthRoutes(server: FastifyInstance, db: DB, cfg: Config,
 
   server.get("/api/auth/me", async (req, reply) => {
     const { user, needsNewLogin } = checkSession(db, readCookie(req.headers.cookie, WEB_COOKIE), "web", cfg.discord);
-    if (user) return { publicId: user.publicId, name: user.name, avatar: user.avatar };
+    if (user) return { publicId: user.publicId, name: user.name, avatar: user.avatar, isAdmin: isAdmin(user, cfg) };
     // a conferência dos servidores do Discord venceu: a tela inicial pede para entrar de novo
     if (needsNewLogin) return reply.code(401).send({ error: "Sign in again.", code: "loginExpired" });
     return reply.code(401).send({ error: "Not signed in.", code: "notSignedIn" });
