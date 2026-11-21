@@ -17,9 +17,10 @@ export function LandingPage() {
 
   if (viewer.isLoading || viewer.data) return <Loading />;
 
-  // o login negado volta para cá com ?erro=notInGuild (fora dos servidores do clã) ou ?erro=notAllowed (fora da lista de usuários)
+  // o login que não deu certo volta para cá com ?erro=: notInGuild (fora dos servidores do clã), notAllowed (fora da lista de usuários),
+  // badState (tentativa expirada ou interrompida) ou loginFailed (o Discord falhou)
   const erro = new URLSearchParams(window.location.search).get("erro");
-  const loginDenied = erro === "notInGuild" || erro === "notAllowed" ? erro : null;
+  const loginDenied = erro === "notInGuild" || erro === "notAllowed" || erro === "badState" || erro === "loginFailed" ? erro : null;
 
   return (
     <div className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center gap-5 px-6 text-center">
