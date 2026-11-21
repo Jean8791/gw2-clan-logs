@@ -73,6 +73,15 @@ describe("readLogsFromZip: abrir o zip de logs no navegador", () => {
   });
 });
 
+describe("readLogsFromZip: limite próprio dos .json", () => {
+  it("um .json acima do limite de .json não é aberto, mas um .zevtc do mesmo tamanho é", () => {
+    const r = readLogsFromZip(zip({ "grande.json": new Uint8Array(16_000_000), "grande.zevtc": new Uint8Array(16_000_000), "ok.json": strToU8("{}") }));
+
+    expect(r.tooBig).toEqual(["grande.json"]);
+    expect(nomes(r)).toEqual(["grande.zevtc", "ok.json"]);
+  });
+});
+
 describe("readLogsFromZip: limite de logs por zip", () => {
   const logs = (n: number) => Object.fromEntries(Array.from({ length: n }, (_, i) => [`dia/${i}.zevtc`, strToU8(String(i))]));
 

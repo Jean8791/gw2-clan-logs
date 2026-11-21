@@ -58,7 +58,10 @@ export class LogWorker {
 
   /** Recoloca na fila o que ficou pela metade numa execução anterior. */
   resume() {
-    const rows = this.db.prepare("SELECT id FROM fights WHERE status IN ('queued','parsing') ORDER BY uploaded_at").all() as { id: string }[];
+    // O que estava em processamento quando o servidor caiu não é repetido sozinho: se foi esse log que derrubou o servidor (falta de memória),
+    // repetir a cada subida geraria um laço de reinício. Vira erro, e quem enviou pode reenviar (o reenvio substitui o registro com erro).
+    this.db.prepare("UPDATE fights SET status = 'error', error = 'interrupted' WHERE status = 'parsing'").run();
+    const rows = this.db.prepare("SELECT id FROM fights WHERE status = 'queued' ORDER BY uploaded_at").all() as { id: string }[];
     for (const r of rows) this.enqueue(r.id);
   }
 

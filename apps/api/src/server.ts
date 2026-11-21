@@ -7,7 +7,7 @@ import { Transform } from "node:stream";
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
 import multipart from "@fastify/multipart";
 import fastifyStatic from "@fastify/static";
-import { MAX_UPLOAD_MB, parseFilters, type Filters, type UploadResult } from "@gw2logs/shared";
+import { MAX_JSON_MB, MAX_UPLOAD_MB, parseFilters, type Filters, type UploadResult } from "@gw2logs/shared";
 import { userByPublicId, type User } from "./auth.js";
 import { apiUser, registerAuthRoutes, sessionUser } from "./auth-routes.js";
 import { paths, type Config } from "./config.js";
@@ -17,6 +17,7 @@ import { Gw2Api } from "./gw2api.js";
 import { AttemptLimiter, folderBytes, safeEqual } from "./guards.js";
 import { MEDIA_KEY, MediaStore } from "./media.js";
 import * as q from "./queries.js";
+import { removeFights } from "./retention.js";
 import { copyFight } from "./store.js";
 import { LogWorker } from "./worker.js";
 
@@ -133,9 +134,10 @@ export async function buildApp(cfg: Config, opts: { logger?: boolean; fetch?: ty
       // grava num temporário calculando o hash: o mesmo log enviado duas vezes pelo mesmo usuário é ignorado
       const tmp = path.join(p.uploads, `tmp-${crypto.randomUUID()}`);
       const hash = crypto.createHash("sha256");
+      let bytes = 0;
       await pipeline(
         part.file,
-        new Transform({ transform: (chunk, _e, cb) => (hash.update(chunk), cb(null, chunk)) }),
+        new Transform({ transform: (chunk, _e, cb) => (hash.update(chunk), (bytes += chunk.length), cb(null, chunk)) }),
         createWriteStream(tmp),
       );
       if (part.file.truncated) {
@@ -143,8 +145,19 @@ export async function buildApp(cfg: Config, opts: { logger?: boolean; fetch?: ty
         results.push({ file: part.filename, error: `File larger than ${MAX_UPLOAD / 1024 / 1024} MB.`, code: "tooBig", max: MAX_UPLOAD / 1024 / 1024 });
         continue;
       }
+      // o .json é lido inteiro na memória (~30 vezes o tamanho do arquivo): acima do limite próprio, o envio derrubaria o servidor
+      if (ext === ".json" && bytes > MAX_JSON_MB * 1024 * 1024) {
+        await fs.rm(tmp, { force: true });
+        results.push({ file: part.filename, error: `JSON file larger than ${MAX_JSON_MB} MB. Send the original .zevtc instead.`, code: "jsonTooBig", max: MAX_JSON_MB });
+        continue;
+      }
       const sha = hash.digest("hex");
-      const existing = db.prepare("SELECT id, status FROM fights WHERE sha256 = ? AND owner_id = ?").get(sha, user.id) as { id: string; status: any } | undefined;
+      let existing = db.prepare("SELECT id, status FROM fights WHERE sha256 = ? AND owner_id = ?").get(sha, user.id) as { id: string; status: any } | undefined;
+      // um log que ficou com erro (por exemplo, interrompido quando o servidor caiu) pode ser reenviado: o registro com erro sai e o envio segue como novo
+      if (existing?.status === "error") {
+        await removeFights(db, p, [existing.id]);
+        existing = undefined;
+      }
       if (existing) {
         await fs.rm(tmp, { force: true });
         results.push({ file: part.filename, id: existing.id, status: existing.status, duplicate: true });
