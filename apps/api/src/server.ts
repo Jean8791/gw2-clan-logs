@@ -18,7 +18,7 @@ import { AttemptLimiter, folderBytes, safeEqual } from "./guards.js";
 import { MEDIA_KEY, MediaStore } from "./media.js";
 import * as q from "./queries.js";
 import { removeFights } from "./retention.js";
-import { isCrossSite, SAFE_METHODS, securityHeaders } from "./security.js";
+import { isCrossSite, reportForSandbox, SAFE_METHODS, securityHeaders } from "./security.js";
 import { copyFight } from "./store.js";
 import { LogWorker } from "./worker.js";
 
@@ -69,8 +69,8 @@ export async function buildApp(cfg: Config, opts: { logger?: boolean; fetch?: ty
   });
   const REPORT = /\/fights\/[^/?]+\/report(\?|$)/; // o relatório HTML do Elite Insights traz scripts próprios: a CSP do site o quebraria
   server.addHook("onSend", async (req, reply, payload) => {
-    const html = String(reply.getHeader("content-type") ?? "").startsWith("text/html") && !REPORT.test(req.url);
-    reply.headers(securityHeaders({ https: cfg.publicUrl.startsWith("https://"), html }));
+    const html = String(reply.getHeader("content-type") ?? "").startsWith("text/html");
+    reply.headers(securityHeaders({ https: cfg.publicUrl.startsWith("https://"), html, report: REPORT.test(req.url) }));
     return payload;
   });
 
@@ -291,7 +291,7 @@ export async function buildApp(cfg: Config, opts: { logger?: boolean; fetch?: ty
         const mine = db.prepare("SELECT 1 FROM fights WHERE id = ? AND owner_id = ?").get(id, req.owner.id);
         const file = path.join(p.fightDir(id), "report.html");
         if (!mine || !existsSync(file)) return reply.code(404).send({ error: "Report not available for this fight.", code: "noReport" });
-        return reply.type("text/html; charset=utf-8").send(await fs.readFile(file));
+        return reply.type("text/html; charset=utf-8").send(reportForSandbox(await fs.readFile(file, "utf8")));
       });
 
       scope.get("/ranking", async (req) => {

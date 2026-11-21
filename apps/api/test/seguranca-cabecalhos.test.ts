@@ -4,6 +4,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createSession } from "../src/auth.js";
 import { loadConfig } from "../src/config.js";
+import { reportForSandbox } from "../src/security.js";
 import { buildApp, type App } from "../src/server.js";
 import { criarUsuario, multipart } from "./usuarios.js";
 
@@ -73,7 +74,7 @@ describe("cabeçalhos de segurança", () => {
     expect(cabecalho(await app.server.inject("/api/health"), "content-security-policy")).toBeUndefined();
   });
 
-  it("o relatório HTML do Elite Insights não recebe a CSP global (ela quebraria os scripts dele), mas leva nosniff", async () => {
+  it("o relatório HTML do Elite Insights roda isolado (CSP sandbox allow-scripts, sem a CSP global que quebraria os scripts dele) e leva nosniff", async () => {
     const ana = criarUsuario(app, "1", "ana");
     app.db.prepare("INSERT INTO fights (id, sha256, status, uploaded_at, owner_id) VALUES ('f1', 's', 'done', ?, ?)").run(new Date().toISOString(), ana.id);
     fs.mkdirSync(path.join(dir, "fights", "f1"), { recursive: true });
@@ -82,8 +83,33 @@ describe("cabeçalhos de segurança", () => {
     const res = await app.server.inject(`/api/u/${ana.publicId}/fights/f1/report`);
 
     expect(res.statusCode).toBe(200);
-    expect(cabecalho(res, "content-security-policy")).toBeUndefined();
+    // origem opaca: o relatório roda scripts, mas não alcança o cookie da sessão nem a API do site
+    expect(cabecalho(res, "content-security-policy")).toBe("sandbox allow-scripts");
     expect(cabecalho(res, "x-content-type-options")).toBe("nosniff");
+  });
+
+  it("o relatório sandboxed não quebra no localStorage: um script no início do <head> o anula quando o acesso é bloqueado", async () => {
+    const ana = criarUsuario(app, "1", "ana");
+    app.db.prepare("INSERT INTO fights (id, sha256, status, uploaded_at, owner_id) VALUES ('f2', 's2', 'done', ?, ?)").run(new Date().toISOString(), ana.id);
+    fs.mkdirSync(path.join(dir, "fights", "f2"), { recursive: true });
+    fs.writeFileSync(path.join(dir, "fights", "f2", "report.html"), '<!DOCTYPE html><html><head><meta charset="utf-8"><script>window.ORIGINAL = 1;</script></head><body></body></html>');
+
+    const corpo = (await app.server.inject(`/api/u/${ana.publicId}/fights/f2/report`)).body;
+
+    const shim = corpo.indexOf("localStorage");
+    expect(shim).toBeGreaterThan(corpo.indexOf("<head>"));
+    expect(shim).toBeLessThan(corpo.indexOf("window.ORIGINAL")); // roda antes dos scripts do relatório
+    expect(corpo).toContain("window.ORIGINAL = 1;"); // o resto do relatório fica como estava
+    expect(corpo).toContain('<meta charset="utf-8">');
+  });
+
+  it("a resposta de erro da rota do relatório (JSON) não leva o sandbox", async () => {
+    const ana = criarUsuario(app, "1", "ana");
+
+    const res = await app.server.inject(`/api/u/${ana.publicId}/fights/nao-existe/report`);
+
+    expect(res.statusCode).toBe(404);
+    expect(cabecalho(res, "content-security-policy")).toBeUndefined();
   });
 });
 
@@ -177,5 +203,31 @@ describe("apagar a conta pede o nome para confirmar", () => {
 
     expect((await apagar(`session=${createSession(app.db, ana.id, "web")}`, { confirm: "ana" })).statusCode).toBe(200);
     expect(existe(ana.id)).toBe(false);
+  });
+});
+
+describe("reportForSandbox: onde o script anti-localStorage entra no relatório", () => {
+  const SCRIPT = "<script>try{window.localStorage}";
+
+  it("logo depois do <head>, mesmo com atributos", () => {
+    const html = reportForSandbox('<!DOCTYPE html><html><head lang="pt"><meta charset="utf-8"></head><body></body></html>');
+
+    expect(html).toContain(`<head lang="pt">${SCRIPT}`);
+  });
+
+  it("<header> não é <head>: sem <head>, entra depois do doctype e deixa o <header> intacto", () => {
+    const html = reportForSandbox('<!DOCTYPE html><html><body><header class="topo">T</header><script>window.O=1</script></body></html>');
+
+    expect(html.startsWith(`<!DOCTYPE html>${SCRIPT}`)).toBe(true);
+    expect(html).toContain('<header class="topo">T</header>');
+    expect(html.match(/localStorage/g)).toHaveLength(2); // só o script anti-localStorage (try e defineProperty), uma vez
+  });
+
+  it("sem <head> e sem doctype, vai para o começo", () => {
+    expect(reportForSandbox("<div>oi</div>").startsWith(SCRIPT)).toBe(true);
+  });
+
+  it("o doctype continua na primeira linha (senão o navegador cai em quirks mode)", () => {
+    expect(reportForSandbox("<!doctype html><html><body></body></html>").startsWith("<!doctype html>")).toBe(true);
   });
 });
