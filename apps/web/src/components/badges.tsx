@@ -61,7 +61,7 @@ export function GuildTag({ id, withName = false }: { id: string | null; withName
   const g = guilds.get(id);
   const label = g?.tag ? `[${g.tag}]` : "[?]";
   return (
-    <span className="inline-flex min-w-0 items-center gap-1.5" title={g?.name ?? id}>
+    <span className="inline-flex min-w-0 items-center gap-1.5" title={g ? (g.name ?? t("guild.unknownTip")) : undefined}>
       <span className={cx("rounded px-1 py-px text-[11px] font-bold", g?.inAlliance ? "bg-gold-soft text-gold" : "bg-surface-3 text-muted")}>{label}</span>
       {withName && <span className="truncate text-sm text-muted">{g?.name ?? t("guild.unknown")}</span>}
     </span>
