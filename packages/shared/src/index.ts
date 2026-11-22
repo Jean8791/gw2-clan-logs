@@ -7,6 +7,7 @@ export * from "./upload.js";
 export * from "./upload-queue.js";
 export * from "./zip.js";
 export * from "./pagination.js";
+export * from "./fit-height.js";
 export * from "./search.js";
 export * from "./retention.js";
 import { BOON_BASES, type ScopedKey } from "./boons.js";
