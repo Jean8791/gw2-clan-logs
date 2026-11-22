@@ -4,6 +4,7 @@ import { pageCount, pageSlice, visibleColumns } from "@gw2logs/shared";
 import { loadHiddenColumns, saveHiddenColumns } from "../lib/columns";
 import { ColumnPicker } from "./ColumnPicker";
 import { Pagination } from "./Pagination";
+import { useFitHeight } from "../lib/fit-height";
 import { cx } from "./ui";
 
 export interface Column<T> {
@@ -53,8 +54,8 @@ export function DataTable<T>({
   /** Mostra só esta quantidade de linhas por vez, com os controles de página. A ordenação continua valendo para todas as linhas. */
   pageSize?: number;
   /**
-   * Ocupa o resto da altura da tela (o pai precisa ser uma coluna com altura definida, ver `fill` nas rotas): a página não rola,
-   * só a lista de dentro, e o cabeçalho fica sempre à vista. Sem ele, a tabela tem altura máxima própria.
+   * Ocupa o resto da altura da tela, medida no navegador (ver `useFitHeight`): só a lista de dentro rola e o cabeçalho fica sempre à vista.
+   * Se a tela for pequena demais para o mínimo, é a página que rola. Sem ele, a tabela tem altura máxima própria.
    */
   fill?: boolean;
   /** Barra de baixo montada pelo pai (paginação no servidor). Recebe o botão "Colunas", para ficar nela; devolva null se não houver barra. */
@@ -68,6 +69,7 @@ export function DataTable<T>({
   /** com ele, aparece o botão "Colunas" e a escolha fica salva no navegador, por tabela */
   pickerKey?: string;
 }) {
+  const fit = useFitHeight(fill === true);
   const [localSort, setLocalSort] = useState(initialSort ?? null);
   const [page, setPage] = useState(1);
   const external = onSortChange !== undefined;
@@ -126,8 +128,8 @@ export function DataTable<T>({
   return (
     // Área de rolagem com altura limitada: assim o cabeçalho (sticky) fica preso no topo dela ao rolar, como na bel.st.
     // Com overflow só no eixo x o cabeçalho colava num contêiner que não rola na vertical e sumia.
-    <div className={fill ? "flex min-h-0 flex-1 flex-col" : undefined}>
-      <div className={fill ? "min-h-0 flex-1 overflow-auto" : "max-h-[calc(100vh-5rem)] overflow-auto"}>
+    <div ref={fill ? fit.wrap : undefined}>
+      <div ref={fill ? fit.area : undefined} style={fill ? { height: fit.height } : undefined} className={fill ? "overflow-auto" : "max-h-[calc(100vh-5rem)] overflow-auto"}>
       <table className="w-full border-separate border-spacing-0 text-sm">
         <thead>
           <tr>
