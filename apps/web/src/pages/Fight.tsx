@@ -5,7 +5,7 @@ import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis
 import { emptyStats, isUptimeStat, professionColor, ROUTES, STAT_KEYS, STAT_META, statsOfGroup, statText, topByStat, type BoonScope, type PlayerFight, type StatGroup, type StatKey, type Stats } from "@gw2logs/shared";
 import { DataTable, type Column } from "../components/DataTable";
 import { defaultSort, GroupTabs, pickerView, ModeToggle, statColumns, type ValueMode } from "../components/statColumns";
-import { GuildTag, PlayerLink, Profession } from "../components/badges";
+import { GuildTag, NoAllianceNote, PlayerLink, Profession } from "../components/badges";
 import { AXIS, GRID, TOOLTIP } from "../components/charts";
 import { fightKills, KillDeath } from "../components/FightBits";
 import { Badge, Button, Card, Empty, ErrorBox, Kpi, Loading, PageHeader, Segmented, Select } from "../components/ui";
@@ -212,7 +212,11 @@ export function FightPage() {
             </Select>
           )}
         </div>
-        {view === "players" ? (
+        {view === "players" && guild && players.length === 0 ? (
+          <Empty title={t("fight.filter.noPlayers")}>
+            <NoAllianceNote guild={guild} />
+          </Empty>
+        ) : view === "players" ? (
           <DataTable
             key={`players-${group}-${scope}`}
             pickerKey={`fight-players:${pickerView(group, scope)}`}

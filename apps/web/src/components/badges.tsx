@@ -48,6 +48,13 @@ export function useGuildIndex() {
   return new Map((data ?? []).map((g) => [g.id, g]));
 }
 
+/** Aviso para quando o filtro é "Só a aliança" e nenhuma guilda foi marcada como aliança (a lista vazia não é erro). */
+export function NoAllianceNote({ guild }: { guild: string | undefined }) {
+  const { data: guilds } = useGuilds();
+  if (guild !== "alliance" || !guilds || guilds.some((g) => g.inAlliance)) return null;
+  return <p className="mt-2">{t("alliance.noneMarked")}</p>;
+}
+
 export function GuildTag({ id, withName = false }: { id: string | null; withName?: boolean }) {
   const guilds = useGuildIndex();
   if (!id) return <span className="text-faint">—</span>;
