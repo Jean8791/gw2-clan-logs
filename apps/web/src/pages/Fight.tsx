@@ -199,7 +199,7 @@ export function FightPage() {
             ]}
           />
           <GroupTabs value={group} onChange={setGroup} scope={scope} onScopeChange={setScope} />
-          <ModeToggle value={mode} onChange={setMode} />
+          {group !== "boons" && group !== "uptime" && <ModeToggle value={mode} onChange={setMode} />}
           {view === "players" && (
             <Select className="ml-auto w-56" value={guild} onChange={(e) => setGuild(e.target.value)} aria-label={t("fight.filter.aria")}>
               <option value="">{t("fight.filter.all")}</option>
