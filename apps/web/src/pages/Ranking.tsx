@@ -109,7 +109,7 @@ export function RankingPage() {
       <Card className="flex min-h-0 flex-1 flex-col">
         <div className="flex flex-wrap items-center gap-3 border-b border-line px-4 py-3">
           <GroupTabs value={group} onChange={setGroup} scope={scope} onScopeChange={setScope} />
-          <ModeToggle value={mode} onChange={setMode} />
+          {group !== "boons" && group !== "uptime" && <ModeToggle value={mode} onChange={setMode} />}
           <Select className="w-56" value={String(minMinutes)} onChange={(e) => setMinMinutes(Number(e.target.value))} aria-label={t("ranking.minTime")}>
             <option value="0">{t("ranking.minTime.any")}</option>
             <option value="2">{t("ranking.minTime.2")}</option>
