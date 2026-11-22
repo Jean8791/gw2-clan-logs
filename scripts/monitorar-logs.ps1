@@ -12,6 +12,7 @@ Configuracao: o mesmo arquivo do enviar-logs.bat, %APPDATA%\gw2logs\config.bat, 
   GW2LOGS_ORIGEM          pasta do ArcDPS (padrao: Documentos\Guild Wars 2\addons\arcdps\arcdps.cbtlogs)
   GW2LOGS_PASTA           pasta de trabalho (padrao: Documentos\GW2 Logs)
   GW2LOGS_MAX_TENTATIVAS  erros de servidor seguidos por arquivo antes de desistir dele (padrao: 5)
+  GW2LOGS_DIAS            so envia logs gravados nos ultimos N dias; os mais antigos ficam na pasta do ArcDPS, sem mexer (padrao: 3; 0 = sem limite)
 Variavel de ambiente vale mais que o arquivo.
 
 Registro: <pasta de trabalho>\monitor.log (vira monitor.old.log ao passar de 1 MB).
@@ -204,6 +205,7 @@ $script:Chave = Get-Setting $doArquivo 'GW2LOGS_KEY' ''
 $origem = Get-Setting $doArquivo 'GW2LOGS_ORIGEM' (Join-Path $documentos 'Guild Wars 2\addons\arcdps\arcdps.cbtlogs')
 $pasta = Get-Setting $doArquivo 'GW2LOGS_PASTA' (Join-Path $documentos 'GW2 Logs')
 $maxTentativasTexto = Get-Setting $doArquivo 'GW2LOGS_MAX_TENTATIVAS' '5'
+$diasTexto = Get-Setting $doArquivo 'GW2LOGS_DIAS' '3'
 
 $problemas = @()
 try {
@@ -238,6 +240,10 @@ elseif ($script:Url -notmatch '^https?://') { $problemas += "GW2LOGS_URL precisa
 $maxTentativas = 0
 if (-not [int]::TryParse($maxTentativasTexto, [ref]$maxTentativas) -or $maxTentativas -lt 1) {
     $problemas += "GW2LOGS_MAX_TENTATIVAS precisa ser um numero maior que zero (esta '$maxTentativasTexto')"
+}
+$dias = 0
+if (-not [int]::TryParse($diasTexto, [ref]$dias) -or $dias -lt 0) {
+    $problemas += "GW2LOGS_DIAS precisa ser um numero inteiro, 0 ou maior (esta '$diasTexto')"
 }
 if ($problemas.Count -eq 0) {
     $prefixoOrigem = $origem + '\'
@@ -275,8 +281,11 @@ try {
         Write-Log "Aviso: pasta do ArcDPS nao encontrada ($origem). Confira GW2LOGS_ORIGEM."
     } else {
         $limite = (Get-Date).AddSeconds(-$IdadeMinimaSegundos)
+        # os logs mais antigos que GW2LOGS_DIAS nao entram: ficam onde estao (evita encher a fila do servidor na primeira execucao)
+        $maisAntigo = if ($dias -gt 0) { (Get-Date).AddDays(-$dias) } else { [datetime]::MinValue }
         foreach ($f in (Get-Logs $origem | Sort-Object LastWriteTime, FullName)) {
             if ($f.LastWriteTime -gt $limite) { continue }
+            if ($f.LastWriteTime -lt $maisAntigo) { continue }
             if (-not (Test-Livre $f.FullName)) { continue }
             try {
                 Move-Relative $f $origem $integrando | Out-Null

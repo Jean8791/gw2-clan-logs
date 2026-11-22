@@ -1,12 +1,12 @@
-import { CheckCircle2, CircleDashed, FileUp, Info, KeyRound, ListChecks, Loader2, PauseCircle, XCircle } from "lucide-react";
+import { CheckCircle2, CircleDashed, FileUp, Info, ListChecks, Loader2, PauseCircle, XCircle } from "lucide-react";
 import { useMemo, useRef, useState, type DragEvent } from "react";
 import { Link } from "react-router-dom";
 import { MAX_JSON_MB, MAX_UPLOAD_MB, MAX_ZIP_LOGS, MAX_ZIP_MB, retentionCutoff, ROUTES, readLogsFromZip, ZipError, type ItemState, type QueueItem } from "@gw2logs/shared";
 import { RetentionNotice } from "../components/RetentionNotice";
+import { ScriptCard } from "../components/ScriptHelp";
 import { Button, Card, ErrorBox, PageHeader, Rich, cx } from "../components/ui";
-import { createToken, useConfig, useFights } from "../lib/api";
+import { useConfig, useFights, useViewer } from "../lib/api";
 import { codeText, fightErrorText } from "../lib/errors";
-import { date } from "../lib/format";
 import { t } from "../lib/i18n";
 import { uploadQueue, useUploadQueue } from "../lib/upload-queue";
 
@@ -37,6 +37,8 @@ async function itemsOf(file: File): Promise<Item[]> {
 
 export function UploadPage() {
   const { data: cfg } = useConfig();
+  // o envio por script ainda não está liberado para o clã: só o administrador vê o cartão
+  const isAdmin = useViewer().data?.isAdmin === true;
   // a lista e o envio moram na fila global: sair desta página não os interrompe, e ao voltar a lista está aqui
   const { items, running, pct } = useUploadQueue();
   const [drag, setDrag] = useState(false);
@@ -188,6 +190,7 @@ export function UploadPage() {
         </div>
 
         <div className="flex flex-col gap-4">
+        {isAdmin && <ScriptCard />}
         <Card title={<span className="inline-flex items-center gap-2"><ListChecks className="size-4 text-gold" /> {t("upload.limits.title")}</span>}>
           <div className="space-y-3 px-5 py-4 text-sm text-muted">
             <p>
@@ -230,46 +233,3 @@ export function UploadPage() {
   );
 }
 
-
-/** Gera o token do script de envio e mostra, uma vez só, as duas linhas de configuração. */
-export function ScriptCard() {
-  const [created, setCreated] = useState<{ token: string; expiresAt: string } | null>(null);
-  const [error, setError] = useState<unknown>(null);
-  const [copied, setCopied] = useState(false);
-  const config = created ? `GW2LOGS_URL=${window.location.origin}\nGW2LOGS_KEY=${created.token}` : "";
-
-  const generate = () => {
-    setError(null);
-    createToken().then(setCreated, setError);
-  };
-  const copy = () => {
-    void navigator.clipboard?.writeText(config).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
-  };
-
-  return (
-    <Card title={<span className="inline-flex items-center gap-2"><KeyRound className="size-4 text-gold" /> {t("upload.script.title")}</span>}>
-      <div className="space-y-3 px-5 py-4 text-sm text-muted">
-        <p>{t("upload.script.help")}</p>
-        {created && (
-          <>
-            <pre className="overflow-x-auto rounded-lg bg-surface-3 p-3 text-xs text-text">{config}</pre>
-            <p className="text-gold">{t("upload.script.once")}</p>
-            <p>{t("upload.script.expires", { date: date(created.expiresAt) })}</p>
-            <Button size="sm" onClick={copy}>
-              {copied ? t("upload.script.copied") : t("upload.script.copy")}
-            </Button>
-          </>
-        )}
-        {error != null && <ErrorBox error={error} />}
-        <div>
-          <Button size="sm" variant={created ? "outline" : "primary"} onClick={generate}>
-            {created ? t("upload.script.regenerate") : t("upload.script.generate")}
-          </Button>
-        </div>
-      </div>
-    </Card>
-  );
-}
