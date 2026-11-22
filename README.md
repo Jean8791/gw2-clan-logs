@@ -100,6 +100,41 @@ scripts/enviar-logs.sh ~/Documentos/Guild\ Wars\ 2/addons/arcdps/arcdps.cbtlogs 
 - Nos dois scripts o token não vai na linha de comando (no `.sh` segue por entrada padrão; no `.bat` por um arquivo temporário seu, apagado no fim).
 - Quem tem o token envia logs no seu nome: trate-o como senha e gere outro no site se ele vazar (o anterior deixa de valer). O token expira: depois de `API_TOKEN_DAYS` os envios dão erro 401 e é preciso gerar outro no site.
 
+### Envio automático no Windows
+
+Em vez de rodar o `enviar-logs.bat` na mão, o `scripts/monitorar-logs.ps1` pode rodar sozinho pelo Agendador de Tarefas, a cada 5 minutos. Ele usa o Windows PowerShell e o `curl.exe` que já vêm no Windows 10 e 11, e o mesmo `%APPDATA%\gw2logs\config.bat` do `.bat`.
+
+**Instalar**: num PowerShell aberto na pasta do projeto (como administrador, se puder):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\instalar-agendamento.ps1             # a cada 5 minutos
+powershell -ExecutionPolicy Bypass -File scripts\instalar-agendamento.ps1 -Minutos 10 # outro intervalo
+```
+
+O instalador copia o monitor para `%LOCALAPPDATA%\gw2logs\`, pede o endereço do site e o token se o `config.bat` ainda não existir (o arquivo fica legível só para o seu usuário) e cria a tarefa *GW2 Logs - enviar logs do ArcDPS*. Como administrador, a tarefa roda escondida e mesmo com você deslogado, sem guardar senha. Sem administrador, ela só roda com você logado e pode piscar uma janela a cada execução. Para testar na hora: `Start-ScheduledTask -TaskName 'GW2 Logs - enviar logs do ArcDPS'`, e veja o resultado em `Documentos\GW2 Logs\monitor.log`.
+
+**Fluxo das pastas**:
+
+```
+pasta do ArcDPS ──▶ Documentos\GW2 Logs\integrando ──envio──▶ Documentos\GW2 Logs\integrado
+                                                       └────▶ Documentos\GW2 Logs\erro
+```
+
+- A cada execução, os `.zevtc`, `.evtc` e `.json` que o ArcDPS já terminou de gravar (mais de 1 minuto sem mudar) vão para `integrando`, com as mesmas subpastas. Depois são enviados um por vez, do mais antigo para o mais novo. O que o site aceitou, ou já tinha, vai para `integrado`. O que ele recusou (formato inválido, arquivo grande demais) vai para `erro`.
+- **Os logs SAEM da pasta do ArcDPS.** É assim que o mesmo log não é enviado de novo a cada 5 minutos. Outros programas que leem essa pasta (por exemplo, um uploader para o dps.report) deixam de vê-los: use `GW2 Logs\integrado` neles.
+- Fila cheia, limite por hora, disco cheio no servidor, token recusado (401), IP bloqueado (429) ou falta de internet: a execução para e o arquivo fica em `integrando`, para a próxima tentar de novo. Outro erro do servidor conta tentativas por arquivo (`tentativas.json`). Na 5ª, o arquivo vai para `erro`.
+- **Primeira execução**: só entram os logs gravados nos últimos **3 dias** (`GW2LOGS_DIAS`); os mais antigos ficam na pasta do ArcDPS, sem mexer, e podem ir pelo site (zip). O servidor aceita no máximo 10 logs de cada usuário esperando processamento (`UPLOAD_MAX_QUEUE_USER`), e a cada 5 minutos entra mais um lote, até acabar.
+- Opcionais no `config.bat` (ou como variáveis de ambiente, que valem mais): `set GW2LOGS_ORIGEM=...` (outra pasta do ArcDPS), `set GW2LOGS_PASTA=...` (outra pasta no lugar de `Documentos\GW2 Logs`) e `set GW2LOGS_MAX_TENTATIVAS=5` e `set GW2LOGS_DIAS=3` (só envia logs dos últimos N dias; `0` = sem limite).
+- O `monitor.log` registra cada arquivo enviado, já enviado ou recusado, cada parada e um resumo por execução. Ao passar de 1 MB, vira `monitor.old.log`.
+
+**Desinstalar**:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\instalar-agendamento.ps1 -Desinstalar
+```
+
+Remove a tarefa e o script copiado. A configuração (`%APPDATA%\gw2logs\config.bat`) e as pastas de logs ficam.
+
 ## Configuração
 
 Variáveis de ambiente do servidor. No Docker Compose, as principais vêm do arquivo `.env`.

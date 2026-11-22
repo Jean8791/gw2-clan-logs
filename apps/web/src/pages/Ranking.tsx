@@ -6,7 +6,7 @@ import { DataTable, type Column } from "../components/DataTable";
 import { FilterBar } from "../components/FilterBar";
 import { defaultSort, GroupTabs, pickerView, ModeToggle, statColumns, type ValueMode } from "../components/statColumns";
 import { GuildTag, PlayerLink, Profession } from "../components/badges";
-import { Button, Card, Empty, ErrorBox, Loading, PageHeader, Select, cx } from "../components/ui";
+import { Button, Card, Empty, ErrorBox, Loading, PageHeader, Select } from "../components/ui";
 import { useRanking } from "../lib/api";
 import { useFilters, useMe } from "../lib/hooks";
 import { duration } from "../lib/format";
@@ -52,12 +52,12 @@ export function RankingPage() {
       id: "prof",
       header: t("table.class"),
       sort: (r) => r.profession ?? "",
-      // quem jogou de mais de uma classe no período mostra todas, com as lutas de cada uma (a primeira é a mais jogada)
+      // quem jogou de mais de uma classe no período mostra todas, com as lutas de cada uma (a primeira é a mais jogada); a coluna cabe 3 e rola para o lado nas demais
       cell: (r) =>
         r.professions.length > 1 ? (
-          <span className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
+          <span className="flex max-w-[22rem] items-center gap-x-3 overflow-x-auto [scrollbar-width:thin]">
             {r.professions.map((p) => (
-              <span key={p.profession} className="inline-flex items-center gap-1">
+              <span key={p.profession} className="inline-flex shrink-0 items-center gap-1">
                 <Profession profession={p.profession} />
                 <span className="tabular text-xs text-faint" title={t("ranking.classFights", { n: p.fights })}>
                   {p.fights}
@@ -117,22 +117,24 @@ export function RankingPage() {
             <option value="15">{t("ranking.minTime.15")}</option>
             <option value="60">{t("ranking.minTime.60")}</option>
           </Select>
-          <div className={cx("ml-auto flex items-center gap-2 transition", selected.length ? "opacity-100" : "pointer-events-none opacity-0")}>
-            <span className="text-xs text-muted">{t("ranking.selected", { n: selected.length })}</span>
-            <Button variant="ghost" size="sm" onClick={() => setSelected([])}>
-              {t("common.clear")}
-            </Button>
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={() => {
-                const q = filtersToQuery(filters);
-                nav(`${ROUTES.compare}?accounts=${encodeURIComponent(selected.join(","))}${q ? `&${q}` : ""}`);
-              }}
-            >
-              <GitCompareArrows className="size-4" /> {t("common.compare")}
-            </Button>
-          </div>
+          {selected.length > 0 && (
+            <div className="ml-auto flex items-center gap-2">
+              <span className="text-xs text-muted">{t("ranking.selected", { n: selected.length })}</span>
+              <Button variant="ghost" size="sm" onClick={() => setSelected([])}>
+                {t("common.clear")}
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => {
+                  const q = filtersToQuery(filters);
+                  nav(`${ROUTES.compare}?accounts=${encodeURIComponent(selected.join(","))}${q ? `&${q}` : ""}`);
+                }}
+              >
+                <GitCompareArrows className="size-4" /> {t("common.compare")}
+              </Button>
+            </div>
+          )}
         </div>
         {error && (
           <div className="p-4">

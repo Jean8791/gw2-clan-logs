@@ -2,6 +2,9 @@
 rem Envia logs do ArcDPS (.zevtc, .evtc) ou o .json do Elite Insights para o site, pela API. Versao do enviar-logs.sh para Windows.
 rem Uso: enviar-logs.bat "arquivo ou pasta" ["mais arquivos ou pastas"...]
 rem
+rem Alternativa automatica: scripts\instalar-agendamento.ps1 instala o monitorar-logs.ps1 no Agendador de Tarefas, que envia
+rem sozinho a cada 5 minutos, so os logs novos (eles saem da pasta do ArcDPS). Veja "Envio automatico no Windows" no README.
+rem
 rem Exemplo (a pasta padrao do ArcDPS):
 rem   enviar-logs.bat "%USERPROFILE%\Documents\Guild Wars 2\addons\arcdps\arcdps.cbtlogs"
 rem

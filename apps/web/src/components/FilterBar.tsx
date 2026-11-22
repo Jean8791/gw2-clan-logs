@@ -1,3 +1,5 @@
+import { useMediaQuery } from "../lib/media-query";
+import { SHORT_SCREEN } from "../lib/screen";
 import { RotateCcw, SlidersHorizontal } from "lucide-react";
 import { useState } from "react";
 import type { Filters, PlayerOptions, Role } from "@gw2logs/shared";
@@ -32,6 +34,8 @@ export function FilterBar({ value, onChange, fields, options }: { value: Filters
   const roles = withCurrent<Role>(options?.roles ?? ["dps", "support"], value.role);
   const professions = withCurrent(options?.professions ?? meta?.professions ?? [], value.profession);
   const [open, setOpen] = useState(false);
+  // em tela baixa os filtros começam recolhidos (como no celular), para a tabela ficar com o espaço
+  const short = useMediaQuery(SHORT_SCREEN);
   const has = (f: Field) => fields.includes(f);
   const set = (patch: Partial<Filters>) => onChange({ ...value, ...patch });
   const custom = !!(value.from || value.to);
@@ -41,7 +45,7 @@ export function FilterBar({ value, onChange, fields, options }: { value: Filters
 
   return (
     <div className="mb-5 rounded-2xl border border-line bg-surface/60 p-3">
-      <div className="flex items-center justify-between gap-2 md:hidden">
+      <div className={cx("flex items-center justify-between gap-2", !short && "md:hidden")}>
         <Button variant="ghost" size="sm" onClick={() => setOpen(!open)}>
           <SlidersHorizontal className="size-4" /> {t("filter.title")} {active > 0 && <span className="text-gold">({active})</span>}
         </Button>
@@ -51,7 +55,7 @@ export function FilterBar({ value, onChange, fields, options }: { value: Filters
           </Button>
         )}
       </div>
-      <div className={cx("grid-cols-2 gap-x-4 gap-y-3 md:grid md:grid-cols-[repeat(auto-fit,minmax(190px,1fr))] md:items-end", open ? "mt-3 grid" : "hidden")}>
+      <div className={cx("grid-cols-2 gap-x-4 gap-y-3 md:grid-cols-[repeat(auto-fit,minmax(190px,1fr))] md:items-end", open ? "mt-3 grid" : short ? "hidden" : "hidden md:grid")}>
         {has("period") && (
           <Select
             label={t("filter.period")}
