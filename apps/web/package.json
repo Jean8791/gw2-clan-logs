@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -p tsconfig.json && vite build",
+    "build": "tsc -p tsconfig.json && vite build && mkdir -p dist/scripts && cp ../../scripts/enviar-logs.sh ../../scripts/enviar-logs.bat dist/scripts/",
     "preview": "vite preview",
     "typecheck": "tsc -p tsconfig.json"
   },
