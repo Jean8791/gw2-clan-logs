@@ -5,7 +5,7 @@ import { filtersToQuery, PAGE_SIZE, ROUTES, type BoonScope, type RankingRow, typ
 import { DataTable, type Column } from "../components/DataTable";
 import { FilterBar } from "../components/FilterBar";
 import { defaultSort, GroupTabs, pickerView, ModeToggle, statColumns, type ValueMode } from "../components/statColumns";
-import { GuildTag, PlayerLink, Profession } from "../components/badges";
+import { GuildTag, NoAllianceNote, PlayerLink, Profession } from "../components/badges";
 import { Button, Card, Empty, ErrorBox, Loading, PageHeader, Select } from "../components/ui";
 import { useRanking } from "../lib/api";
 import { useFilters, useMe } from "../lib/hooks";
@@ -142,7 +142,10 @@ export function RankingPage() {
           </div>
         )}
         {isLoading && <Loading />}
-        {data && rows.length === 0 && <Empty title={t("ranking.empty.title")}>{t("ranking.empty.text")}</Empty>}
+        {data && rows.length === 0 && <Empty title={t("ranking.empty.title")}>
+            {t("ranking.empty.text")}
+            <NoAllianceNote guild={filters.guild} />
+          </Empty>}
         {data && rows.length > 0 && (
           <DataTable
             key={`${group}-${scope}`}
