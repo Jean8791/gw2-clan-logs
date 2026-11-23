@@ -174,3 +174,59 @@ describe("função com 60 s ou mais de tempo ativo: nada muda", () => {
     expect(funcaoGravada(id, "A.1")).toBe("support");
   });
 });
+
+describe("luta longa nova recalcula as curtas já gravadas da mesma conta e classe", () => {
+  it("Dado uma luta curta já gravada como DPS, quando entra uma longa de suporte da mesma conta e classe, então a curta vira suporte", () => {
+    const curta = gravar(dono, jogador("A.1", "dps", 24));
+
+    gravar(dono, jogador("A.1", "support", 300));
+
+    expect(funcaoGravada(curta, "A.1")).toBe("support");
+  });
+
+  it("Dado curtas já gravadas, quando entram longas, então vale a maioria pelo tempo ativo de todas as longas", () => {
+    const curta = gravar(dono, jogador("A.1", "dps", 24));
+    gravar(dono, jogador("A.1", "support", 100));
+    expect(funcaoGravada(curta, "A.1")).toBe("support");
+
+    gravar(dono, jogador("A.1", "dps", 400));
+
+    expect(funcaoGravada(curta, "A.1")).toBe("dps");
+  });
+
+  it("Dado uma luta curta já gravada, quando entra outra curta, então nada muda (curta não vira histórico)", () => {
+    const primeira = gravar(dono, jogador("A.1", "support", 24));
+
+    gravar(dono, jogador("A.1", "dps", 20));
+
+    expect(funcaoGravada(primeira, "A.1")).toBe("support");
+  });
+
+  it("Dado uma curta de outra classe, de outro dono ou de outra conta, quando entra a longa, então elas não mudam", () => {
+    const outraClasse = gravar(dono, jogador("A.1", "dps", 24, "Reaper"));
+    const outroDonoCurta = gravar(outroDono, jogador("A.1", "dps", 24));
+    const outraConta = gravar(dono, jogador("B.2", "dps", 24));
+
+    gravar(dono, jogador("A.1", "support", 300));
+
+    expect(funcaoGravada(outraClasse, "A.1")).toBe("dps");
+    expect(funcaoGravada(outroDonoCurta, "A.1")).toBe("dps");
+    expect(funcaoGravada(outraConta, "B.2")).toBe("dps");
+  });
+
+  it("Dado lutas longas já gravadas, quando entra outra longa, então as longas anteriores não mudam", () => {
+    const antiga = gravar(dono, jogador("A.1", "dps", 120));
+
+    gravar(dono, jogador("A.1", "support", 600));
+
+    expect(funcaoGravada(antiga, "A.1")).toBe("dps");
+  });
+
+  it("Dado a conta \"?\", quando entra uma longa dela, então as curtas dela não mudam", () => {
+    const curta = gravar(dono, jogador("?", "dps", 24));
+
+    gravar(dono, jogador("?", "support", 300));
+
+    expect(funcaoGravada(curta, "?")).toBe("dps");
+  });
+});

@@ -21,13 +21,20 @@ export function saveFight(db: DB, id: string, f: ExtractedFight, mapName: string
     `SELECT ps.role, ps.active_ms AS activeMs FROM player_stats ps JOIN fights f ON f.id = ps.fight_id
      WHERE ps.account = ? AND ps.profession = ? AND ps.active_ms >= ? AND f.owner_id = (SELECT owner_id FROM fights WHERE id = ?)`,
   );
-  /** Em luta curta a função vem do histórico (a maioria pelo tempo ativo); sem histórico, fica a da classificação. */
-  const roleOf = (p: ExtractedPlayer): Role => {
-    // conta "?" é a de quem veio sem conta nem nome no log: são pessoas diferentes, então não há histórico a herdar
-    if (p.activeMs >= ROLE_MIN_ACTIVE_MS || !p.profession || p.account === "?") return p.role;
+  // conta "?" é a de quem veio sem conta nem nome no log: são pessoas diferentes, então não há histórico a herdar
+  const hasHistory = (p: ExtractedPlayer) => !!p.profession && p.account !== "?";
+  const isShort = (p: ExtractedPlayer) => Math.round(p.activeMs) < ROLE_MIN_ACTIVE_MS;
+  const historyRole = (p: ExtractedPlayer): Role | null => {
     const history = roleHistory.all(p.account, p.profession, ROLE_MIN_ACTIVE_MS, id) as { role: Role; activeMs: number }[];
-    return history.length ? mainRole(history) : p.role;
+    return history.length ? mainRole(history) : null;
   };
+  /** Em luta curta a função vem do histórico (a maioria pelo tempo ativo); sem histórico, fica a da classificação. */
+  const roleOf = (p: ExtractedPlayer): Role => (isShort(p) && hasHistory(p) ? (historyRole(p) ?? p.role) : p.role);
+  // uma luta longa nova muda o histórico: as curtas já gravadas da mesma conta e classe, do mesmo dono, são recalculadas
+  const updateShortRoles = db.prepare(
+    `UPDATE player_stats SET role = ? WHERE account = ? AND profession = ? AND active_ms < ?
+       AND fight_id IN (SELECT id FROM fights WHERE owner_id = (SELECT owner_id FROM fights WHERE id = ?))`,
+  );
 
   db.transaction(() => {
     db.prepare("DELETE FROM player_stats WHERE fight_id = ?").run(id);
@@ -42,6 +49,10 @@ export function saveFight(db: DB, id: string, f: ExtractedFight, mapName: string
         upsertSkillName.run(sk.id, sk.name?.slice(0, 100) ?? null);
         insertSkill.run(id, p.account, sk.id, sk.damage, sk.hits, sk.connectedHits);
       }
+    }
+    for (const p of f.players) {
+      const role = !isShort(p) && hasHistory(p) ? historyRole(p) : null;
+      if (role) updateShortRoles.run(role, p.account, p.profession, ROLE_MIN_ACTIVE_MS, id);
     }
     db.prepare(
       `UPDATE fights SET status='done', error=NULL, mode=@mode, fight_name=@fightName, map_id=@mapId, map_name=@mapName,
