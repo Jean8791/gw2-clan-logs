@@ -48,13 +48,20 @@ export function useGuildIndex() {
   return new Map((data ?? []).map((g) => [g.id, g]));
 }
 
+/** Aviso para quando o filtro é "Só a aliança" e nenhuma guilda foi marcada como aliança (a lista vazia não é erro). */
+export function NoAllianceNote({ guild }: { guild: string | undefined }) {
+  const { data: guilds } = useGuilds();
+  if (guild !== "alliance" || !guilds || guilds.some((g) => g.inAlliance)) return null;
+  return <p className="mt-2">{t("alliance.noneMarked")}</p>;
+}
+
 export function GuildTag({ id, withName = false }: { id: string | null; withName?: boolean }) {
   const guilds = useGuildIndex();
   if (!id) return <span className="text-faint">—</span>;
   const g = guilds.get(id);
   const label = g?.tag ? `[${g.tag}]` : "[?]";
   return (
-    <span className="inline-flex min-w-0 items-center gap-1.5" title={g?.name ?? id}>
+    <span className="inline-flex min-w-0 items-center gap-1.5" title={g ? (g.name ?? t("guild.unknownTip")) : undefined}>
       <span className={cx("rounded px-1 py-px text-[11px] font-bold", g?.inAlliance ? "bg-gold-soft text-gold" : "bg-surface-3 text-muted")}>{label}</span>
       {withName && <span className="truncate text-sm text-muted">{g?.name ?? t("guild.unknown")}</span>}
     </span>

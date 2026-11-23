@@ -85,7 +85,7 @@ export const useFightsPage = (f: Filters, o: { page: number; sort: string; dir: 
 export const useFight = (id: string) => useQuery({ queryKey: ["fight", id], queryFn: () => get<FightDetail>(`${spaceApi}/fights/${encodeURIComponent(id)}`) });
 
 export const useRanking = (f: Filters) =>
-  useQuery({ queryKey: ["ranking", f], queryFn: () => get<{ rows: RankingRow[]; baseline: Aggregate }>(withFilters(`${spaceApi}/ranking`, f)) });
+  useQuery({ queryKey: ["ranking", f], queryFn: () => get<{ rows: RankingRow[]; baseline: Aggregate; referenceMs: number }>(withFilters(`${spaceApi}/ranking`, f)) });
 
 export const usePlayer = (account: string, f: Filters) =>
   useQuery({ queryKey: ["player", account, f], queryFn: () => get<PlayerProfile>(withFilters(`${spaceApi}/players/${encodeURIComponent(account)}`, f)), retry: false });

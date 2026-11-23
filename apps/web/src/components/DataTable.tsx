@@ -22,6 +22,8 @@ export interface Column<T> {
   label?: string;
   /** coluna que não pode ser escondida (nome do jogador, caixa de seleção) */
   fixed?: boolean;
+  /** valor da linha "Total" no fim da tabela, calculado sobre todas as linhas (não só as da página); sem ele a célula fica vazia */
+  total?: (rows: T[]) => ReactNode;
 }
 
 export function DataTable<T>({
@@ -38,6 +40,7 @@ export function DataTable<T>({
   onRowClick,
   rowClassName,
   footer,
+  totalLabel,
   dense,
   pickerKey,
 }: {
@@ -65,6 +68,8 @@ export function DataTable<T>({
   onRowClick?: (r: T) => void;
   rowClassName?: (r: T) => string | undefined;
   footer?: ReactNode;
+  /** Com ele (e colunas com `total`), a tabela fecha com uma linha de totais; este texto vai na primeira coluna. */
+  totalLabel?: ReactNode;
   dense?: boolean;
   /** com ele, aparece o botão "Colunas" e a escolha fica salva no navegador, por tabela */
   pickerKey?: string;
@@ -181,6 +186,24 @@ export function DataTable<T>({
             </tr>
           ))}
         </tbody>
+        {totalLabel !== undefined && shown.some((c) => c.total) && (
+          <tfoot>
+            <tr>
+              {shown.map((c, i) => (
+                <td
+                  key={c.id}
+                  className={cx(
+                    "tabular sticky bottom-0 whitespace-nowrap border-t border-line bg-surface px-3 py-2.5 font-semibold text-gold",
+                    c.align === "right" ? "text-right" : c.align === "center" ? "text-center" : "text-left",
+                    c.sticky ? "left-0 z-20" : "z-10",
+                  )}
+                >
+                  {c.total ? c.total(sorted) : i === 0 ? totalLabel : null}
+                </td>
+              ))}
+            </tr>
+          </tfoot>
+        )}
         {footer}
       </table>
       </div>

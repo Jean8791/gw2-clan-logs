@@ -5,6 +5,7 @@ import { DataTable, type Column } from "../components/DataTable";
 import { FilterBar } from "../components/FilterBar";
 import { Pagination } from "../components/Pagination";
 import { FightStatus, fightKills, KillDeath, SquadVsEnemy, Won } from "../components/FightBits";
+import { NoAllianceNote } from "../components/badges";
 import { Card, Empty, ErrorBox, Loading, PageHeader } from "../components/ui";
 import { useFightsPage } from "../lib/api";
 import { useFilters } from "../lib/hooks";
@@ -74,7 +75,10 @@ export function FightsPage() {
       {data && (
         <Card className="flex min-h-0 flex-1 flex-col">
           {data.rows.length === 0 ? (
-            <Empty title={t("fights.empty.title")}>{t("empty.changeFilters")}</Empty>
+            <Empty title={t("fights.empty.title")}>
+              {t("empty.changeFilters")}
+              <NoAllianceNote guild={filters.guild} />
+            </Empty>
           ) : (
             <>
               {/* a ordenação é do servidor: vale para todas as lutas do filtro, não só para esta página */}

@@ -3,6 +3,7 @@ import {
   BATTLE_DAY_SHIFT_HOURS,
   FIGHT_SORT_KEYS,
   STAT_KEYS,
+  STAT_META,
   type DaySummary,
   type Aggregate,
   type Fight,
@@ -81,7 +82,16 @@ const PLAYER_COLS = `ps.fight_id AS fightId, ps.account, ps.name, ps.profession,
   ps.commander, ps.role, ps.active_ms AS activeMs, ps.dist_to_com AS distToCom, ${STAT_SELECT}`;
 const toPlayer = <T extends PlayerFight>(r: any): T => ({ ...r, commander: !!r.commander });
 
-const AGG_SELECT = `COUNT(*) AS fights, SUM(ps.active_ms) AS activeMs, ${STAT_KEYS.map((k) => `SUM(ps.${STAT_COL[k]}) AS "${k}"`).join(", ")}`;
+/**
+ * Cada métrica soma sobre as lutas, menos o boon gerado: o Elite Insights já o entrega normalizado pela duração da luta, então somar (ou
+ * dividir pelas lutas) distorce. Ele vira a média ponderada pelo tempo ativo (Σ valor × tempo ÷ Σ tempo), igual ao uptime, que já é tempo
+ * com o boon sobre tempo ativo. Sem tempo ativo, 0.
+ */
+const aggColumn = (k: (typeof STAT_KEYS)[number]) =>
+  STAT_META[k].format === "volume"
+    ? `COALESCE(SUM(ps.${STAT_COL[k]} * ps.active_ms) * 1.0 / NULLIF(SUM(ps.active_ms), 0), 0) AS "${k}"`
+    : `SUM(ps.${STAT_COL[k]}) AS "${k}"`;
+const AGG_SELECT = `COUNT(*) AS fights, SUM(ps.active_ms) AS activeMs, ${STAT_KEYS.map(aggColumn).join(", ")}`;
 const toAggregate = (r: any): Aggregate => {
   const a: any = { fights: r?.fights ?? 0, activeMs: r?.activeMs ?? 0 };
   for (const k of STAT_KEYS) a[k] = r?.[k] ?? 0;

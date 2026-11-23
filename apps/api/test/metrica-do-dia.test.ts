@@ -67,8 +67,8 @@ describe("quem jogou pouco numa luta e morreu continua contando, na proporção 
     expect(suggestMetric(total, squad)).toBe("healing");
   });
 
-  it("boons por luta: a luta curta conta como luta (e puxa a média para baixo, como a do squad)", () => {
-    expect(statRate(agg({ fights: 2, alacOut: 600 }), "alacOut")).toBe(300);
+  it("boons: o valor da soma já é a média ponderada pelo tempo ativo (a luta curta pesa só o que durou), então não se divide pelas lutas", () => {
+    expect(statRate(agg({ fights: 2, alacOut: 300 }), "alacOut")).toBe(300);
   });
 });
 
