@@ -5,7 +5,7 @@ import { filtersToQuery, PAGE_SIZE, ROUTES, type BoonScope, type RankingRow, typ
 import { DataTable, type Column } from "../components/DataTable";
 import { FilterBar } from "../components/FilterBar";
 import { defaultSort, GroupTabs, pickerView, ModeToggle, statColumns, type ValueMode } from "../components/statColumns";
-import { GuildTag, PlayerLink, Profession } from "../components/badges";
+import { GuildTag, NoAllianceNote, PlayerLink, Profession } from "../components/badges";
 import { Button, Card, Empty, ErrorBox, Loading, PageHeader, Select } from "../components/ui";
 import { useRanking } from "../lib/api";
 import { useFilters, useMe } from "../lib/hooks";
@@ -80,7 +80,7 @@ export function RankingPage() {
       sort: (r) => r.supportFights / r.fights,
       cell: (r) => <span className="text-muted">{Math.round((r.supportFights / r.fights) * 100)}%</span>,
     },
-    ...statColumns(group, mode, rows, scope),
+    ...statColumns(group, mode, rows, scope, data ? { baseline: data.baseline, refMs: data.referenceMs } : undefined),
   ];
 
   const copyLink = async () => {
@@ -109,7 +109,7 @@ export function RankingPage() {
       <Card className="flex min-h-0 flex-1 flex-col">
         <div className="flex flex-wrap items-center gap-3 border-b border-line px-4 py-3">
           <GroupTabs value={group} onChange={setGroup} scope={scope} onScopeChange={setScope} />
-          <ModeToggle value={mode} onChange={setMode} />
+          {group !== "boons" && group !== "uptime" && <ModeToggle value={mode} onChange={setMode} />}
           <Select className="w-56" value={String(minMinutes)} onChange={(e) => setMinMinutes(Number(e.target.value))} aria-label={t("ranking.minTime")}>
             <option value="0">{t("ranking.minTime.any")}</option>
             <option value="2">{t("ranking.minTime.2")}</option>
@@ -142,7 +142,10 @@ export function RankingPage() {
           </div>
         )}
         {isLoading && <Loading />}
-        {data && rows.length === 0 && <Empty title={t("ranking.empty.title")}>{t("ranking.empty.text")}</Empty>}
+        {data && rows.length === 0 && <Empty title={t("ranking.empty.title")}>
+            {t("ranking.empty.text")}
+            <NoAllianceNote guild={filters.guild} />
+          </Empty>}
         {data && rows.length > 0 && (
           <DataTable
             key={`${group}-${scope}`}

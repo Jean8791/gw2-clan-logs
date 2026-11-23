@@ -16,6 +16,8 @@ Configuracao: o mesmo arquivo do enviar-logs.bat, %APPDATA%\gw2logs\config.bat, 
 Variavel de ambiente vale mais que o arquivo.
 
 Registro: <pasta de trabalho>\monitor.log (vira monitor.old.log ao passar de 1 MB).
+Token recusado (401): o envio fica pausado ate GW2LOGS_KEY mudar (token-recusado.txt guarda so o SHA-256 dele),
+para nao somar tentativas falhas no servidor, que bloqueia o IP na 5a.
 Saida: 0 tudo certo ou nada a enviar; 1 parou ou deu erro; 2 falta configuracao.
 
 Compativel com o Windows PowerShell 5.1. Este arquivo precisa ficar so com ASCII e quebra de linha CRLF:
@@ -131,6 +133,12 @@ function Save-Tentativas([string]$Caminho, [hashtable]$Mapa) {
     foreach ($k in ($Mapa.Keys | Sort-Object)) { $obj | Add-Member -NotePropertyName $k -NotePropertyValue $Mapa[$k] }
     $json = if ($Mapa.Count -eq 0) { '{}' } else { ConvertTo-Json -InputObject $obj }
     [System.IO.File]::WriteAllText($Caminho, $json, $Utf8)
+}
+
+function Get-Sha256Hex([string]$Texto) {
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try { return (($sha.ComputeHash($Utf8.GetBytes($Texto)) | ForEach-Object { $_.ToString('x2') }) -join '') }
+    finally { $sha.Dispose() }
 }
 
 # Texto entre aspas de um arquivo --config do curl: \ e " precisam de escape.
@@ -310,6 +318,21 @@ try {
     $mudouTentativas = $false
     $fila = @(Get-Logs $integrando | Sort-Object LastWriteTime, FullName)
 
+    # Depois de um 401 o envio fica pausado ate o token mudar: cada token errado conta como tentativa falha no servidor,
+    # e a 5a seguida bloqueia o IP, inclusive para o envio pelo navegador. O arquivo guarda so o SHA-256 do token.
+    $arquivoTokenRecusado = Join-Path $pasta 'token-recusado.txt'
+    $hashChave = Get-Sha256Hex $script:Chave
+    if (Test-Path -LiteralPath $arquivoTokenRecusado -PathType Leaf) {
+        $hashRecusado = ([System.IO.File]::ReadAllText($arquivoTokenRecusado, $Utf8)).Trim()
+        if ($hashRecusado -eq $hashChave) {
+            if ($fila.Count -gt 0) { $motivoParada = 'envio pausado: este token ja foi recusado (401). Gere outro no site e troque GW2LOGS_KEY' }
+            $fila = @()
+        } else {
+            Remove-Item -LiteralPath $arquivoTokenRecusado -Force
+            Write-Log 'Token mudou desde o ultimo 401: voltando a enviar.'
+        }
+    }
+
     # contagem de arquivos que ja nao estao em integrando nao serve para nada
     foreach ($k in @($tentativas.Keys)) {
         if (-not (Test-Path -LiteralPath (Join-Path $integrando $k) -PathType Leaf)) { $tentativas.Remove($k); $mudouTentativas = $true }
@@ -329,7 +352,11 @@ try {
             break
         }
 
-        if ($r.Http -eq '401') { $motivoParada = 'token recusado (401): gere outro no site e confira GW2LOGS_KEY'; break }
+        if ($r.Http -eq '401') {
+            $motivoParada = 'token recusado (401): gere outro no site e troque GW2LOGS_KEY. O envio fica pausado ate o token mudar'
+            try { [System.IO.File]::WriteAllText($arquivoTokenRecusado, $hashChave, $Utf8) } catch { Write-Log "Erro ao gravar token-recusado.txt: $($_.Exception.Message)" }
+            break
+        }
         if ($r.Http -eq '429') { $motivoParada = 'servidor bloqueou este IP por um tempo (429)'; break }
 
         $item = $null
