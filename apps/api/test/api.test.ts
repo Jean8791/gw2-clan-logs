@@ -67,6 +67,8 @@ describe("API", () => {
     const all = (await app.server.inject(u("/ranking"))).json();
     expect(all.rows.map((r: any) => r.account)).toEqual(["Atacante.2222", "Outro.3333", "Comandante.1111"]);
     expect(all.baseline.fights).toBe(3);
+    // luta de teste de 1 min: a referência do ajuste dos boons fica no mínimo de 5 min
+    expect(all.referenceMs).toBe(300_000);
 
     const guildA = (await app.server.inject(u("/ranking?guild=GUILD-A"))).json();
     expect(guildA.rows).toHaveLength(2);

@@ -7,8 +7,8 @@ import {
   filtersToQuery,
   inScope,
   isShortParticipation,
+  adjustedByTime,
   isUptimeStat,
-  mainRole,
   metricForGroup,
   PAGE_SIZE,
   perMinute,
@@ -20,6 +20,7 @@ import {
   statText,
   suggestMetric,
   uptimeValue,
+  weightedByActive,
   type Aggregate,
   type BoonScope,
   type PlayerHistoryRow,
@@ -32,52 +33,23 @@ import { FilterBar } from "../components/FilterBar";
 import { GuildTag, Profession } from "../components/badges";
 import { AXIS, GRID, TOOLTIP } from "../components/charts";
 import { PlayerPicker } from "../components/PlayerPicker";
+import { pickerView, statColumns } from "../components/statColumns";
 import { SkillIcon } from "../components/MediaIcon";
 import { Badge, Button, Card, Delta, Empty, ErrorBox, Kpi, Loading, PageHeader, Select, cx } from "../components/ui";
 import { usePlayer, usePlayerOptions, usePlayerSkills, useRanking } from "../lib/api";
 import { setMe, useFilters, useMe } from "../lib/hooks";
 import { getLang, t as tr } from "../lib/i18n"; // "t" já é o total do jogador nesta página
 import { ScopeToggle } from "../components/statColumns";
-import { BaselinePicker, type BaselineRole } from "../components/BaselinePicker";
 import { accountShort, axis, compact, date, dateTime, diffPct, duration, int, stat } from "../lib/format";
-
-/** Barra comparando o jogador com a média do squad (mesmos filtros). */
-function VsAverage({ k, player, avg }: { k: StatKey; player: Aggregate; avg: Aggregate }) {
-  const meta = STAT_META[k];
-  const a = statRate(player, k);
-  const b = statRate(avg, k);
-  const max = Math.max(a, b) || 1;
-  // a unidade vem escrita: sem ela, "26,5 mil" de dano recebido parecia o total, e é por minuto
-  const unit = isUptimeStat(k) ? "" : meta.format === "volume" ? tr("unit.perFight") : "/min";
-  return (
-    <div className="grid grid-cols-[minmax(0,12rem)_1fr_auto] items-center gap-3 py-1.5">
-      <span className="truncate text-sm text-muted" title={statText(k, getLang()).hint}>
-        {statText(k, getLang()).label}
-      </span>
-      <div className="relative h-2.5 rounded-full bg-surface-3">
-        <div className="absolute inset-y-0 left-0 rounded-full bg-gold/80" style={{ width: `${(a / max) * 100}%` }} />
-        <div className="absolute -inset-y-1 w-0.5 rounded bg-text/70" style={{ left: `calc(${(b / max) * 100}% - 1px)` }} title={tr("player.avgTip", { value: stat(k, b, true) })} />
-      </div>
-      <div className="flex w-40 items-center justify-end gap-2">
-        <span className="tabular text-sm font-medium">
-          {stat(k, a, true)}
-          {unit && <span className="ml-0.5 text-xs font-normal text-faint">{unit}</span>}
-        </span>
-        <Delta pct={diffPct(a, b)} higherIsBetter={meta.higherIsBetter} />
-      </div>
-    </div>
-  );
-}
 
 export function PlayerPage() {
   const { account = "" } = useParams();
   const [filters, setFilters] = useFilters({ mode: "wvw" });
   const { data, error, isLoading } = usePlayer(account, filters);
   const skills = usePlayerSkills(account, filters).data ?? [];
-  // por padrão compara com a média de quem joga na mesma função (suporte com suporte, DPS com DPS)
-  const [baseRole, setBaseRole] = useState<BaselineRole | null>(null);
-  const effRole: BaselineRole = baseRole ?? (data ? mainRole(data.history) : "dps");
-  const avg = useRanking({ ...filters, role: effRole === "all" ? filters.role : effRole }).data?.baseline;
+  // a média de comparação segue os mesmos filtros da página (período, função, classe, tamanho, mapa); sem filtro de função, é a do squad todo
+  const ranking = useRanking(filters).data;
+  const avg = ranking?.baseline;
   const me = useMe();
   const nav = useNavigate();
   // listas dos filtros: só o que este jogador jogou (funções, classes e dias)
@@ -153,20 +125,37 @@ export function PlayerPage() {
     { id: "avg", header: tr("skills.col.avg"), align: "right", sort: (k) => k.avgHit, cell: (k) => compact(k.avgHit) },
   ];
 
+  // Linha "Total": cada coluna mostra o mesmo valor do Ranking. Soma das lutas filtradas; em boons e uptime, a média ponderada pelo tempo
+  // ajustada pelo tempo jogado (a conta vai na dica).
+  const sumOf = (rows: PlayerHistoryRow[], k: StatKey) => rows.reduce((a, r) => a + r[k], 0);
+  const totalOf = (k: StatKey) => (rows: PlayerHistoryRow[]) => {
+    const active = rows.reduce((a, r) => a + r.activeMs, 0);
+    if (!isUptimeStat(k) && STAT_META[k].format !== "volume") return int(sumOf(rows, k));
+    const own = isUptimeStat(k) ? uptimeValue(k, sumOf(rows, k), active) : weightedByActive(rows, (r) => r[k]);
+    if (!avg || ranking?.referenceMs === undefined) return stat(k, own);
+    const general = isUptimeStat(k) ? uptimeValue(k, avg[k], avg.activeMs) : avg[k];
+    const adjusted = adjustedByTime(own, active, general, ranking.referenceMs);
+    const tip = tr("player.historyTotalTip", { own: stat(k, own), min: duration(active), ref: duration(ranking.referenceMs), general: stat(k, general), adj: stat(k, adjusted) });
+    return <span title={tip}>{stat(k, adjusted)}</span>;
+  };
+
   const histCols: Column<PlayerHistoryRow>[] = [
     { id: "when", header: tr("hist.col.when"), fixed: true, sort: (h) => h.timeStart, cell: (h) => <span className="text-muted">{dateTime(h.timeStart)}</span> },
     { id: "map", header: tr("hist.col.map"), sort: (h) => h.mapName ?? "", cell: (h) => <Link className="hover:text-gold" to={ROUTES.fight(h.fightId)}>{h.fightName ?? h.mapName}</Link> },
     { id: "prof", header: tr("table.class"), sort: (h) => h.profession ?? "", cell: (h) => <Profession profession={h.profession} /> },
     { id: "role", header: tr("fight.col.role"), sort: (h) => h.role, cell: (h) => (h.role === "support" ? <Badge tone="info">{tr("fight.role.support")}</Badge> : <Badge>{tr("fight.role.dps")}</Badge>) },
     { id: "guild", header: tr("table.guild"), cell: (h) => <GuildTag id={h.guildId} /> },
-    { id: "time", header: tr("table.time"), align: "right", sort: (h) => h.activeMs, cell: (h) => duration(h.activeMs) },
-    { id: "damage", header: tr("skills.col.damage"), align: "right", sort: (h) => h.damage, cell: (h) => compact(h.damage) },
-    { id: "kills", header: tr("hist.col.kills"), align: "right", sort: (h) => h.kills, cell: (h) => h.kills },
-    { id: "strips", header: tr("hist.col.strips"), align: "right", sort: (h) => h.strips, cell: (h) => h.strips },
-    { id: "cleanses", header: tr("hist.col.cleanses"), align: "right", sort: (h) => h.cleanses, cell: (h) => h.cleanses },
-    { id: "healing", header: tr("hist.col.healing"), align: "right", sort: (h) => h.healing, cell: (h) => compact(h.healing) },
-    { id: "deaths", header: tr("hist.col.deaths"), align: "right", sort: (h) => h.deaths, cell: (h) => <span className={h.deaths ? "text-bad" : "text-faint"}>{h.deaths}</span> },
+    { id: "time", header: tr("table.time"), align: "right", sort: (h) => h.activeMs, cell: (h) => duration(h.activeMs), total: (rows) => duration(rows.reduce((a, r) => a + r.activeMs, 0)) },
+    { id: "damage", header: tr("skills.col.damage"), align: "right", sort: (h) => h.damage, cell: (h) => compact(h.damage), total: totalOf("damage") },
+    { id: "kills", header: tr("hist.col.kills"), align: "right", sort: (h) => h.kills, cell: (h) => h.kills, total: totalOf("kills") },
+    { id: "strips", header: tr("hist.col.strips"), align: "right", sort: (h) => h.strips, cell: (h) => h.strips, total: totalOf("strips") },
+    { id: "cleanses", header: tr("hist.col.cleanses"), align: "right", sort: (h) => h.cleanses, cell: (h) => h.cleanses, total: totalOf("cleanses") },
+    { id: "healing", header: tr("hist.col.healing"), align: "right", sort: (h) => h.healing, cell: (h) => compact(h.healing), total: totalOf("healing") },
+    { id: "deaths", header: tr("hist.col.deaths"), align: "right", sort: (h) => h.deaths, cell: (h) => <span className={h.deaths ? "text-bad" : "text-faint"}>{h.deaths}</span>, total: totalOf("deaths") },
   ];
+  // o valor de cada luta nas métricas do grupo escolhido acima (as que o cartão "vs média" resume): dá para conferir a conta à mão
+  const historyRows = [...data.history].reverse();
+  const historyCols = [...histCols, ...statColumns(chartGroup, "total", historyRows, chartScope).filter((c) => !histCols.some((h) => h.id === c.id)).map((c) => ({ ...c, total: totalOf(c.id as StatKey) }))];
 
   return (
     <>
@@ -272,7 +261,7 @@ export function PlayerPage() {
                         const x = p?.[0]?.payload;
                         return x ? (x.short ? `${x.label} · ${tr("player.shortFight", { time: duration(x.activeMs) })}` : x.label) : "";
                       }} formatter={(v: number) => [stat(metric, v, true), statText(metric, getLang()).label]} />
-                    {avgLine != null && <ReferenceLine y={avgLine} stroke="#8f98a8" strokeDasharray="4 4" label={{ value: tr(`player.avgLine.${effRole}`), fill: "#8f98a8", fontSize: 11, position: "insideTopRight" }} />}
+                    {avgLine != null && <ReferenceLine y={avgLine} ifOverflow="extendDomain" stroke="#8f98a8" strokeDasharray="4 4" label={{ value: tr(`player.avgLine.${filters.role ?? "all"}`), fill: "#8f98a8", fontSize: 11, position: "insideTopRight" }} />}
                     <Line type="monotone" dataKey="value" stroke="#e0b25a" strokeWidth={2.5} dot={(p: { cx?: number; cy?: number; index?: number; payload?: { short?: boolean } }) =>
                         p.cx == null || p.cy == null ? <g key={p.index} /> : p.payload?.short ? (
                           <circle key={p.index} cx={p.cx} cy={p.cy} r={4} fill="#0d0f14" stroke="#e0b25a" strokeWidth={2} />
@@ -305,13 +294,11 @@ export function PlayerPage() {
             </Card>
           </div>
 
-          {avg && (
-            <Card
-              className="mt-6"
-              title={tr("player.vsAverage")}
-              action={
-                <div className="flex flex-wrap items-center gap-3">
-                <BaselinePicker value={effRole} onChange={setBaseRole} />
+          <Card
+            className="mt-6"
+            title={tr("player.history")}
+            action={
+              <div className="flex flex-wrap items-center gap-3">
                 <div className="flex gap-1">
                   {STAT_GROUPS.map((g) => (
                     <button key={g.id} onClick={() => selectGroup(g.id)} className={cx("rounded-md px-2 py-1 text-xs font-medium", chartGroup === g.id ? "bg-surface-3 text-gold" : "text-muted hover:text-text")}>
@@ -320,19 +307,21 @@ export function PlayerPage() {
                   ))}
                 </div>
                 {chartGroup === "boons" && <ScopeToggle value={chartScope} onChange={selectScope} />}
-                </div>
-              }
-            >
-              <div className="grid gap-x-10 px-5 py-3 lg:grid-cols-2">
-                {statsOfGroup(chartGroup, chartScope).map((k) => (
-                  <VsAverage key={k} k={k} player={t} avg={avg} />
-                ))}
               </div>
-              <p className="border-t border-line px-5 py-2.5 text-xs text-faint">
-                {tr("player.vsNote")}
-              </p>
-            </Card>
-          )}
+            }
+          >
+            <DataTable
+              key={`history-${pickerView(chartGroup, chartScope)}`}
+              pickerKey={`player-history:${pickerView(chartGroup, chartScope)}`}
+              rows={historyRows}
+              columns={historyCols}
+              totalLabel={`${tr("mode.total")} · ${tr("overview.fightsN", { n: historyRows.length })}`}
+              rowKey={(h) => h.fightId}
+              pageSize={PAGE_SIZE}
+              dense
+            />
+            <p className="border-t border-line px-5 py-2.5 text-xs text-faint">{tr("player.historyNote")}</p>
+          </Card>
 
           {skills.length > 0 && (
             <Card className="mt-6" title={tr("player.skills")}>
@@ -342,10 +331,6 @@ export function PlayerPage() {
               </p>
             </Card>
           )}
-
-          <Card className="mt-6" title={tr("player.history")}>
-            <DataTable pickerKey="player-history" rows={[...data.history].reverse()} columns={histCols} rowKey={(h) => h.fightId} pageSize={PAGE_SIZE} dense />
-          </Card>
         </>
       )}
     </>
