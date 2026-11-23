@@ -113,6 +113,28 @@ describe("statValue com ajuste: só boons e uptime", () => {
   });
 });
 
+describe("statRate com ajuste (página Comparar): o mesmo número do Ranking", () => {
+  const jogador = { ...linha({ activeMs: 10 * MIN, stabOut: 0.4, stabUp: 10 * MIN, damage: 600_000 }), fights: 4 } as Aggregate;
+  const adj = ajuste({ activeMs: 1_000 * MIN, stabOut: 0.1, stabUp: 400 * MIN, damage: 1 }, 10 * MIN);
+
+  it("Dado boon, então statRate com ajuste é o valor ajustado do Ranking (0,25), e sem ajuste é a média ponderada pura (0,4)", () => {
+    expect(statRate(jogador, "stabOut", adj)).toBeCloseTo(0.25, 10);
+    expect(statRate(jogador, "stabOut")).toBe(0.4);
+  });
+
+  it("Dado boon, então statRate com ajuste dá o mesmo que o statValue do Ranking", () => {
+    expect(statRate(jogador, "stabOut", adj)).toBe(statValue("stabOut", "total", jogador, adj));
+  });
+
+  it("Dado uptime de 100% em 10 min, média geral 40% e referência de 10 min, então 70%", () => {
+    expect(statRate(jogador, "stabUp", adj)).toBeCloseTo(70, 10);
+  });
+
+  it("Dado dano, então o ajuste não muda nada: continua por minuto de tempo ativo", () => {
+    expect(statRate(jogador, "damage", adj)).toBe(60_000);
+  });
+});
+
 describe("ranking: boon vira média ponderada pelo tempo ativo; o resto continua somado", () => {
   let db: DB;
   let dir: string;

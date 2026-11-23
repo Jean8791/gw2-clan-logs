@@ -504,12 +504,16 @@ export const professionColor = (p: string | null | undefined): string =>
 /** Valor por minuto de tempo ativo em luta. */
 export const perMinute = (value: number, activeMs: number): number => (activeMs > 0 ? (value * 60000) / activeMs : 0);
 
+/** Boon (média do volume ponderada pelo tempo ativo) e uptime (% do tempo ativo): valores por tempo, sem "por minuto". */
+const isTimeBased = (k: StatKey): boolean => isUptimeStat(k) || STAT_META[k].format === "volume";
+
 /**
  * Valor mostrado de uma métrica numa soma de lutas: uptime em %, boon (a média ponderada pelo tempo ativo, que a consulta já entrega em
- * `a[k]`) e o resto por minuto de tempo ativo. Tudo é soma sobre tempo, então uma luta curta pesa só o que durou.
+ * `a[k]`) e o resto por minuto de tempo ativo. Tudo é soma sobre tempo, então uma luta curta pesa só o que durou. Com `adjust`, boons e
+ * uptime saem ajustados pelo tempo jogado, o mesmo número do Ranking.
  */
-export const statRate = (a: Aggregate, k: StatKey): number =>
-  isUptimeStat(k) ? uptimeValue(k, a[k], a.activeMs) : STAT_META[k].format === "volume" ? a[k] : perMinute(a[k], a.activeMs);
+export const statRate = (a: Aggregate, k: StatKey, adjust?: TimeAdjust): number =>
+  isTimeBased(k) ? statValue(k, "total", a, adjust) : perMinute(a[k], a.activeMs);
 
 /** Métricas que definem o papel de um jogador. Ficam de fora as raras ou de resultado (ressurreição, abates, mortes…), que dariam razões enormes por acaso. */
 const ROLE_METRICS: StatKey[] = [
@@ -597,9 +601,6 @@ export interface TimeAdjust {
   baseline: Aggregate;
   refMs: number;
 }
-
-/** Boon (média do volume ponderada pelo tempo ativo) e uptime (% do tempo ativo): valores por tempo, sem "por minuto". */
-const isTimeBased = (k: StatKey): boolean => isUptimeStat(k) || STAT_META[k].format === "volume";
 
 /**
  * Valor de uma métrica de um jogador (ou de uma soma) no modo escolhido: o mesmo na tabela e no gráfico da luta.

@@ -26,6 +26,9 @@ export function ComparePage() {
   const [baseRole, setBaseRole] = useState<BaselineRole | null>(null);
   const effRole: BaselineRole = baseRole ?? mainRole((data?.players ?? []).flatMap((p) => p.history));
   const baseline = useRanking({ ...filters, role: effRole === "all" ? filters.role : effRole }).data?.baseline;
+  // boons e uptime saem ajustados pelo tempo jogado, o mesmo número do Ranking com estes filtros
+  const ranking = useRanking(filters).data;
+  const adjust = ranking ? { baseline: ranking.baseline, refMs: ranking.referenceMs } : undefined;
 
   const setAccounts = (list: string[]) =>
     setParams((prev) => {
@@ -41,7 +44,7 @@ export function ComparePage() {
 
   // radar: cada métrica normalizada pelo maior valor entre os comparados e a média (0–100)
   const radar = keys.map((k) => {
-    const vals = players.map((p) => statRate(p.totals, k));
+    const vals = players.map((p) => statRate(p.totals, k, adjust));
     const avg = baseline ? statRate(baseline, k) : 0;
     const max = Math.max(...vals, avg) || 1;
     const meta = STAT_META[k];
@@ -144,7 +147,7 @@ export function ComparePage() {
                     </tr>
                     {keys.map((k) => {
                       const meta = STAT_META[k];
-                      const vals = players.map((p) => statRate(p.totals, k));
+                      const vals = players.map((p) => statRate(p.totals, k, adjust));
                       const best = meta.higherIsBetter ? Math.max(...vals) : Math.min(...vals);
                       return (
                         <tr key={k} className="border-t border-line/60">
