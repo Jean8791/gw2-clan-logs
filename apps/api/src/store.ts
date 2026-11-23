@@ -1,6 +1,6 @@
-import { STAT_KEYS } from "@gw2logs/shared";
+import { mainRole, ROLE_MIN_ACTIVE_MS, STAT_KEYS, type Role } from "@gw2logs/shared";
 import { STAT_COL, type DB } from "./db.js";
-import type { ExtractedFight } from "./ingest.js";
+import type { ExtractedFight, ExtractedPlayer } from "./ingest.js";
 
 /**
  * Grava (ou regrava) o resultado da extração de uma luta. `trusted`: o JSON saiu do nosso Elite Insights; só então um nome diferente
@@ -16,13 +16,26 @@ export function saveFight(db: DB, id: string, f: ExtractedFight, mapName: string
     `INSERT INTO skills (id, name) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET name = ${trusted ? "COALESCE(excluded.name, name)" : "COALESCE(NULLIF(name, ''), excluded.name)"}`,
   );
 
+  // lutas longas da mesma conta e classe, no espaço do mesmo dono
+  const roleHistory = db.prepare(
+    `SELECT ps.role, ps.active_ms AS activeMs FROM player_stats ps JOIN fights f ON f.id = ps.fight_id
+     WHERE ps.account = ? AND ps.profession = ? AND ps.active_ms >= ? AND f.owner_id = (SELECT owner_id FROM fights WHERE id = ?)`,
+  );
+  /** Em luta curta a função vem do histórico (a maioria pelo tempo ativo); sem histórico, fica a da classificação. */
+  const roleOf = (p: ExtractedPlayer): Role => {
+    // conta "?" é a de quem veio sem conta nem nome no log: são pessoas diferentes, então não há histórico a herdar
+    if (p.activeMs >= ROLE_MIN_ACTIVE_MS || !p.profession || p.account === "?") return p.role;
+    const history = roleHistory.all(p.account, p.profession, ROLE_MIN_ACTIVE_MS, id) as { role: Role; activeMs: number }[];
+    return history.length ? mainRole(history) : p.role;
+  };
+
   db.transaction(() => {
     db.prepare("DELETE FROM player_stats WHERE fight_id = ?").run(id);
     db.prepare("DELETE FROM player_skills WHERE fight_id = ?").run(id);
     for (const p of f.players) {
       if (p.guildId) insertGuild.run(p.guildId);
       insertPlayer.run(
-        id, p.account, p.name, p.profession, p.guildId, p.group, p.commander ? 1 : 0, p.role, Math.round(p.activeMs), p.distToCom,
+        id, p.account, p.name, p.profession, p.guildId, p.group, p.commander ? 1 : 0, roleOf(p), Math.round(p.activeMs), p.distToCom,
         ...STAT_KEYS.map((k) => p[k]),
       );
       for (const sk of p.skills) {

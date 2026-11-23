@@ -545,6 +545,12 @@ export function mainRole(history: { role: Role; activeMs: number }[]): Role {
 export const SHORT_PARTICIPATION_MS = 30_000;
 export const isShortParticipation = (activeMs: number): boolean => activeMs < SHORT_PARTICIPATION_MS;
 
+/**
+ * Abaixo disto de tempo ativo (60 s) a luta não tem sinal para estimar a função (suporte × DPS) pelo desempenho: a função vem do histórico da
+ * mesma conta e classe. É outro limiar que o de cima: aquele só marca o ponto do gráfico, este decide como a função é calculada.
+ */
+export const ROLE_MIN_ACTIVE_MS = 60_000;
+
 /** Valor por segundo de tempo ativo em luta (o "DPS"). */
 /**
  * Os `n` jogadores com mais `key` por minuto de tempo ativo, do maior para o menor. Ignora quem lutou menos de `minActiveMs`
