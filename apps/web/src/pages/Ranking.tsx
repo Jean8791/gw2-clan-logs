@@ -80,7 +80,7 @@ export function RankingPage() {
       sort: (r) => r.supportFights / r.fights,
       cell: (r) => <span className="text-muted">{Math.round((r.supportFights / r.fights) * 100)}%</span>,
     },
-    ...statColumns(group, mode, rows, scope),
+    ...statColumns(group, mode, rows, scope, data ? { baseline: data.baseline, refMs: data.referenceMs } : undefined),
   ];
 
   const copyLink = async () => {

@@ -505,11 +505,11 @@ export const professionColor = (p: string | null | undefined): string =>
 export const perMinute = (value: number, activeMs: number): number => (activeMs > 0 ? (value * 60000) / activeMs : 0);
 
 /**
- * Valor mostrado de uma métrica numa soma de lutas: uptime em %, boon por luta e o resto por minuto de tempo ativo.
- * É sempre soma sobre soma (valores sobre tempo, ou sobre lutas), então uma luta curta pesa só o que durou, e conta como luta.
+ * Valor mostrado de uma métrica numa soma de lutas: uptime em %, boon (a média ponderada pelo tempo ativo, que a consulta já entrega em
+ * `a[k]`) e o resto por minuto de tempo ativo. Tudo é soma sobre tempo, então uma luta curta pesa só o que durou.
  */
 export const statRate = (a: Aggregate, k: StatKey): number =>
-  isUptimeStat(k) ? uptimeValue(k, a[k], a.activeMs) : STAT_META[k].format === "volume" ? (a.fights ? a[k] / a.fights : 0) : perMinute(a[k], a.activeMs);
+  isUptimeStat(k) ? uptimeValue(k, a[k], a.activeMs) : STAT_META[k].format === "volume" ? a[k] : perMinute(a[k], a.activeMs);
 
 /** Métricas que definem o papel de um jogador. Ficam de fora as raras ou de resultado (ressurreição, abates, mortes…), que dariam razões enormes por acaso. */
 const ROLE_METRICS: StatKey[] = [
@@ -569,13 +569,51 @@ export const perSecond = (value: number, activeMs: number): number => (activeMs 
 /** Como mostrar uma métrica: o total, ou por minuto, ou por segundo de tempo ativo. */
 export type ValueMode = "total" | "perMin" | "perSec";
 
+/** Menor referência do ajuste por tempo (5 min): num filtro com pouco tempo de jogo ela nunca zera. */
+export const MIN_REFERENCE_MS = 5 * 60_000;
+
+/**
+ * Referência do ajuste por tempo: metade do tempo mediano de jogo por jogador no filtro (mínimo 5 min). Mediana, e não média, para poucos
+ * jogadores de muitas horas não esticarem a referência; metade, para quem jogou o tempo típico ficar com 2/3 do próprio valor.
+ */
+export function referenceTimeMs(activeMsPerPlayer: number[]): number {
+  if (!activeMsPerPlayer.length) return MIN_REFERENCE_MS;
+  const sorted = [...activeMsPerPlayer].sort((a, b) => a - b);
+  return Math.max(MIN_REFERENCE_MS, sorted[Math.floor(sorted.length / 2)]! / 2);
+}
+
+/** Média ponderada pelo tempo ativo (Σ valor × tempo ÷ Σ tempo) de linhas de jogador; é a conta que a consulta do Ranking faz nos boons. 0 sem tempo. */
+export function weightedByActive<T extends { activeMs: number }>(rows: T[], value: (r: T) => number): number {
+  const active = rows.reduce((a, r) => a + r.activeMs, 0);
+  return active > 0 ? rows.reduce((a, r) => a + value(r) * r.activeMs, 0) / active : 0;
+}
+
+/** Média ajustada pelo tempo jogado: quem jogou pouco é puxado para a média geral, quem jogou muito quase mantém o próprio valor. */
+export const adjustedByTime = (own: number, activeMs: number, general: number, refMs: number): number =>
+  activeMs + refMs > 0 ? (activeMs * own + refMs * general) / (activeMs + refMs) : general;
+
+/** O que o Ranking envia para ajustar boons e uptime: a média geral do filtro (baseline) e a referência de tempo. */
+export interface TimeAdjust {
+  baseline: Aggregate;
+  refMs: number;
+}
+
+/** Boon (média do volume ponderada pelo tempo ativo) e uptime (% do tempo ativo): valores por tempo, sem "por minuto". */
+const isTimeBased = (k: StatKey): boolean => isUptimeStat(k) || STAT_META[k].format === "volume";
+
 /**
  * Valor de uma métrica de um jogador (ou de uma soma) no modo escolhido: o mesmo na tabela e no gráfico da luta.
- * Uptime é % do tempo ativo e boon gerado é volume por luta, então o modo não se aplica a eles.
+ * Boons e uptime já vêm normalizados pelo tempo (o boon pelo Elite Insights e pela média ponderada pelo tempo ativo; o uptime é % do tempo
+ * ativo), então o modo não se aplica a eles. Com `adjust` (Ranking), eles são puxados para a média geral conforme o tempo jogado.
  */
-export function statValue(k: StatKey, mode: ValueMode, r: Stats & { activeMs: number }): number {
-  if (isUptimeStat(k)) return uptimeValue(k, r[k], r.activeMs);
-  if (mode === "total" || STAT_META[k].format === "volume") return r[k];
+export function statValue(k: StatKey, mode: ValueMode, r: Stats & { activeMs: number }, adjust?: TimeAdjust): number {
+  if (isTimeBased(k)) {
+    const own = isUptimeStat(k) ? uptimeValue(k, r[k], r.activeMs) : r[k];
+    if (!adjust) return own;
+    const general = isUptimeStat(k) ? uptimeValue(k, adjust.baseline[k], adjust.baseline.activeMs) : adjust.baseline[k];
+    return adjustedByTime(own, r.activeMs, general, adjust.refMs);
+  }
+  if (mode === "total") return r[k];
   return mode === "perSec" ? perSecond(r[k], r.activeMs) : perMinute(r[k], r.activeMs);
 }
 

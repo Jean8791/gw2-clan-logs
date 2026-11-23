@@ -8,7 +8,7 @@ import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest, 
 import multipart from "@fastify/multipart";
 import rateLimit from "@fastify/rate-limit";
 import fastifyStatic from "@fastify/static";
-import { MAX_JSON_MB, MAX_UPLOAD_MB, parseFilters, type Filters, type UploadResult } from "@gw2logs/shared";
+import { MAX_JSON_MB, MAX_UPLOAD_MB, parseFilters, referenceTimeMs, type Filters, type UploadResult } from "@gw2logs/shared";
 import { isAdmin, userByPublicId, type User } from "./auth.js";
 import { apiUser, registerAuthRoutes, sessionUser } from "./auth-routes.js";
 import { paths, type Config } from "./config.js";
@@ -313,7 +313,9 @@ export async function buildApp(cfg: Config, opts: { logger?: FastifyServerOption
 
       scope.get("/ranking", async (req) => {
         const fl = filtersOf(req);
-        return { rows: q.ranking(db, fl), baseline: q.baseline(db, fl) };
+        const rows = q.ranking(db, fl);
+        // referenceMs: o tempo de referência do ajuste dos boons e do uptime (metade do tempo mediano de jogo no filtro)
+        return { rows, baseline: q.baseline(db, fl), referenceMs: referenceTimeMs(rows.map((r) => r.activeMs)) };
       });
 
       scope.get<{ Params: { account: string } }>("/players/:account", async (req, reply) => {

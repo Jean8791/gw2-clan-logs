@@ -1,4 +1,4 @@
-import { BOON_SCOPES, isUptimeStat, STAT_GROUPS, STAT_META, statsOfGroup, statText, statValue, type BoonScope, type StatGroup, type StatKey, type Stats, type ValueMode } from "@gw2logs/shared";
+import { BOON_SCOPES, isUptimeStat, STAT_GROUPS, STAT_META, statsOfGroup, statText, statValue, type BoonScope, type StatGroup, type StatKey, type Stats, type TimeAdjust, type ValueMode } from "@gw2logs/shared";
 import { BuffIcon } from "./MediaIcon";
 import type { Column } from "./DataTable";
 import { Segmented, cx } from "./ui";
@@ -7,15 +7,21 @@ import { getLang, t } from "../lib/i18n";
 
 export type { ValueMode };
 
-/** Colunas de métricas de um grupo (Dano, Suporte…), em total ou por minuto, com destaque do melhor valor. */
-export function statColumns<T extends Stats & { activeMs: number }>(group: StatGroup, mode: ValueMode, rows: T[], scope: BoonScope = "squad"): Column<T>[] {
+/**
+ * Colunas de métricas de um grupo (Dano, Suporte…), em total ou por minuto, com destaque do melhor valor. Com `adjust` (Ranking), boons e
+ * uptime são ajustados pelo tempo jogado (puxados para a média geral de quem jogou menos que a referência do período).
+ */
+export function statColumns<T extends Stats & { activeMs: number }>(group: StatGroup, mode: ValueMode, rows: T[], scope: BoonScope = "squad", adjust?: TimeAdjust): Column<T>[] {
   return statsOfGroup(group, scope).map((k: StatKey) => {
     const meta = STAT_META[k];
     const text = statText(k, getLang());
     // uptime é % do tempo ativo (ou média de pilhas) nos dois modos: o "por minuto" não se aplica
     const isRate = mode !== "total" && meta.format !== "volume" && !isUptimeStat(k);
     const perSec = mode === "perSec";
-    const value = (r: T) => statValue(k, mode, r);
+    const value = (r: T) => statValue(k, mode, r, adjust);
+    const name = text.hint ? `${text.label} — ${text.hint}` : text.label;
+    // boons e uptime, quando o Ranking ajusta pelo tempo jogado
+    const isAdjusted = !!adjust && (meta.format === "volume" || isUptimeStat(k));
     const values = rows.map(value);
     const best = values.length ? (meta.higherIsBetter ? Math.max(...values) : Math.min(...values)) : 0;
     const label = meta.buffId ? (
@@ -37,7 +43,7 @@ export function statColumns<T extends Stats & { activeMs: number }>(group: StatG
       ) : (
         label
       ),
-      title: [text.hint ? `${text.label} — ${text.hint}` : text.label, isRate && t(perSec ? "rate.titleSec" : "rate.titleMin")].filter(Boolean).join(" · "),
+      title: [name, isRate && t(perSec ? "rate.titleSec" : "rate.titleMin"), isAdjusted && t("rate.titleAdjusted")].filter(Boolean).join(" · "),
       align: "right",
       sort: value,
       cell: (r: T) => {

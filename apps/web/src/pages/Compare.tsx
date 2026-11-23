@@ -2,7 +2,7 @@ import { X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { PolarAngleAxis, PolarGrid, Radar, RadarChart, ResponsiveContainer, Tooltip, Legend } from "recharts";
-import { isUptimeStat, perMinute, ROUTES, STAT_META, statsOfGroup, statText, uptimeValue, type Aggregate, type BoonScope, type StatGroup, type StatKey, mainRole } from "@gw2logs/shared";
+import { ROUTES, STAT_META, statRate, statsOfGroup, statText, type BoonScope, type StatGroup, type StatKey, mainRole } from "@gw2logs/shared";
 import { FilterBar } from "../components/FilterBar";
 import { GroupTabs } from "../components/statColumns";
 import { PlayerPicker } from "../components/PlayerPicker";
@@ -14,8 +14,6 @@ import { useFilters, useMe } from "../lib/hooks";
 import { getLang, t } from "../lib/i18n";
 import { BaselinePicker, type BaselineRole } from "../components/BaselinePicker";
 import { accountShort, duration, stat } from "../lib/format";
-
-const value = (a: Aggregate, k: StatKey) => (isUptimeStat(k) ? uptimeValue(k, a[k], a.activeMs) : STAT_META[k].format === "volume" ? (a.fights ? a[k] / a.fights : 0) : perMinute(a[k], a.activeMs));
 
 export function ComparePage() {
   const [params, setParams] = useSearchParams();
@@ -43,8 +41,8 @@ export function ComparePage() {
 
   // radar: cada métrica normalizada pelo maior valor entre os comparados e a média (0–100)
   const radar = keys.map((k) => {
-    const vals = players.map((p) => value(p.totals, k));
-    const avg = baseline ? value(baseline, k) : 0;
+    const vals = players.map((p) => statRate(p.totals, k));
+    const avg = baseline ? statRate(baseline, k) : 0;
     const max = Math.max(...vals, avg) || 1;
     const meta = STAT_META[k];
     // quando menor é melhor (mortes, dano recebido), inverte: 100 = nada, 0 = o pior
@@ -146,7 +144,7 @@ export function ComparePage() {
                     </tr>
                     {keys.map((k) => {
                       const meta = STAT_META[k];
-                      const vals = players.map((p) => value(p.totals, k));
+                      const vals = players.map((p) => statRate(p.totals, k));
                       const best = meta.higherIsBetter ? Math.max(...vals) : Math.min(...vals);
                       return (
                         <tr key={k} className="border-t border-line/60">
@@ -158,7 +156,7 @@ export function ComparePage() {
                               {stat(k, v, true)}
                             </td>
                           ))}
-                          <td className="px-4 py-2 text-right text-muted">{baseline ? stat(k, value(baseline, k), true) : "—"}</td>
+                          <td className="px-4 py-2 text-right text-muted">{baseline ? stat(k, statRate(baseline, k), true) : "—"}</td>
                         </tr>
                       );
                     })}
