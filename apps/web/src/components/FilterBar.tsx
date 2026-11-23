@@ -104,7 +104,7 @@ export function FilterBar({ value, onChange, fields, options }: { value: Filters
               <optgroup label={t("filter.guild.allianceGroup")}>
                 {alliance.map((g) => (
                   <option key={g.id} value={g.id}>
-                    [{g.tag}] {g.name}
+                    [{g.tag ?? "?"}] {g.name}
                   </option>
                 ))}
               </optgroup>
@@ -113,7 +113,7 @@ export function FilterBar({ value, onChange, fields, options }: { value: Filters
               <optgroup label={t("filter.guild.othersGroup")}>
                 {others.map((g) => (
                   <option key={g.id} value={g.id}>
-                    [{g.tag}] {g.name}
+                    [{g.tag ?? "?"}] {g.name}
                   </option>
                 ))}
               </optgroup>

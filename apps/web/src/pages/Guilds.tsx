@@ -31,7 +31,7 @@ export function GuildsPage() {
   };
 
   // a busca define o conjunto: a ordenação, o total e as páginas valem só para as guildas que batem com ela
-  const rows = useMemo(() => (data ?? []).filter((g) => guildMatches(g, search)), [data, search]);
+  const rows = useMemo(() => (data ?? []).filter((g) => g.name && guildMatches(g, search)), [data, search]);
 
   const columns: Column<GuildSummary>[] = [
     {
@@ -61,7 +61,7 @@ export function GuildsPage() {
       sort: (g) => g.name ?? "",
       cell: (g) => (
         <Link to={`${ROUTES.ranking}?guild=${encodeURIComponent(g.id)}`} className="font-medium hover:text-gold">
-          {g.name ?? <span className="text-faint">{t("guilds.noName")}</span>}
+          {g.name}
         </Link>
       ),
     },
