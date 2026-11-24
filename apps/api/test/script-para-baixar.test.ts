@@ -24,11 +24,13 @@ describe("script de envio para baixar", () => {
     }
   });
 
-  it("o cartão do script só aparece para o administrador", () => {
+  it("o cartão do script aparece para o dono autenticado sem exigir administrador", () => {
     const upload = fs.readFileSync(path.join(web, "src", "pages", "Upload.tsx"), "utf8");
+    const routes = fs.readFileSync(path.join(web, "src", "main.tsx"), "utf8");
 
-    expect(upload).toContain("{isAdmin && <ScriptCard />}");
-    expect(upload).not.toMatch(/<ScriptCard \/>\s*\n\s*<Card/);
+    expect(upload).toMatch(/<ScriptCard \/>\s*\n\s*<Card/);
+    expect(upload).not.toContain("isAdmin");
+    expect(routes).toContain("<OwnerOnly><UploadPage /></OwnerOnly>");
   });
 
   it("o monitor automático só leva para a fila os logs dos últimos 3 dias, configurável por GW2LOGS_DIAS", () => {

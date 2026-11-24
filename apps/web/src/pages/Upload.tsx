@@ -5,7 +5,7 @@ import { MAX_JSON_MB, MAX_UPLOAD_MB, MAX_ZIP_LOGS, MAX_ZIP_MB, retentionCutoff, 
 import { RetentionNotice } from "../components/RetentionNotice";
 import { ScriptCard } from "../components/ScriptHelp";
 import { Button, Card, ErrorBox, PageHeader, Rich, cx } from "../components/ui";
-import { useConfig, useFights, useViewer } from "../lib/api";
+import { useConfig, useFights } from "../lib/api";
 import { codeText, fightErrorText } from "../lib/errors";
 import { t } from "../lib/i18n";
 import { uploadQueue, useUploadQueue } from "../lib/upload-queue";
@@ -37,8 +37,6 @@ async function itemsOf(file: File): Promise<Item[]> {
 
 export function UploadPage() {
   const { data: cfg } = useConfig();
-  // o envio por script ainda não está liberado para o clã: só o administrador vê o cartão
-  const isAdmin = useViewer().data?.isAdmin === true;
   // a lista e o envio moram na fila global: sair desta página não os interrompe, e ao voltar a lista está aqui
   const { items, running, pct } = useUploadQueue();
   const [drag, setDrag] = useState(false);
@@ -190,7 +188,7 @@ export function UploadPage() {
         </div>
 
         <div className="flex flex-col gap-4">
-        {isAdmin && <ScriptCard />}
+        <ScriptCard />
         <Card title={<span className="inline-flex items-center gap-2"><ListChecks className="size-4 text-gold" /> {t("upload.limits.title")}</span>}>
           <div className="space-y-3 px-5 py-4 text-sm text-muted">
             <p>
