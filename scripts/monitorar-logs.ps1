@@ -288,11 +288,12 @@ try {
     if (-not (Test-Path -LiteralPath $origem -PathType Container)) {
         Write-Log "Aviso: pasta do ArcDPS nao encontrada ($origem). Confira GW2LOGS_ORIGEM."
     } else {
-        $limite = (Get-Date).AddSeconds(-$IdadeMinimaSegundos)
+        $agora = Get-Date; $limite = $agora.AddSeconds(-$IdadeMinimaSegundos)
         # os logs mais antigos que GW2LOGS_DIAS nao entram: ficam onde estao (evita encher a fila do servidor na primeira execucao)
         $maisAntigo = if ($dias -gt 0) { (Get-Date).AddDays(-$dias) } else { [datetime]::MinValue }
         foreach ($f in (Get-Logs $origem | Sort-Object LastWriteTime, FullName)) {
-            if ($f.LastWriteTime -gt $limite) { continue }
+            # data no futuro = o relogio do PC estava adiantado quando o ArcDPS gravou: esperar nao adianta, vale o teste de arquivo livre
+            if ($f.LastWriteTime -gt $limite -and $f.LastWriteTime -le $agora) { continue }
             if ($f.LastWriteTime -lt $maisAntigo) { continue }
             if (-not (Test-Livre $f.FullName)) { continue }
             try {
