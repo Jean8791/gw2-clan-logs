@@ -43,6 +43,13 @@ describe("script de envio para baixar", () => {
     expect(monitor).toContain("\r\n");
   });
 
+  it("o monitor não deixa parado o log gravado com o relógio do PC adiantado (data no futuro)", () => {
+    const monitor = fs.readFileSync(path.join(repoRoot, "scripts", "monitorar-logs.ps1"), "utf8");
+
+    expect(monitor).toContain("if ($f.LastWriteTime -gt $limite -and $f.LastWriteTime -le $agora) { continue }");
+    expect(monitor).toContain("if (-not (Test-Livre $f.FullName)) { continue }");
+  });
+
   it("a configuração do Windows usa `set` e a do Linux usa CHAVE=valor, como cada script lê", () => {
     expect(modalSource()).toContain('os === "windows" ? "set " : ""');
     expect(fs.readFileSync(path.join(repoRoot, "scripts", "enviar-logs.bat"), "utf8")).toContain("set GW2LOGS_KEY=");
