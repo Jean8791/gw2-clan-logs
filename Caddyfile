@@ -5,5 +5,14 @@
 	}
 	# o Caddy anuncia "Server: Caddy" em toda resposta; não há por que dizer qual servidor está na frente
 	header -Server
-	reverse_proxy app:8080
+	# painel de logs dos containers (Dozzle): só com usuário e senha; o hash vem do .env (ver README)
+	handle /logs* {
+		basic_auth {
+			{$LOGS_USUARIO} {$LOGS_SENHA_HASH}
+		}
+		reverse_proxy dozzle:8080
+	}
+	handle {
+		reverse_proxy app:8080
+	}
 }
