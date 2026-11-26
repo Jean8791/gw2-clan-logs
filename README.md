@@ -174,7 +174,7 @@ Variáveis de ambiente do servidor. No Docker Compose, as principais vêm do arq
 | `UPLOAD_MAX_DISK_MB` | Espaço máximo dos logs enviados que ainda esperam processamento | `4096` |
 | `DOMINIO` (Compose) | Nome do site, usado pelo Caddy para o HTTPS | obrigatório |
 | `EI_TIMEOUT_MIN` | Minutos que o Elite Insights tem para ler um log antes de ser cortado. Em VM com pouca CPU, logs de ~20 MB passam de 5 minutos | `5` |
-| `APP_MEM_LIMIT` (Compose) | Teto de memória do container; em VM de 1 GB use `800m` | `1500m` |
+| `APP_MEM_LIMIT` (Compose) | Teto de memória do container; em VM de 1 GB use `800m` | `2000m` |
 | `DOTNET_GCHeapHardLimitPercent` (Compose) | Teto do heap do .NET (o Elite Insights) em % do `APP_MEM_LIMIT`, **em hexadecimal**: `5A` = 90, `4B` = 75, `3C` = 60. Vazio, o .NET usa 75% do limite do contêiner. Se o limite do contêiner subir, suba este valor junto (veja [Migrar para uma VM maior](#migrar-para-uma-vm-maior-ampere-a1-arm64)) | vazio |
 
 O Elite Insights roda com uma configuração enxuta (sem replay de combate, linhas do tempo por segundo e modificadores de dano), que leva o pico de memória de um log grande de ~1,4 GB para ~0,5 GB. O `DetailledWvW` precisa continuar ligado: sem ele o EI não traz dano, kills e inimigos em WvW.
@@ -221,7 +221,7 @@ O site precisa de disco que não se perde e de ~1 GB de memória, então serviç
 
 Logs de WvW grandes (de 20 a 50 MB) precisam de mais memória que a VM de 1 GB. A imagem Docker roda em `linux/amd64` e em `linux/arm64`, então o site vai para uma VM Ampere A1 (*Always Free*) com o mesmo `docker compose`, sem mudar o código.
 
-**1. Meça antes de escolher o tamanho.** Com a imagem construída (`docker build -t gw2-medir .`), rode `scripts/medir-ei.sh -d gw2-medir ARQUIVO.zevtc`: ele usa a mesma configuração do servidor e mostra o pico de memória (RSS) e o tempo do Elite Insights. Medido num log de 13 MB: ~475 MB de pico, 6,9 s e um JSON de 24 MB. O pico cresce com o log (e com o JSON gerado); meça os seus maiores logs e escolha o `APP_MEM_LIMIT` com folga de pelo menos 50% sobre o pior pico, mais ~500 MB para o resto do site. Além do EI, o servidor lê o JSON inteiro na memória do Node depois que o EI termina, então o JSON de um log de 50 MB (algo como 90 MB) também pesa.
+**1. Meça antes de escolher o tamanho.** Com a imagem construída (`docker build -t gw2-medir .`), rode `scripts/medir-ei.sh -d gw2-medir ARQUIVO.zevtc`: ele usa a mesma configuração do servidor e mostra o pico de memória (RSS) e o tempo do Elite Insights. Medido na imagem, com limite de 1500 MB e o padrão do .NET: log de 13 MB, ~475 MB de pico, 6,9 s e JSON de 24 MB; log de 22 MB, 781 MB de pico, 11 s e JSON de 30 MB; log de 39 MB, **falhou** (o .NET só usa 75% do limite) e, com 3 GB, passou com 1,3 GB de pico, 16 s e JSON de 39 MB. Por isso o padrão do compose é 2000m. O pico cresce com o log (e com o JSON gerado); meça os seus maiores logs e escolha o `APP_MEM_LIMIT` com folga de pelo menos 50% sobre o pior pico, mais ~500 MB para o resto do site. Além do EI, o servidor lê o JSON inteiro na memória do Node depois que o EI termina, então o JSON de um log de 50 MB (algo como 90 MB) também pesa.
 
 **2. Tamanho da VM.** A cota *Always Free* soma até 4 OCPU e 24 GB de RAM nas instâncias A1. Ponto de partida: **2 OCPU e 12 GB** (deixa a outra metade da cota livre e é rápido o bastante para o EI, que usa 1 thread: `SingleThreaded=true`). Com a memória medida, ajuste o `.env`:
 
