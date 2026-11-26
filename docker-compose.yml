@@ -68,6 +68,13 @@ services:
       DOZZLE_BASE: /logs
       DOZZLE_NO_ANALYTICS: "true"
       DOZZLE_FILTER: name=gw2-clan-logs
+      # o acesso já é protegido pelo Caddy: sem assistente de configuração, sem login próprio (precisaria do /data),
+      # e sem ações nem shell nos containers (com o socket do Docker, seriam controle da VM)
+      DOZZLE_DISABLE_SETUP_WIZARD: "true"
+      DOZZLE_AUTH_PROVIDER: none
+      DOZZLE_ENABLE_ACTIONS: "false"
+      DOZZLE_ENABLE_SHELL: "false"
+      DOZZLE_AUTO_UPDATE: "off"
     mem_limit: 128m
     read_only: true
     cap_drop: [ALL]
