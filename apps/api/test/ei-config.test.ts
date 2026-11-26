@@ -52,6 +52,10 @@ describe("eiFailure: por que o Elite Insights não gerou o JSON", () => {
     expect(eiFailure(processed("Corrupted log"), 0).message).toBe("eiUnreadableWhy|Corrupted log");
   });
 
+  it("Dado o motivo OutOfMemoryException impresso pelo EI, então também é falta de memória", () => {
+    expect(eiFailure(processed("Program: Exception of type 'System.OutOfMemoryException' was thrown."), 0).message).toBe("eiMemory");
+  });
+
   it("Dado saída 2 e nenhuma linha Processed, então é falta de memória", () => {
     expect(eiFailure("Reading MapList\n", 2).message).toBe("eiMemory");
   });
