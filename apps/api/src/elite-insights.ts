@@ -35,13 +35,16 @@ export const eiEnv = (base: NodeJS.ProcessEnv): NodeJS.ProcessEnv => ({ DOTNET_G
 
 /**
  * Por que o EI não gerou o JSON. Ele imprime "Processed - {json}" com o motivo da falha; sem essa linha e com saída 2, foi o vigia de
- * memória dele (passou de 90% da memória do contêiner, tentou coletar lixo e saiu em silêncio): não é log curto nem corrompido.
+ * memória dele (passou de 90% da memória do contêiner, tentou coletar lixo e saiu em silêncio). Se o vigia estiver desligado, o .NET
+ * lança OutOfMemoryException e o motivo vem na linha. Nos dois casos é falta de memória, não log curto nem corrompido.
  */
 export function eiFailure(stdout: string, code: number | null): Error {
   const line = stdout.split("\n").find((l) => l.startsWith("Processed - "));
   try {
     const r = line ? JSON.parse(line.slice("Processed - ".length)) : null;
-    if (r && r.parsed === false && typeof r.status === "string") return fightError("eiUnreadableWhy", r.status);
+    if (r && r.parsed === false && typeof r.status === "string") {
+      return r.status.includes("OutOfMemoryException") ? fightError("eiMemory") : fightError("eiUnreadableWhy", r.status);
+    }
   } catch {
     /* sem motivo legível */
   }
