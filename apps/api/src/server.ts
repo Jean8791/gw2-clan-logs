@@ -30,6 +30,8 @@ const LIMIT_MESSAGES = {
   diskFull: "The server is out of space for new logs.",
 };
 const ALLOWED_EXT = [".zevtc", ".evtc", ".zip", ".json"];
+/** Quantos ids o monitor pode conferir de uma vez: o SQLite limita as variáveis de uma consulta. */
+const MAX_STATUS_IDS = 100;
 
 export interface App {
   server: FastifyInstance;
@@ -231,6 +233,18 @@ export async function buildApp(cfg: Config, opts: { logger?: FastifyServerOption
       results.push({ file: part.filename, id, status: "queued" });
     }
     return results;
+  });
+
+  // O monitor do Windows confere aqui se o que enviou virou luta. Só as lutas do próprio usuário: id alheio ou inexistente não aparece.
+  server.get<{ Querystring: { ids?: string | string[] } }>("/api/upload/status", async (req, reply) => {
+    const user = uploadUser(req, reply);
+    if (!user) return reply;
+    const ids = [req.query.ids ?? []].flat().join(",").split(",").filter(Boolean); // ?ids=a&ids=b chega como lista
+    if (ids.length > MAX_STATUS_IDS) return reply.code(400).send({ error: `Ask for at most ${MAX_STATUS_IDS} ids at a time.`, code: "tooManyIds", max: MAX_STATUS_IDS });
+    if (ids.length === 0) return [];
+    return db
+      .prepare(`SELECT id, status, error FROM fights WHERE owner_id = ? AND id IN (${ids.map(() => "?").join(",")})`)
+      .all(user.id, ...ids);
   });
 
   // para o alerta de "fora do ar": só diz se o banco responde e quantos logs esperam (nada de dado de jogador)
