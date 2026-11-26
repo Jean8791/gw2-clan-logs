@@ -51,9 +51,30 @@ services:
       - "443:443"
     environment:
       DOMINIO: ${DOMINIO:?defina DOMINIO no .env}
+      # acesso ao painel de logs em https://DOMINIO/logs: usuário e hash bcrypt da senha (ver README)
+      LOGS_USUARIO: ${LOGS_USUARIO:?defina LOGS_USUARIO no .env}
+      LOGS_SENHA_HASH: ${LOGS_SENHA_HASH:?defina LOGS_SENHA_HASH no .env}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - certificados:/data
+
+  # Painel web dos logs dos containers. Só o Caddy chega nele (a porta não é publicada), e o Caddy exige senha.
+  # O socket do Docker dá a ele acesso de leitura a TODOS os containers da VM: por isso o filtro limita ao projeto,
+  # e por isso a senha do /logs precisa ser forte.
+  dozzle:
+    image: amir20/dozzle:v11.5.0
+    restart: unless-stopped
+    environment:
+      DOZZLE_BASE: /logs
+      DOZZLE_NO_ANALYTICS: "true"
+      DOZZLE_FILTER: name=gw2-clan-logs
+    mem_limit: 128m
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
 
 volumes:
   dados:
