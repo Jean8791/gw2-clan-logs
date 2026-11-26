@@ -221,9 +221,8 @@ O site precisa de disco que não se perde e de ~1 GB de memória, então serviç
 |---|---|
 | `development` | O que está sendo desenvolvido e testado. Todo trabalho novo sai dela e os PRs voltam para ela (é a branch padrão) |
 | `release` | A produção: o servidor roda o código desta branch. Protegida (exige PR e CI verde) |
-| `master` | Cópia da produção: fica igual à `release` depois de cada lançamento, sem commits próprios. Protegida |
 
-Fluxo: tarefa (branch `DDMMAAAAHHMM`) → PR para `development` → teste (`npm test`, build do Docker e envio de logs reais) → PR de `development` para `release` → atualizar o servidor → `master` vai para o mesmo commit da `release`. O CI roda nas três branches e em todo PR.
+Fluxo: tarefa (branch `DDMMAAAAHHMM`) → PR para `development` → teste (`npm test`, build do Docker e envio de logs reais) → PR de `development` para `release` → atualizar o servidor. O CI roda em `development`, em `release` e em todo PR.
 
 ## Como as métricas são calculadas
 
