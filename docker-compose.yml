@@ -24,6 +24,8 @@ services:
       RATE_LIMIT_AUTH_PER_MIN: ${RATE_LIMIT_AUTH_PER_MIN:-}
       # opcional: dias de validade do token pessoal do script de envio (vazio = 90)
       API_TOKEN_DAYS: ${API_TOKEN_DAYS:-}
+      # opcional: minutos que o Elite Insights tem para ler um log antes de ser cortado (vazio = 5)
+      EI_TIMEOUT_MIN: ${EI_TIMEOUT_MIN:-}
       PUBLIC_URL: https://${DOMINIO:?defina DOMINIO no .env}
       RETENTION_DAYS: ${RETENTION_DAYS:-30}
       # só o Caddy chega no app (a porta não é publicada), então o IP do X-Forwarded-For é confiável

@@ -173,6 +173,7 @@ Variáveis de ambiente do servidor. No Docker Compose, as principais vêm do arq
 | `UPLOAD_MAX_QUEUE_USER` / `UPLOAD_MAX_PER_HOUR_USER` | O mesmo, por usuário: logs esperando ou em processamento, e logs novos por hora | `10` / `200` |
 | `UPLOAD_MAX_DISK_MB` | Espaço máximo dos logs enviados que ainda esperam processamento | `4096` |
 | `DOMINIO` (Compose) | Nome do site, usado pelo Caddy para o HTTPS | obrigatório |
+| `EI_TIMEOUT_MIN` | Minutos que o Elite Insights tem para ler um log antes de ser cortado. Em VM com pouca CPU, logs de ~20 MB passam de 5 minutos | `5` |
 | `APP_MEM_LIMIT` (Compose) | Teto de memória do container; em VM de 1 GB use `800m` | `1500m` |
 
 O Elite Insights roda com uma configuração enxuta (sem replay de combate, linhas do tempo por segundo e modificadores de dano), que leva o pico de memória de um log grande de ~1,4 GB para ~0,5 GB. O `DetailledWvW` precisa continuar ligado: sem ele o EI não traz dano, kills e inimigos em WvW.
