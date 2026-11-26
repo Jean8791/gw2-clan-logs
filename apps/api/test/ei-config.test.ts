@@ -45,6 +45,15 @@ describe("EI_HTML", () => {
   });
 });
 
+describe("EI_TIMEOUT_MIN", () => {
+  it("padrão de 5 minutos; um valor positivo vira milissegundos; inválido volta ao padrão", () => {
+    expect(loadConfig({}).eiTimeoutMs).toBe(5 * 60_000);
+    expect(loadConfig({ EI_TIMEOUT_MIN: "10" }).eiTimeoutMs).toBe(10 * 60_000);
+    expect(loadConfig({ EI_TIMEOUT_MIN: "0" }).eiTimeoutMs).toBe(5 * 60_000);
+    expect(loadConfig({ EI_TIMEOUT_MIN: "abc" }).eiTimeoutMs).toBe(5 * 60_000);
+  });
+});
+
 describe("eiFailure: por que o Elite Insights não gerou o JSON", () => {
   const processed = (status: string) => `Processed - ${JSON.stringify({ parsed: false, status })}\n`;
 

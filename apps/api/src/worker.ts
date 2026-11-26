@@ -129,7 +129,7 @@ export class LogWorker {
         jsonFile = src;
       } else {
         const eiStarted = Date.now();
-        const out = await runEliteInsights({ eiDir: this.cfg.eiDir, dotnet: this.cfg.dotnet, logFile: src, outDir: work, html: this.cfg.eiHtml });
+        const out = await runEliteInsights({ eiDir: this.cfg.eiDir, dotnet: this.cfg.dotnet, logFile: src, outDir: work, html: this.cfg.eiHtml, timeoutMs: this.cfg.eiTimeoutMs });
         eiMs = Date.now() - eiStarted;
         jsonFile = out.json;
         html = out.html;
