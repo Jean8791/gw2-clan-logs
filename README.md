@@ -175,6 +175,7 @@ Variáveis de ambiente do servidor. No Docker Compose, as principais vêm do arq
 | `DOMINIO` (Compose) | Nome do site, usado pelo Caddy para o HTTPS | obrigatório |
 | `EI_TIMEOUT_MIN` | Minutos que o Elite Insights tem para ler um log antes de ser cortado. Em VM com pouca CPU, logs de ~20 MB passam de 5 minutos | `5` |
 | `APP_MEM_LIMIT` (Compose) | Teto de memória do container; em VM de 1 GB use `800m` | `1500m` |
+| `DOTNET_GCHeapHardLimitPercent` (Compose) | Teto do heap do .NET (o Elite Insights) em % do `APP_MEM_LIMIT`, **em hexadecimal**: `5A` = 90, `4B` = 75, `3C` = 60. Vazio, o .NET usa 75% do limite do contêiner. Se o limite do contêiner subir, suba este valor junto (veja [Migrar para uma VM maior](#migrar-para-uma-vm-maior-ampere-a1-arm64)) | vazio |
 
 O Elite Insights roda com uma configuração enxuta (sem replay de combate, linhas do tempo por segundo e modificadores de dano), que leva o pico de memória de um log grande de ~1,4 GB para ~0,5 GB. O `DetailledWvW` precisa continuar ligado: sem ele o EI não traz dano, kills e inimigos em WvW.
 
@@ -215,6 +216,40 @@ O site precisa de disco que não se perde e de ~1 GB de memória, então serviç
 - **Acompanhar:** `docker compose logs -f app`, `docker stats`, e a tela Lutas mostra a fila e os erros de processamento. Cada log processado registra `eiMs` (Elite Insights) e `totalMs` no log "luta processada", e o total fica em `fights.process_ms` (vazio nas lutas copiadas e nas antigas): `SELECT COUNT(*), AVG(process_ms), MAX(process_ms) FROM fights WHERE process_ms IS NOT NULL` dá a média e o pico para estimar quantos logs por hora o servidor aguenta.
 - **Alerta de fora do ar:** `GET /api/health` responde o estado e o tamanho da fila. O workflow `.github/workflows/uptime.yml` o consulta a cada 15 minutos e o GitHub avisa por e-mail se falhar; defina a variável `SITE_URL` do repositório (Settings, Secrets and variables, Variables).
 - **Segurança:** o SSH só aceita chave, sem login de root, sem encaminhamento de portas, de X11 e de agente (`PermitRootLogin no`, `AllowTcpForwarding no` e afins num arquivo em `/etc/ssh/sshd_config.d/`, com nome começando por `00-`, porque o primeiro valor vence), com `fail2ban` e atualizações automáticas (pode reiniciar sozinho de madrugada). Deixe abertas só as portas 22, 80 e 443, e confira também o firewall da rede da nuvem (*Security List*). No site: quem tem o link de um espaço o vê (só leitura) e o dono pode trocá-lo; enviar logs exige login ou o token pessoal; marcar guildas exige ser administrador (`ADMIN_DISCORD_IDS`) ou a `ADMIN_KEY`, por script.
+
+### Migrar para uma VM maior (Ampere A1, ARM64)
+
+Logs de WvW grandes (de 20 a 50 MB) precisam de mais memória que a VM de 1 GB. A imagem Docker roda em `linux/amd64` e em `linux/arm64`, então o site vai para uma VM Ampere A1 (*Always Free*) com o mesmo `docker compose`, sem mudar o código.
+
+**1. Meça antes de escolher o tamanho.** Com a imagem construída (`docker build -t gw2-medir .`), rode `scripts/medir-ei.sh -d gw2-medir ARQUIVO.zevtc`: ele usa a mesma configuração do servidor e mostra o pico de memória (RSS) e o tempo do Elite Insights. Medido num log de 13 MB: ~475 MB de pico, 6,9 s e um JSON de 24 MB. O pico cresce com o log (e com o JSON gerado); meça os seus maiores logs e escolha o `APP_MEM_LIMIT` com folga de pelo menos 50% sobre o pior pico, mais ~500 MB para o resto do site. Além do EI, o servidor lê o JSON inteiro na memória do Node depois que o EI termina, então o JSON de um log de 50 MB (algo como 90 MB) também pesa.
+
+**2. Tamanho da VM.** A cota *Always Free* soma até 4 OCPU e 24 GB de RAM nas instâncias A1. Ponto de partida: **2 OCPU e 12 GB** (deixa a outra metade da cota livre e é rápido o bastante para o EI, que usa 1 thread: `SingleThreaded=true`). Com a memória medida, ajuste o `.env`:
+
+```
+APP_MEM_LIMIT=6g
+DOTNET_GCHeapHardLimitPercent=5A
+EI_TIMEOUT_MIN=10
+```
+
+`5A` é 90 em hexadecimal: o heap do .NET pode usar até 90% do `APP_MEM_LIMIT`. O padrão do .NET (75%) também serve; suba o valor só se o EI falhar com `eiMemory` com o contêiner ainda longe do limite. Esses números são um ponto de partida, não uma garantia: confirme com as suas medições.
+
+**3. Criar a VM.** No console da Oracle, *Create instance*, forma **VM.Standard.A1.Flex** (Ampere), imagem **Ubuntu 24.04 (aarch64)**, 2 OCPU e 12 GB, IP público e a sua chave SSH. Libere as portas 80 e 443 como no passo 1 de [Colocar no ar](#colocar-no-ar). Sem swap (a VM tem memória de sobra). Instale o Docker como no passo 3 e clone o projeto (`git clone ... && git checkout release`).
+
+**4. Copiar o `.env` e os dados.** Faça tudo com o site **parado** na VM antiga, para não perder lutas enviadas durante a cópia (o monitor de envio no Windows tenta de novo sozinho: o arquivo fica em `integrando`).
+  1. Na VM antiga: `docker compose stop app` (o Caddy pode continuar). Faça um backup consistente do banco: `docker compose start app && scripts/backup.sh && docker compose stop app`; o backup fica no próprio volume e vai junto na cópia.
+  2. Descubra o nome do volume: `docker volume ls | grep dados`.
+  3. Da VM antiga para a nova, sem arquivo intermediário (substitua o volume, o usuário e o endereço da VM nova; a chave SSH da VM antiga para a nova precisa existir, ou rode o comando da sua máquina com `ssh` nas duas pontas): `docker run --rm -v VOLUME_DADOS:/data:ro alpine tar czf - -C /data . | ssh usuario@IP-NOVO 'cd ~ && cat > dados.tgz'`.
+  4. Na VM nova, antes do primeiro `up`: `docker volume create gw2-clan-logs_dados` e `docker run --rm -v gw2-clan-logs_dados:/data -v ~/dados.tgz:/dados.tgz:ro alpine sh -c 'tar xzf /dados.tgz -C /data && chown -R 10001:10001 /data'` (o dono tem que ser o uid 10001 do app; o nome do volume é `NOMEDAPASTA_dados`, então confira com `docker volume ls`). Depois apague o `dados.tgz`.
+  5. Copie o `.env` da VM antiga para a nova com `scp` e `chmod 600 .env`. Não imprima nem cole o conteúdo: ele tem segredos. Acrescente as linhas do passo 2 (`APP_MEM_LIMIT` etc.).
+  6. `docker compose up -d --build` (o build é nativo em ARM64). Confira `docker compose logs app` (sem erro, banco aberto) e o total de lutas: `docker compose exec app node -e "const D=require('better-sqlite3');console.log(new D('/data/gw2logs-v2.db',{readonly:true}).prepare('select count(*) n from fights').get())"` e compare com o da VM antiga.
+
+**Validar o Elite Insights em ARM64 antes de mudar o DNS.** O build arm64 da imagem, o Node, o `better-sqlite3`, o runtime .NET e os 606 testes passam (testados sob emulação), mas o Elite Insights só foi exercitado em amd64: sob a emulação QEMU o .NET aborta com `AccessViolationException`, o que é limitação do emulador e não prova nada sobre ARM de verdade. Na A1, antes de tudo, rode `scripts/medir-ei.sh -d IMAGEM ARQUIVO.zevtc` num log pequeno e depois no maior. Se o EI falhar também lá, não mude o DNS (o site continua na VM antiga) e abra uma pendência.
+
+**5. Apontar o DuckDNS e validar.** No painel do DuckDNS, troque o IP do seu subdomínio pelo da VM nova (o TTL é curto, ~1 min). Na primeira visita o Caddy emite o certificado HTTPS (se a emissão falhar, o DNS ainda não propagou: espere e veja `docker compose logs caddy`). Valide: o site abre, o login com o Discord funciona (o endereço é o mesmo, então a URL de retorno não muda), as lutas e os usuários aparecem, `/api/health` responde e **um log grande (o que falhava com `eiMemory`) é importado**. Rode também `scripts/backup.sh` e refaça o agendamento do cron e do `backup-drive.sh` (rclone) na VM nova.
+
+**6. Desligar a VM antiga, só depois.** Deixe a antiga parada (`docker compose stop`) por alguns dias, como plano B: se algo falhar, basta apontar o DuckDNS de volta. Só então apague a instância, e o volume de boot, no console da Oracle.
+
+**"Out of capacity for shape VM.Standard.A1.Flex":** a Oracle não tem A1 livre naquela região e domínio de disponibilidade. Em ordem: (1) tente outro *Availability Domain* na criação (se a região tiver mais de um); (2) tente de novo mais tarde, de madrugada costuma ter vaga; (3) peça menos (1 OCPU e 6 GB) e aumente depois, pois a forma Flex permite redimensionar a instância parada; (4) tente repetidamente com o OCI CLI (`oci compute instance launch ...` em um laço com pausa) até a vaga aparecer; (5) mudar a conta para *Pay As You Go* costuma resolver, e continua sem cobrança enquanto você ficar dentro dos limites *Always Free* (confira o limite na sua conta antes). A região da conta não muda depois de criada. Enquanto não houver vaga, o site continua na VM antiga: nada é desligado antes da validação.
 
 ## Branches e lançamento
 
