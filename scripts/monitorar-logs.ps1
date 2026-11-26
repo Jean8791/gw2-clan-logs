@@ -2,8 +2,9 @@
 Envio automatico dos logs do ArcDPS para o site, feito para rodar pelo Agendador de Tarefas (veja instalar-agendamento.ps1).
 
 Fluxo das pastas:
-  pasta do ArcDPS (origem) -> GW2 Logs\integrando -> envio para o site -> GW2 Logs\integrado
-                                                                        \-> GW2 Logs\erro
+  pasta do ArcDPS (origem) -> GW2 Logs\integrando -> envio para o site -> o site processa -> GW2 Logs\integrado
+                                                                        \-> GW2 Logs\erro (recusado ou falhou ao processar)
+O arquivo so sai de integrando para integrado quando o site confirma que a luta ficou pronta (pendentes.json guarda o id de cada envio).
 Os logs SAEM da pasta do ArcDPS: e assim que o mesmo log nao e enviado de novo a cada execucao.
 
 Configuracao: o mesmo arquivo do enviar-logs.bat, %APPDATA%\gw2logs\config.bat, com linhas "set CHAVE=valor".
@@ -114,21 +115,22 @@ function Get-Logs([string]$Pasta) {
         Where-Object { $Extensoes -contains $_.Extension.ToLowerInvariant() })
 }
 
-function Read-Tentativas([string]$Caminho) {
+# Arquivo JSON simples nome -> valor (tentativas.json: numero de tentativas; pendentes.json: id da luta no servidor).
+function Read-Mapa([string]$Caminho) {
     $mapa = @{}
     if (-not (Test-Path -LiteralPath $Caminho -PathType Leaf)) { return $mapa }
     try {
         $obj = ConvertFrom-Json -InputObject ([System.IO.File]::ReadAllText($Caminho, $Utf8))
         if ($null -ne $obj) {
-            foreach ($p in $obj.PSObject.Properties) { $mapa[$p.Name] = [int]$p.Value }
+            foreach ($p in $obj.PSObject.Properties) { $mapa[$p.Name] = $p.Value }
         }
     } catch {
-        Write-Log "Aviso: tentativas.json invalido, recomecando a contagem ($($_.Exception.Message))"
+        Write-Log "Aviso: $([System.IO.Path]::GetFileName($Caminho)) invalido, recomecando ($($_.Exception.Message))"
     }
     return $mapa
 }
 
-function Save-Tentativas([string]$Caminho, [hashtable]$Mapa) {
+function Save-Mapa([string]$Caminho, [hashtable]$Mapa) {
     $obj = New-Object PSObject
     foreach ($k in ($Mapa.Keys | Sort-Object)) { $obj | Add-Member -NotePropertyName $k -NotePropertyValue $Mapa[$k] }
     $json = if ($Mapa.Count -eq 0) { '{}' } else { ConvertTo-Json -InputObject $obj }
@@ -146,14 +148,19 @@ function ConvertTo-CurlString([string]$Texto) {
     return '"' + $Texto.Replace('\', '\\').Replace('"', '\"') + '"'
 }
 
-# O primeiro item da lista que o servidor devolve. ConvertFrom-Json no PowerShell 5.1 devolve o array inteiro
+# Os itens da lista que o servidor devolve. ConvertFrom-Json no PowerShell 5.1 devolve o array inteiro
 # como um objeto so; no 7 ele enumera. O foreach abaixo trata os dois casos (e um array dentro de outro).
-function Get-PrimeiroItem([string]$Json) {
+function Get-Itens([string]$Json) {
     $dados = ConvertFrom-Json -InputObject $Json
     $itens = @()
     foreach ($x in $dados) {
         if ($x -is [System.Array]) { foreach ($y in $x) { $itens += $y } } else { $itens += $x }
     }
+    return $itens
+}
+
+function Get-PrimeiroItem([string]$Json) {
+    $itens = @(Get-Itens $Json)
     if ($itens.Count -lt 1 -or $null -eq $itens[0]) { return $null }
     return $itens[0]
 }
@@ -198,6 +205,34 @@ function Send-Log([System.IO.FileInfo]$Arquivo) {
         $ErrorActionPreference = $eapAntes
         Set-Location -LiteralPath $locAntes.ProviderPath
         [Environment]::CurrentDirectory = $dirAntes
+        Remove-Item -LiteralPath $cfg -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $resp -Force -ErrorAction SilentlyContinue
+    }
+}
+
+# Pergunta ao servidor o status das lutas enviadas (ate 100 ids). Devolve @{ Saida; Http; Corpo; Erro } como o Send-Log.
+function Get-StatusEnvios([string[]]$Ids) {
+    $id = [guid]::NewGuid().ToString('N')
+    $cfg = Join-Path $env:TEMP "gw2logs-$id.cfg"
+    $resp = Join-Path $env:TEMP "gw2logs-$id.resp"
+    $linhas = @(
+        'url = ' + (ConvertTo-CurlString ($script:Url + '/api/upload/status?ids=' + ($Ids -join ',')))
+        'header = ' + (ConvertTo-CurlString ('X-Upload-Key: ' + $script:Chave))
+    )
+    $eapAntes = $ErrorActionPreference
+    try {
+        [System.IO.File]::WriteAllText($cfg, ($linhas -join "`n") + "`n", $Utf8)
+        $ErrorActionPreference = 'Continue'
+        $saida = & $script:Curl -sS --connect-timeout 30 -m 60 -o $resp -w '%{http_code}' --config $cfg 2>&1
+        $codigo = $LASTEXITCODE
+        $ErrorActionPreference = $eapAntes
+        $http = (@($saida | Where-Object { $_ -isnot [System.Management.Automation.ErrorRecord] }) -join '').Trim()
+        $erro = (@($saida | Where-Object { $_ -is [System.Management.Automation.ErrorRecord] } | ForEach-Object { $_.ToString() }) -join ' ').Trim()
+        $corpo = ''
+        if (Test-Path -LiteralPath $resp) { $corpo = [System.IO.File]::ReadAllText($resp, $Utf8) }
+        return @{ Saida = $codigo; Http = $http; Corpo = $corpo; Erro = $erro }
+    } finally {
+        $ErrorActionPreference = $eapAntes
         Remove-Item -LiteralPath $cfg -Force -ErrorAction SilentlyContinue
         Remove-Item -LiteralPath $resp -Force -ErrorAction SilentlyContinue
     }
@@ -315,7 +350,7 @@ try {
 
     # ------------------------------------------------------------ etapa 2: envio do que esta em integrando
     $arquivoTentativas = Join-Path $pasta 'tentativas.json'
-    $tentativas = Read-Tentativas $arquivoTentativas
+    $tentativas = Read-Mapa $arquivoTentativas
     $mudouTentativas = $false
     $fila = @(Get-Logs $integrando | Sort-Object LastWriteTime, FullName)
 
@@ -323,11 +358,13 @@ try {
     # e a 5a seguida bloqueia o IP, inclusive para o envio pelo navegador. O arquivo guarda so o SHA-256 do token.
     $arquivoTokenRecusado = Join-Path $pasta 'token-recusado.txt'
     $hashChave = Get-Sha256Hex $script:Chave
+    $pausado = $false
     if (Test-Path -LiteralPath $arquivoTokenRecusado -PathType Leaf) {
         $hashRecusado = ([System.IO.File]::ReadAllText($arquivoTokenRecusado, $Utf8)).Trim()
         if ($hashRecusado -eq $hashChave) {
             if ($fila.Count -gt 0) { $motivoParada = 'envio pausado: este token ja foi recusado (401). Gere outro no site e troque GW2LOGS_KEY' }
             $fila = @()
+            $pausado = $true
         } else {
             Remove-Item -LiteralPath $arquivoTokenRecusado -Force
             Write-Log 'Token mudou desde o ultimo 401: voltando a enviar.'
@@ -338,6 +375,63 @@ try {
     foreach ($k in @($tentativas.Keys)) {
         if (-not (Test-Path -LiteralPath (Join-Path $integrando $k) -PathType Leaf)) { $tentativas.Remove($k); $mudouTentativas = $true }
     }
+
+    # etapa 2a: o que ja foi aceito pelo site e esperava ser processado. Pronto -> integrado; falhou -> erro; ainda na fila -> continua.
+    $arquivoPendentes = Join-Path $pasta 'pendentes.json'
+    $pendentes = Read-Mapa $arquivoPendentes
+    $mudouPendentes = $false
+    $integrados = 0
+    foreach ($k in @($pendentes.Keys)) {
+        if (-not (Test-Path -LiteralPath (Join-Path $integrando $k) -PathType Leaf)) { $pendentes.Remove($k); $mudouPendentes = $true }
+    }
+    if ($pendentes.Count -gt 0 -and -not $pausado) {
+        $chaves = @($pendentes.Keys | Sort-Object)
+        for ($i = 0; $i -lt $chaves.Count; $i += 100) {
+            $lote = @($chaves[$i..([Math]::Min($i + 99, $chaves.Count - 1))])
+            $s = Get-StatusEnvios @($lote | ForEach-Object { [string]$pendentes[$_] })
+            $itens = @()
+            if ($s.Saida -eq 0 -and $s.Http -eq '200') { try { $itens = @(Get-Itens $s.Corpo) } catch { $itens = $null } } else { $itens = $null }
+            if ($s.Http -eq '401') {
+                $motivoParada = 'token recusado (401): gere outro no site e troque GW2LOGS_KEY. O envio fica pausado ate o token mudar'
+                try { [System.IO.File]::WriteAllText($arquivoTokenRecusado, $hashChave, $Utf8) } catch { Write-Log "Erro ao gravar token-recusado.txt: $($_.Exception.Message)" }
+                $fila = @()
+                break
+            }
+            if ($s.Http -eq '429') { $motivoParada = 'servidor bloqueou este IP por um tempo (429)'; $fila = @(); break }
+            if ($null -eq $itens) {
+                Write-Log "Aviso: nao consegui conferir o processamento no servidor (curl $($s.Saida), http $($s.Http)). Os arquivos seguem em integrando."
+                break
+            }
+            $porId = @{}
+            foreach ($x in $itens) { $porId[[string](Get-Prop $x 'id')] = $x }
+            foreach ($k in $lote) {
+                $idLuta = [string]$pendentes[$k]
+                if (-not $porId.ContainsKey($idLuta)) {
+                    # o site nao conhece este id (luta apagada, ou o token e de outro usuario): sai dos pendentes e o envio decide de novo
+                    $pendentes.Remove($k); $mudouPendentes = $true
+                    Write-Log "O servidor nao achou a luta de $k (id $idLuta): vai ser enviado de novo."
+                    continue
+                }
+                $statusLuta = [string](Get-Prop $porId[$idLuta] 'status')
+                if ($statusLuta -eq 'done') {
+                    Move-Relative (Get-Item -LiteralPath (Join-Path $integrando $k)) $integrando $integrado | Out-Null
+                    $pendentes.Remove($k); $mudouPendentes = $true
+                    $integrados++
+                    Write-Log "Integrado: $k (id $idLuta)"
+                } elseif ($statusLuta -eq 'error') {
+                    Move-Relative (Get-Item -LiteralPath (Join-Path $integrando $k)) $integrando $pastaErro | Out-Null
+                    $pendentes.Remove($k); $mudouPendentes = $true
+                    $recusados++
+                    Write-Log "Falhou no servidor: $k -> erro (id $idLuta, $(Get-Prop $porId[$idLuta] 'error'))"
+                }
+            }
+        }
+        # o que foi movido acima nao pode ser reenviado: a fila e lida de novo, sem os que seguem aguardando
+        if ($fila.Count -gt 0) {
+            $fila = @(Get-Logs $integrando | Where-Object { -not $pendentes.ContainsKey((Get-Relative $_.FullName $integrando)) } | Sort-Object LastWriteTime, FullName)
+        }
+    }
+    $fila = @($fila | Where-Object { -not $pendentes.ContainsKey((Get-Relative $_.FullName $integrando)) })
 
     foreach ($f in $fila) {
         $motivo = $null
@@ -375,8 +469,17 @@ try {
             $erro = Get-Prop $item 'error'
             $code = [string](Get-Prop $item 'code')
             if ([string]::IsNullOrEmpty([string]$erro)) {
-                Move-Relative $f $integrando $integrado | Out-Null
                 if ($tentativas.ContainsKey($rel)) { $tentativas.Remove($rel); $mudouTentativas = $true }
+                $idLuta = [string](Get-Prop $item 'id')
+                $statusLuta = [string](Get-Prop $item 'status')
+                if ($idLuta -ne '' -and $statusLuta -ne 'done') {
+                    # aceito, mas ainda nao processado: fica em integrando ate uma proxima execucao conferir
+                    $pendentes[$rel] = $idLuta; $mudouPendentes = $true
+                    $enviados++
+                    Write-Log "Enviado: $rel (id $idLuta, $statusLuta). Aguardando o servidor processar."
+                    continue
+                }
+                Move-Relative $f $integrando $integrado | Out-Null
                 if ((Get-Prop $item 'duplicate') -eq $true) {
                     $jaEnviados++
                     Write-Log "Ja enviado: $rel (id $(Get-Prop $item 'id'))"
@@ -414,12 +517,16 @@ try {
     }
 
     if ($mudouTentativas) {
-        try { Save-Tentativas $arquivoTentativas $tentativas } catch { $falhas++; Write-Log "Erro ao gravar tentativas.json: $($_.Exception.Message)" }
+        try { Save-Mapa $arquivoTentativas $tentativas } catch { $falhas++; Write-Log "Erro ao gravar tentativas.json: $($_.Exception.Message)" }
+    }
+
+    if ($mudouPendentes) {
+        try { Save-Mapa $arquivoPendentes $pendentes } catch { $falhas++; Write-Log "Erro ao gravar pendentes.json: $($_.Exception.Message)" }
     }
 
     $restantes = @(Get-Logs $integrando).Count
     if ($motivoParada) { Write-Log "Parado: $($motivoParada.TrimEnd('.')). Fica para a proxima execucao." }
-    Write-Log ("Resumo: {0} movido(s) da origem, {1} enviado(s), {2} ja enviado(s), {3} recusado(s), {4} falha(s), {5} aguardando em integrando." -f $movidos, $enviados, $jaEnviados, $recusados, $falhas, $restantes)
+    Write-Log ("Resumo: {0} movido(s) da origem, {1} enviado(s), {2} ja enviado(s), {3} integrado(s), {4} recusado(s) ou falhou(aram), {5} falha(s), {6} aguardando em integrando ({7} esperando o servidor processar)." -f $movidos, $enviados, $jaEnviados, $integrados, $recusados, $falhas, $restantes, $pendentes.Count)
     if ($motivoParada -or $falhas -gt 0) { exit 1 }
     exit 0
 } catch {

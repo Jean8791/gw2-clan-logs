@@ -50,6 +50,18 @@ describe("script de envio para baixar", () => {
     expect(monitor).toContain("if (-not (Test-Livre $f.FullName)) { continue }");
   });
 
+  it("o monitor só move para integrado o que o servidor confirma como pronto, e leva para erro o que falhou ao processar", () => {
+    const monitor = fs.readFileSync(path.join(repoRoot, "scripts", "monitorar-logs.ps1"), "utf8");
+
+    expect(monitor).toContain("/api/upload/status?ids=");
+    expect(monitor).toContain("$pendentes[$rel] = $idLuta");
+    expect(monitor).toContain("if ($statusLuta -eq 'done')");
+    expect(monitor).toContain("elseif ($statusLuta -eq 'error')");
+    expect(monitor).toContain("Move-Relative $f $integrando $integrado");
+    expect(monitor.match(/\$integrado \| Out-Null/g)).toHaveLength(2); // só a confirmação (done) e o duplicado já pronto movem para integrado
+    expect(monitor).toContain("$s.Http -eq '401'"); // token revogado com só pendentes: pausa, em vez de martelar o servidor
+  });
+
   it("a configuração do Windows usa `set` e a do Linux usa CHAVE=valor, como cada script lê", () => {
     expect(modalSource()).toContain('os === "windows" ? "set " : ""');
     expect(fs.readFileSync(path.join(repoRoot, "scripts", "enviar-logs.bat"), "utf8")).toContain("set GW2LOGS_KEY=");

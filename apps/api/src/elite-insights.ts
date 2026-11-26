@@ -33,6 +33,24 @@ export const eiConfLines = (outDir: string, o: { html: boolean }): string[] => [
 /** Ambiente do processo: o .NET devolve memória ao sistema com mais vontade (menos pico, sem ficar mais lento). */
 export const eiEnv = (base: NodeJS.ProcessEnv): NodeJS.ProcessEnv => ({ DOTNET_GCConserveMemory: "9", ...base });
 
+/**
+ * Por que o EI não gerou o JSON. Ele imprime "Processed - {json}" com o motivo da falha; sem essa linha e com saída 2, foi o vigia de
+ * memória dele (passou de 90% da memória do contêiner, tentou coletar lixo e saiu em silêncio). Se o vigia estiver desligado, o .NET
+ * lança OutOfMemoryException e o motivo vem na linha. Nos dois casos é falta de memória, não log curto nem corrompido.
+ */
+export function eiFailure(stdout: string, code: number | null): Error {
+  const line = stdout.split("\n").find((l) => l.startsWith("Processed - "));
+  try {
+    const r = line ? JSON.parse(line.slice("Processed - ".length)) : null;
+    if (r && r.parsed === false && typeof r.status === "string") {
+      return r.status.includes("OutOfMemoryException") ? fightError("eiMemory") : fightError("eiUnreadableWhy", r.status);
+    }
+  } catch {
+    /* sem motivo legível */
+  }
+  return code === 2 && !line ? fightError("eiMemory") : fightError("eiUnreadable");
+}
+
 export async function runEliteInsights(opts: { eiDir: string; dotnet: string; logFile: string; outDir: string; html?: boolean; timeoutMs?: number }): Promise<EiOutput> {
   const { eiDir, dotnet, logFile, outDir } = opts;
   if (!eiAvailable(eiDir)) {
@@ -42,7 +60,7 @@ export async function runEliteInsights(opts: { eiDir: string; dotnet: string; lo
   const conf = path.join(outDir, "ei.conf");
   await fs.writeFile(conf, eiConfLines(outDir, { html: opts.html ?? false }).join("\n"));
 
-  const stdout = await new Promise<string>((resolve, reject) => {
+  const { stdout, code } = await new Promise<{ stdout: string; code: number | null }>((resolve, reject) => {
     const p = spawn(dotnet, [path.join(eiDir, EI_DLL), "-c", conf, logFile], { cwd: eiDir, env: eiEnv(process.env) });
     let out = "";
     let err = "";
@@ -56,9 +74,9 @@ export async function runEliteInsights(opts: { eiDir: string; dotnet: string; lo
       clearTimeout(timer);
       reject(fightError("eiStart", `${dotnet}: ${e.message}`));
     });
-    p.on("close", () => {
+    p.on("close", (exitCode) => {
       clearTimeout(timer);
-      resolve(out + err);
+      resolve({ stdout: out + err, code: exitCode });
     });
   });
 
@@ -66,16 +84,7 @@ export async function runEliteInsights(opts: { eiDir: string; dotnet: string; lo
   const json = files.find((f) => f.endsWith(".json"));
   const html = files.find((f) => f.endsWith(".html"));
   if (!json) {
-    // O EI imprime "Processed - {json}" com o motivo da falha.
-    const line = stdout.split("\n").find((l) => l.startsWith("Processed - "));
-    let reason: string | null = null;
-    try {
-      const r = line ? JSON.parse(line.slice("Processed - ".length)) : null;
-      if (r && r.parsed === false && typeof r.status === "string") reason = r.status;
-    } catch {
-      /* sem motivo legível */
-    }
-    throw reason ? fightError("eiUnreadableWhy", reason) : fightError("eiUnreadable");
+    throw eiFailure(stdout, code);
   }
   return { json: path.join(outDir, json), html: html ? path.join(outDir, html) : null };
 }
