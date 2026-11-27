@@ -166,6 +166,7 @@ Variáveis de ambiente do servidor. No Docker Compose, as principais vêm do arq
 | Variável | Para quê | Padrão |
 |---|---|---|
 | `EI_HTML` | `true` gera o relatório HTML do Elite Insights (botão "Relatório completo"). Custa 40 a 50 MB de disco e ~300 MB de memória a mais por luta grande, então fica desligado. **O relatório mostra quem gravou o log** e, com a leitura aberta, fica visível a todos: não ligue sem antes tirar o nome do gravador do HTML | `false` |
+| `EI_POSITIONS` | `true` lê as **posições** dos jogadores no replay e liga a coluna *% Perto da tag* (tempo vivo a até 1200 unidades do comandante). **Dobra a memória e o tempo do Elite Insights** (medido: logs de 24 e 41 MB passam de 0,8 e 1,3 GB para 1,7 e 3,2 GB de pico, e o JSON de 30 e 39 MB para 112 e 201 MB): só ligue numa VM grande, subindo o `APP_MEM_LIMIT` junto. Desligado, a coluna *Distância da tag* continua aparecendo (vem do replay, sem as posições) e a porcentagem fica em traço. Só vale para logs enviados depois de ligar | `false` |
 | `TRUST_PROXY` | `true` atrás do Caddy: conta o IP real do cliente nos bloqueios e no limite de pedidos. O Compose já liga | `false` |
 | `UPLOAD_MAX_FAILS` / `UPLOAD_BLOCK_MIN` | Erros de token ou de senha de administrador seguidos do mesmo IP até bloquear, e por quantos minutos | `5` / `15` |
 | `UPLOAD_MAX_QUEUE` | Logs esperando ou em processamento; acima disso o envio é recusado | `30` |
@@ -177,7 +178,7 @@ Variáveis de ambiente do servidor. No Docker Compose, as principais vêm do arq
 | `APP_MEM_LIMIT` (Compose) | Teto de memória do container; em VM de 1 GB use `800m` | `2000m` |
 | `DOTNET_GCHeapHardLimitPercent` (Compose) | Teto do heap do .NET (o Elite Insights) em % do `APP_MEM_LIMIT`, **em hexadecimal**: `5A` = 90, `4B` = 75, `3C` = 60. Vazio, o .NET usa 75% do limite do contêiner. Se o limite do contêiner subir, suba este valor junto (veja [Migrar para uma VM maior](#migrar-para-uma-vm-maior-ampere-a1-arm64)) | vazio |
 
-O Elite Insights roda com uma configuração enxuta (sem replay de combate, linhas do tempo por segundo e modificadores de dano), que leva o pico de memória de um log grande de ~1,4 GB para ~0,5 GB. O `DetailledWvW` precisa continuar ligado: sem ele o EI não traz dano, kills e inimigos em WvW.
+O Elite Insights roda com uma configuração enxuta (sem linhas do tempo por segundo e sem modificadores de dano), que leva o pico de memória de um log grande de ~1,4 GB para ~0,5 GB. O replay fica ligado porque sem ele a distância até a tag vem zerada (custa de 0 a 7% de memória). O `DetailledWvW` precisa continuar ligado: sem ele o EI não traz dano, kills e inimigos em WvW.
 
 </details>
 

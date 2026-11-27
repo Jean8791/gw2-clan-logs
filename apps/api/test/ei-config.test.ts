@@ -2,13 +2,19 @@ import { describe, expect, it } from "vitest";
 import { loadConfig } from "../src/config.js";
 import { eiConfLines, eiEnv, eiFailure } from "../src/elite-insights.js";
 
-const conf = (html = false) => Object.fromEntries(eiConfLines("/saida", { html }).map((l) => l.split("=") as [string, string]));
+const conf = (html = false, positions = false) => Object.fromEntries(eiConfLines("/saida", { html, positions }).map((l) => l.split("=") as [string, string]));
 
 describe("eiConfLines: configuração enxuta do Elite Insights", () => {
   it("desliga o que o site não usa e pesa na memória", () => {
     const c = conf();
 
-    expect(c).toMatchObject({ ParseCombatReplay: "false", RawTimelineArrays: "false", ComputeDamageModifiers: "false", SingleThreaded: "true" });
+    expect(c).toMatchObject({ RawTimelineArrays: "false", ComputeDamageModifiers: "false", SingleThreaded: "true" });
+  });
+
+  it("liga o replay (a distância até a tag precisa dele; custa de 0 a 7% de memória), mas só liga as posições quando pedido", () => {
+    expect(conf().ParseCombatReplay).toBe("true");
+    expect(conf(false, false).RawTimelineArrays).toBe("false");
+    expect(conf(false, true)).toMatchObject({ ParseCombatReplay: "true", RawTimelineArrays: "true" });
   });
 
   it("mantém o que a extração precisa (sem DetailledWvW some dano, kills e inimigos)", () => {
@@ -74,3 +80,12 @@ describe("eiFailure: por que o Elite Insights não gerou o JSON", () => {
     expect(eiFailure("Reading MapList\n", null).message).toBe("eiUnreadable");
   });
 });
+
+describe("EI_POSITIONS", () => {
+  it("só liga com a palavra true; por padrão fica desligado (as posições dobram a memória do Elite Insights)", () => {
+    expect(loadConfig({}).eiPositions).toBe(false);
+    expect(loadConfig({ EI_POSITIONS: "true" }).eiPositions).toBe(true);
+    expect(loadConfig({ EI_POSITIONS: "1" }).eiPositions).toBe(false);
+  });
+});
+

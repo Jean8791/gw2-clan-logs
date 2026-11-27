@@ -22,6 +22,9 @@ export interface ExtractedPlayer extends Stats {
   role: Role;
   activeMs: number;
   distToCom: number | null;
+  /** tempo (ms) coberto pelo dado da tag: 0 quando o log não tem replay */
+  distCoverMs: number;
+  nearCoverMs: number;
   skills: ExtractedSkill[];
 }
 
@@ -113,6 +116,65 @@ export function isWvW(r: J): boolean {
   return num(r, "triggerID") === 1 || r.detailedWvW === true || (r.wvWMapData && typeof r.wvWMapData === "object") || /World vs World|WvW/i.test(name);
 }
 
+// ---------- Posição em relação à tag (replay do Elite Insights) ----------
+
+/** Até onde um jogador conta como "perto da tag", em unidades do jogo (polegadas): o alcance de stack. */
+export const NEAR_TAG_RADIUS = 1200;
+
+interface Replay {
+  start: number;
+  /** [x, y] em pixels do mapa, uma a cada `pollingRate` ms a partir de `start`; vazio se o log não trouxe as posições */
+  positions: number[][];
+  /** intervalos [início, fim) em ms; o Elite Insights usa o maior e o menor inteiro de 64 bits como "para sempre" e "desde sempre" */
+  dead: [number, number][];
+  dc: [number, number][];
+}
+
+const intervals = (v: unknown): [number, number][] =>
+  Array.isArray(v) ? v.filter((i): i is [number, number] => Array.isArray(i) && i.length === 2 && typeof i[0] === "number" && typeof i[1] === "number") : [];
+const inside = (t: number, list: [number, number][]): boolean => list.some(([a, b]) => t >= a && t < b);
+/** Uma posição [x, y] com os dois números válidos. Number.isFinite não converte: null e undefined, que viram 0 e NaN na conta, não passam. */
+const isPoint = (v: unknown): v is [number, number] => Array.isArray(v) && Number.isFinite(v[0]) && Number.isFinite(v[1]);
+
+/** O replay de um jogador, ou null se o log foi lido sem replay (sem replay o EI nem grava o campo, e a distToCom vem 0). */
+function replayOf(p: J | undefined): Replay | null {
+  const c = p?.combatReplayData;
+  if (!c || typeof c.start !== "number" || typeof c.end !== "number") return null;
+  return { start: c.start, positions: Array.isArray(c.positions) ? c.positions : [], dead: intervals(c.dead), dc: intervals(c.dc) };
+}
+
+/**
+ * O que o log diz da posição do jogador em relação à tag (o comandante), com a cobertura em ms: só o tempo coberto entra no denominador.
+ * Com as posições (RawTimelineArrays), conta amostra a amostra o tempo vivo (fora de morto e desconectado) e quanto dele ficou a até
+ * NEAR_TAG_RADIUS do comandante; a amostra sem o comandante em campo continua no tempo vivo, mas não conta como perto. Só com o replay
+ * (sem as posições), usa a distância média que o próprio Elite Insights calculou. Sem replay ou sem comandante marcado, não há dado.
+ */
+function tagStats(own: Replay | null, cmd: Replay | null, meta: { rate: number; inch: number } | null, avgDist: unknown, activeMs: number) {
+  const none = { tagNear: 0, tagDist: 0, nearCoverMs: 0, distCoverMs: 0 };
+  if (!own || !cmd) return none;
+  if (meta && own.positions.length && cmd.positions.length) {
+    let alive = 0;
+    let near = 0;
+    let measured = 0;
+    let distSum = 0;
+    own.positions.forEach((pos, i) => {
+      const t = own.start + i * meta.rate;
+      if (inside(t, own.dead) || inside(t, own.dc)) return;
+      alive++;
+      const q = cmd.positions[Math.floor((t - cmd.start) / meta.rate)];
+      // posição sem coordenada válida: continua no tempo vivo, mas não dá para medir (um NaN derrubaria a gravação da luta inteira)
+      if (!isPoint(pos) || !isPoint(q) || inside(t, cmd.dead) || inside(t, cmd.dc)) return;
+      const d = Math.round((Math.hypot(pos[0] - q[0], pos[1] - q[1]) / meta.inch) * 1000) / 1000;
+      measured++;
+      distSum += d;
+      if (d <= NEAR_TAG_RADIUS) near++;
+    });
+    return { tagNear: near * meta.rate, nearCoverMs: alive * meta.rate, tagDist: distSum * meta.rate, distCoverMs: measured * meta.rate };
+  }
+  if (typeof avgDist === "number" && activeMs > 0) return { ...none, tagDist: avgDist * activeMs, distCoverMs: activeMs };
+  return none;
+}
+
 export function extractFight(r: J): ExtractedFight {
   const wvw = isWvW(r);
   const targets = arr(r, "targets");
@@ -126,6 +188,12 @@ export function extractFight(r: J): ExtractedFight {
   const rawPlayers = arr(r, "players");
   const all = rawPlayers.filter((p) => !p.isFake && !p.friendlyNPC);
   const squad = all.filter((p) => !p.notInSquad);
+
+  // a tag: o replay do comandante é a referência de posição de todos
+  const cmd = replayOf(squad.find((p) => p.hasCommanderTag === true));
+  const rate = num(r.combatReplayMetaData, "pollingRate");
+  const inch = num(r.combatReplayMetaData, "inchToPixel");
+  const replayMeta = rate > 0 && inch > 0 ? { rate, inch } : null;
 
   const instances: ExtractedPlayer[] = squad.map((p) => {
     const dpsAll = phase0(p, "dpsAll");
@@ -212,6 +280,10 @@ export function extractFight(r: J): ExtractedFight {
       }
     }
 
+    const tag = tagStats(replayOf(p), cmd, replayMeta, statsAll.distToCom, activeMs);
+    s.tagNear = tag.tagNear;
+    s.tagDist = tag.tagDist;
+
     return {
       ...s,
       account: str(p, "account") ?? str(p, "name") ?? "?",
@@ -223,6 +295,8 @@ export function extractFight(r: J): ExtractedFight {
       role: "dps",
       activeMs,
       distToCom: typeof statsAll.distToCom === "number" ? statsAll.distToCom : null,
+      distCoverMs: tag.distCoverMs,
+      nearCoverMs: tag.nearCoverMs,
       skills: skillDamage(p, targetIdx, skillMap, buffMap),
     };
   });
@@ -266,6 +340,8 @@ function mergeSameAccount(players: ExtractedPlayer[]): ExtractedPlayer[] {
     const merged: ExtractedPlayer = { ...main, activeMs: 0, commander: group.some((p) => p.commander), skills: [] };
     for (const k of STAT_KEYS) merged[k] = group.reduce((a, p) => a + p[k], 0);
     merged.activeMs = group.reduce((a, p) => a + p.activeMs, 0);
+    merged.distCoverMs = group.reduce((a, p) => a + p.distCoverMs, 0);
+    merged.nearCoverMs = group.reduce((a, p) => a + p.nearCoverMs, 0);
     const skills = new Map<number, ExtractedSkill>();
     for (const sk of group.flatMap((p) => p.skills)) {
       const cur = skills.get(sk.id) ?? { ...sk, damage: 0, hits: 0, connectedHits: 0 };

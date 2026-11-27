@@ -160,6 +160,8 @@ describe("ranking: boon vira média ponderada pelo tempo ativo; o resto continua
     role: "support",
     activeMs: activeSeg * 1000,
     distToCom: null,
+    distCoverMs: 0,
+    nearCoverMs: 0,
     skills: [],
     ...o,
   });

@@ -2,7 +2,7 @@ import { X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { PolarAngleAxis, PolarGrid, Radar, RadarChart, ResponsiveContainer, Tooltip, Legend } from "recharts";
-import { ROUTES, STAT_META, statRate, statsOfGroup, statText, type BoonScope, type StatGroup, type StatKey, mainRole } from "@gw2logs/shared";
+import { bestValue, hasStatData, ROUTES, STAT_META, statRate, statsOfGroup, statText, type BoonScope, type StatGroup, type StatKey, mainRole } from "@gw2logs/shared";
 import { FilterBar } from "../components/FilterBar";
 import { GroupTabs } from "../components/statColumns";
 import { PlayerPicker } from "../components/PlayerPicker";
@@ -148,18 +148,19 @@ export function ComparePage() {
                     {keys.map((k) => {
                       const meta = STAT_META[k];
                       const vals = players.map((p) => statRate(p.totals, k, adjust));
-                      const best = meta.higherIsBetter ? Math.max(...vals) : Math.min(...vals);
+                      // quem não tem o dado (log sem replay) não disputa o destaque: o 0 dele seria o "menor" da distância
+                      const best = bestValue(k, players.map((p) => p.totals), (totals) => statRate(totals, k, adjust));
                       return (
                         <tr key={k} className="border-t border-line/60">
                           <td className="px-4 py-2 text-muted" title={statText(k, getLang()).hint}>
                             {statText(k, getLang()).label}
                           </td>
                           {vals.map((v, i) => (
-                            <td key={i} className={cx("px-4 py-2 text-right", v === best && players.length > 1 && v !== 0 ? "font-semibold text-gold" : v === 0 ? "text-faint" : "")}>
-                              {stat(k, v, true)}
+                            <td key={i} className={cx("px-4 py-2 text-right", !hasStatData(k, players[i]!.totals) || v === 0 ? "text-faint" : v === best && players.length > 1 ? "font-semibold text-gold" : "")}>
+                              {hasStatData(k, players[i]!.totals) ? stat(k, v, true) : "—"}
                             </td>
                           ))}
-                          <td className="px-4 py-2 text-right text-muted">{baseline ? stat(k, statRate(baseline, k), true) : "—"}</td>
+                          <td className="px-4 py-2 text-right text-muted">{baseline && hasStatData(k, baseline) ? stat(k, statRate(baseline, k), true) : "—"}</td>
                         </tr>
                       );
                     })}
