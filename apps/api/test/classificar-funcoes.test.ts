@@ -15,6 +15,8 @@ const jogador = (id: string, over: Partial<Stats> & Partial<ExtractedPlayer> = {
   role: "dps",
   activeMs: 120_000,
   distToCom: null,
+  distCoverMs: 0,
+  nearCoverMs: 0,
   skills: [],
   damage: 1000,
   ...over,

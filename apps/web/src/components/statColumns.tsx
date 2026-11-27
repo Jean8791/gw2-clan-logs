@@ -1,4 +1,4 @@
-import { BOON_SCOPES, isUptimeStat, STAT_GROUPS, STAT_META, statsOfGroup, statText, statValue, type BoonScope, type StatGroup, type StatKey, type Stats, type TimeAdjust, type ValueMode } from "@gw2logs/shared";
+import { BOON_SCOPES, bestValue, hasStatData, isUptimeStat, STAT_GROUPS, STAT_META, statsOfGroup, statText, statValue, type BoonScope, type StatGroup, type StatKey, type Stats, type TagCover, type TimeAdjust, type ValueMode } from "@gw2logs/shared";
 import { BuffIcon } from "./MediaIcon";
 import type { Column } from "./DataTable";
 import { Segmented, cx } from "./ui";
@@ -18,12 +18,13 @@ export function statColumns<T extends Stats & { activeMs: number }>(group: StatG
     // uptime é % do tempo ativo (ou média de pilhas) nos dois modos: o "por minuto" não se aplica
     const isRate = mode !== "total" && meta.format !== "volume" && !isUptimeStat(k);
     const perSec = mode === "perSec";
+    // as métricas da tag faltam nos logs lidos sem replay: a linha sem dado mostra traço, vai para o fim (null) e não disputa o destaque
+    const covered = (r: T) => hasStatData(k, r as unknown as Partial<TagCover>);
     const value = (r: T) => statValue(k, mode, r, adjust);
     const name = text.hint ? `${text.label} — ${text.hint}` : text.label;
     // boons e uptime, quando o Ranking ajusta pelo tempo jogado
     const isAdjusted = !!adjust && (meta.format === "volume" || isUptimeStat(k));
-    const values = rows.map(value);
-    const best = values.length ? (meta.higherIsBetter ? Math.max(...values) : Math.min(...values)) : 0;
+    const best = bestValue(k, rows as unknown as (T & Partial<TagCover>)[], value);
     const label = meta.buffId ? (
       <span className="inline-flex items-center gap-1">
         <BuffIcon id={meta.buffId} />
@@ -45,8 +46,9 @@ export function statColumns<T extends Stats & { activeMs: number }>(group: StatG
       ),
       title: [name, isRate && t(perSec ? "rate.titleSec" : "rate.titleMin"), isAdjusted && t("rate.titleAdjusted")].filter(Boolean).join(" · "),
       align: "right",
-      sort: value,
+      sort: (r: T) => (covered(r) ? value(r) : null),
       cell: (r: T) => {
+        if (!covered(r)) return <span className="text-faint">—</span>;
         const v = value(r);
         return <span className={cx(v === best && v !== 0 && rows.length > 1 ? "font-semibold text-gold" : v === 0 ? "text-faint" : "text-text")}>{stat(k, v, mode !== "total", perSec)}</span>;
       },

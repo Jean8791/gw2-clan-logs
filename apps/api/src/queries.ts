@@ -2,8 +2,10 @@
 import {
   BATTLE_DAY_SHIFT_HOURS,
   FIGHT_SORT_KEYS,
+  isTagStat,
   STAT_KEYS,
   STAT_META,
+  TAG_COVER,
   type DaySummary,
   type Aggregate,
   type Fight,
@@ -19,7 +21,7 @@ import {
   type ProfessionCount,
   type RankingRow,
 } from "@gw2logs/shared";
-import { STAT_COL, type DB } from "./db.js";
+import { snake, STAT_COL, type DB } from "./db.js";
 
 type Params = Record<string, string | number>;
 
@@ -130,9 +132,17 @@ const FIGHT_COLS = `f.id, f.status, f.error, f.uploaded_at AS uploadedAt, f.file
 
 const toFight = (r: any): Fight => ({ ...r, success: !!r.success, hasReport: !!r.hasReport });
 
-const STAT_SELECT = STAT_KEYS.map((k) => `ps.${STAT_COL[k]} AS "${k}"`).join(", ");
+/**
+ * A tela divide as métricas de uptime pelo tempo ativo. As da tag só existem nos logs lidos com replay, e o tempo que o dado cobre
+ * (`*_cover_ms`) pode ser menor que o ativo (morto e desconectado ficam de fora): a API devolve o valor já reescalado para o tempo
+ * ativo (valor × ativo ÷ coberto), e a mesma conta da tela dá o certo (valor ÷ coberto). Sem cobertura, 0.
+ */
+const coverCol = (k: keyof typeof TAG_COVER) => snake(TAG_COVER[k]);
+const statSelect = (k: (typeof STAT_KEYS)[number]) =>
+  isTagStat(k) ? `CASE WHEN ps.${coverCol(k)} > 0 THEN ps.${STAT_COL[k]} * ps.active_ms / ps.${coverCol(k)} ELSE 0 END AS "${k}"` : `ps.${STAT_COL[k]} AS "${k}"`;
+const STAT_SELECT = STAT_KEYS.map(statSelect).join(", ");
 const PLAYER_COLS = `ps.fight_id AS fightId, ps.account, ps.name, ps.profession, ps.guild_id AS guildId, ps.grp AS "group",
-  ps.commander, ps.role, ps.active_ms AS activeMs, ps.dist_to_com AS distToCom, ${STAT_SELECT}`;
+  ps.commander, ps.role, ps.active_ms AS activeMs, ps.dist_to_com AS distToCom, ps.dist_cover_ms AS distCoverMs, ps.near_cover_ms AS nearCoverMs, ${STAT_SELECT}`;
 const toPlayer = <T extends PlayerFight>(r: any): T => ({ ...r, commander: !!r.commander });
 
 /**
@@ -141,12 +151,15 @@ const toPlayer = <T extends PlayerFight>(r: any): T => ({ ...r, commander: !!r.c
  * com o boon sobre tempo ativo. Sem tempo ativo, 0.
  */
 const aggColumn = (k: (typeof STAT_KEYS)[number]) =>
-  STAT_META[k].format === "volume"
-    ? `COALESCE(SUM(ps.${STAT_COL[k]} * ps.active_ms) * 1.0 / NULLIF(SUM(ps.active_ms), 0), 0) AS "${k}"`
-    : `SUM(ps.${STAT_COL[k]}) AS "${k}"`;
-const AGG_SELECT = `COUNT(*) AS fights, SUM(ps.active_ms) AS activeMs, ${STAT_KEYS.map(aggColumn).join(", ")}`;
+  isTagStat(k)
+    ? // soma sobre soma, só das lutas com o dado: Σ valor ÷ Σ coberto, reescalado para o tempo ativo (ver statSelect)
+      `COALESCE(SUM(ps.${STAT_COL[k]}) * 1.0 * SUM(ps.active_ms) / NULLIF(SUM(ps.${coverCol(k)}), 0), 0) AS "${k}"`
+    : STAT_META[k].format === "volume"
+      ? `COALESCE(SUM(ps.${STAT_COL[k]} * ps.active_ms) * 1.0 / NULLIF(SUM(ps.active_ms), 0), 0) AS "${k}"`
+      : `SUM(ps.${STAT_COL[k]}) AS "${k}"`;
+const AGG_SELECT = `COUNT(*) AS fights, SUM(ps.active_ms) AS activeMs, SUM(ps.dist_cover_ms) AS distCoverMs, SUM(ps.near_cover_ms) AS nearCoverMs, ${STAT_KEYS.map(aggColumn).join(", ")}`;
 const toAggregate = (r: any): Aggregate => {
-  const a: any = { fights: r?.fights ?? 0, activeMs: r?.activeMs ?? 0 };
+  const a: any = { fights: r?.fights ?? 0, activeMs: r?.activeMs ?? 0, distCoverMs: r?.distCoverMs ?? 0, nearCoverMs: r?.nearCoverMs ?? 0 };
   for (const k of STAT_KEYS) a[k] = r?.[k] ?? 0;
   return a;
 };

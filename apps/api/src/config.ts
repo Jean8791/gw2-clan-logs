@@ -43,6 +43,8 @@ export interface Config {
   rateLimit: { perMin: number; authPerMin: number };
   /** Gerar o relatório HTML do Elite Insights (40 a 50 MB de disco e ~300 MB de memória a mais por luta grande). */
   eiHtml: boolean;
+  /** Ler as posições dos jogadores no replay (porcentagem do tempo perto da tag): dobra a memória e o tempo do Elite Insights. */
+  eiPositions: boolean;
   /** Tempo máximo, em milissegundos, que o Elite Insights tem para ler um log; passado disso é cortado. */
   eiTimeoutMs: number;
   limits: UploadLimits;
@@ -100,6 +102,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     apiTokenDays: positive(env.API_TOKEN_DAYS, DEFAULT_API_TOKEN_DAYS),
     rateLimit: { perMin: nonNegative(env.RATE_LIMIT_PER_MIN, 600), authPerMin: nonNegative(env.RATE_LIMIT_AUTH_PER_MIN, 30) },
     eiHtml: env.EI_HTML === "true",
+    eiPositions: env.EI_POSITIONS === "true",
     eiTimeoutMs: positive(env.EI_TIMEOUT_MIN, 5) * 60_000,
     limits: {
       maxFailedKeys: positive(env.UPLOAD_MAX_FAILS, 5),
