@@ -1,7 +1,8 @@
 import { BarChart3, CalendarDays, ChevronUp, GitCompareArrows, Home, Link2, LogIn, LogOut, Shield, Swords, Trash2, Upload, UserRound } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { ROUTES } from "@gw2logs/shared";
-import { NavLink, Outlet } from "react-router-dom";
+import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { deleteAccount, logout, useConfig, useMeta, useViewer } from "../lib/api";
 import { useMe } from "../lib/hooks";
 import { setLang, useLang, useT } from "../lib/i18n";
@@ -140,30 +141,74 @@ function CopyLink() {
   );
 }
 
-/** Entrar com o Discord, no fim da página, para qualquer visitante: só entra quem tem autorização. */
-function SignInFooter() {
+/**
+ * "Meu perfil" para quem não está logado: em vez de abrir a tela, oferece duas opções. Meu perfil leva à escolha do jogador (que fica
+ * guardada no navegador); Entrar leva ao login do Discord e, depois dele, volta para esta mesma tela. Só entra quem tem autorização.
+ * O painel sai num portal: o cabeçalho e a barra lateral têm filtro de fundo e rolagem, que prenderiam um painel posicionado dentro deles.
+ */
+function ProfileMenu({ className }: { className: string }) {
   const t = useT();
   const { data: cfg } = useConfig();
-  const viewer = useViewer();
-  if (viewer.isLoading || viewer.data || cfg?.loginAvailable === false) return null;
+  const { pathname, search } = useLocation();
+  const [pos, setPos] = useState<{ left: number; top?: number; bottom?: number } | null>(null);
+  const button = useRef<HTMLButtonElement>(null);
+  const panel = useRef<HTMLDivElement>(null);
+  const close = () => setPos(null);
+  const toggle = () => {
+    if (pos) return close();
+    const r = button.current!.getBoundingClientRect();
+    const left = Math.max(8, Math.min(r.left, window.innerWidth - 232));
+    // embaixo da tela (a barra lateral) o painel abre para cima; no topo (celular), para baixo
+    setPos(r.top > window.innerHeight / 2 ? { left, bottom: window.innerHeight - r.top + 4 } : { left, top: r.bottom + 4 });
+  };
+
+  useEffect(() => {
+    if (!pos) return;
+    const outside = (e: MouseEvent) => !panel.current?.contains(e.target as Node) && !button.current?.contains(e.target as Node) && close();
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && close();
+    document.addEventListener("mousedown", outside);
+    document.addEventListener("keydown", esc);
+    window.addEventListener("resize", close);
+    return () => {
+      document.removeEventListener("mousedown", outside);
+      document.removeEventListener("keydown", esc);
+      window.removeEventListener("resize", close);
+    };
+  }, [pos]);
+  // trocar de tela fecha o painel
+  useEffect(close, [pathname]);
+
+  const item = "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted transition hover:bg-surface-2 hover:text-text";
+  const signIn = `/api/auth/login?next=${encodeURIComponent(pathname + search)}`;
   return (
-    <footer className="mt-8 flex justify-center">
-      <a href="/api/auth/login">
-        <Button size="sm" variant="ghost">
-          <LogIn className="size-3.5" /> {t("space.signIn")}
-        </Button>
-      </a>
-    </footer>
+    <>
+      <button ref={button} type="button" className={className} onClick={toggle} aria-haspopup="menu" aria-expanded={pos !== null}>
+        <ME.icon className="size-4" /> <NavLabel label={ME.label} />
+      </button>
+      {pos &&
+        createPortal(
+          <div ref={panel} role="menu" style={pos} className="fixed z-50 w-56 rounded-lg border border-line bg-surface-2 p-1 shadow-lg">
+            <NavLink to={ME.to} role="menuitem" className={item} onClick={close}>
+              <ME.icon className="size-4" /> {t("nav.myProfile")}
+            </NavLink>
+            {cfg?.loginAvailable !== false && (
+              <a href={signIn} role="menuitem" className={item}>
+                <LogIn className="size-4" /> {t("space.signIn")}
+              </a>
+            )}
+          </div>,
+          document.body,
+        )}
+    </>
   );
 }
 
 export function Layout() {
   const viewer = useViewer();
-  // quem está logado vê o Meu Perfil na lista, o Importar logs e o menu da conta. Quem não está vê só o Meu Perfil, embaixo
-  // (no celular não há "embaixo": lá ele entra na lista). O Meu Perfil é do navegador de quem usa, não depende de login.
+  // quem está logado vê o Meu Perfil na lista, o Importar logs e o menu da conta. Quem não está vê o menu Meu perfil / Entrar, embaixo
+  // (no celular, no fim da lista). O Meu Perfil é do navegador de quem usa, não depende de login.
   const logged = !!viewer.data;
   const nav = logged ? [...NAV, ME, IMPORT] : NAV;
-  const mobileNav = logged ? nav : [...NAV, ME];
   const lang = useLang();
   const link = (active: boolean) =>
     cx(
@@ -190,11 +235,7 @@ export function Layout() {
             <AccountMenu name={viewer.data.name} />
           ) : (
             // enquanto o login ainda carrega, nada aparece embaixo (evita piscar o Meu Perfil para quem está logado)
-            !viewer.isLoading && (
-              <NavLink to={ME.to} className={({ isActive }) => link(isActive)}>
-                <ME.icon className="size-4" /> <NavLabel label={ME.label} />
-              </NavLink>
-            )
+            !viewer.isLoading && <ProfileMenu className={cx(link(false), "w-full")} />
           )}
         </div>
       </aside>
@@ -209,11 +250,12 @@ export function Layout() {
           </div>
         </div>
         <nav className="flex gap-1 overflow-x-auto px-3 pb-2">
-          {mobileNav.map(({ to, label, icon: Icon, end }) => (
+          {nav.map(({ to, label, icon: Icon, end }) => (
             <NavLink key={to} to={to} end={end} className={({ isActive }) => cx(link(isActive), "shrink-0 px-2.5 py-1.5 text-xs")}>
               <Icon className="size-3.5" /> <NavLabel label={label} />
             </NavLink>
           ))}
+          {!logged && !viewer.isLoading && <ProfileMenu className={cx(link(false), "shrink-0 px-2.5 py-1.5 text-xs")} />}
         </nav>
       </header>
 
@@ -226,7 +268,6 @@ export function Layout() {
         {/* key: ao trocar o idioma a tela é refeita, e os textos e números saem no idioma novo */}
         <LoginNotice />
         <Outlet key={lang} />
-        <SignInFooter />
       </main>
     </div>
   );
