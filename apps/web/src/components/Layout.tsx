@@ -6,7 +6,6 @@ import { deleteAccount, logout, useConfig, useMeta, useViewer } from "../lib/api
 import { useMe } from "../lib/hooks";
 import { setLang, useLang, useT } from "../lib/i18n";
 import { LoginNotice } from "./LoginNotice";
-import { RetentionNotice } from "./RetentionNotice";
 import { Button, Input, Segmented, cx } from "./ui";
 
 const NAV = [
@@ -227,10 +226,6 @@ export function Layout() {
         {/* key: ao trocar o idioma a tela é refeita, e os textos e números saem no idioma novo */}
         <LoginNotice />
         <Outlet key={lang} />
-        {/* toda tela mostra dados que somem depois de um tempo: o aviso fica no fim da página */}
-        <div className="mt-8">
-          <RetentionNotice />
-        </div>
         <SignInFooter />
       </main>
     </div>
