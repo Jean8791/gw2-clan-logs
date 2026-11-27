@@ -88,7 +88,8 @@ afterEach(() => {
 
 describe("K/D usa os inimigos mortos no total, de quem for o crédito", () => {
   it("o dia e a visão geral somam enemy_deaths; sem ele, caem nos kills do squad", () => {
-    fight(T.dia13_1000, { "A.1111": 1 }, { kills: 1, enemyDeaths: 10 });
+    // 10 minutos depois da outra luta do dia: no mesmo horário, com o mesmo jogador, seria a mesma luta gravada duas vezes
+    fight(new Date(Date.parse(T.dia13_1000) + 600_000).toISOString(), { "A.1111": 1 }, { kills: 1, enemyDeaths: 10 });
 
     expect(q.battleDays(db, {})[0]).toMatchObject({ day: "2026-11-13", kills: 8 + 10 });
     expect(q.overview(db, {}).kills).toBe(1 + 2 + 4 + 8 + 10);

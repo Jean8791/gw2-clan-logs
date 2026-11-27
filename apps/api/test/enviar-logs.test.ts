@@ -26,7 +26,8 @@ const start = async (env: Record<string, string> = {}) => {
 };
 const logFile = (name: string, n: number) => {
   const f = path.join(home, name);
-  fs.writeFileSync(f, JSON.stringify({ ...wvwFixture(), fightName: `Luta ${n}` }));
+  // cada log numa data própria: logs no mesmo horário, mapa e grupo seriam a mesma luta gravada duas vezes
+  fs.writeFileSync(f, JSON.stringify({ ...wvwFixture(), fightName: `Luta ${n}`, timeStartStd: `2026-11-1${n} 23:33:54 -03:00` }));
   return f;
 };
 /** Roda o script e devolve saída e código de saída (não lança quando o código não é 0). */
@@ -56,7 +57,7 @@ describe("scripts/enviar-logs.sh", () => {
     await start();
     const a = logFile("a.json", 1);
     fs.mkdirSync(path.join(home, "pasta"));
-    fs.writeFileSync(path.join(home, "pasta", "b.json"), JSON.stringify({ ...wvwFixture(), fightName: "Luta 2" }));
+    fs.writeFileSync(path.join(home, "pasta", "b.json"), JSON.stringify({ ...wvwFixture(), fightName: "Luta 2", timeStartStd: "2026-11-19 23:33:54 -03:00" }));
     fs.writeFileSync(path.join(home, "pasta", "leia-me.txt"), "não é log");
 
     const r = await enviar([a, path.join(home, "pasta")]);

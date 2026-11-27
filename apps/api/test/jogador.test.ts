@@ -23,11 +23,11 @@ afterEach(async () => {
 const FULANO = "Fulano.1234";
 let n = 0;
 
-/** Uma luta do dono, às 20:00 UTC do dia dado (o dia de batalha é a data menos 9 horas, então fica no mesmo dia). */
+/** Uma luta do dono, no dia dado a partir das 20:00 UTC, 11 minutos depois da anterior (para não ser a mesma luta gravada duas vezes). O dia de batalha é a data menos 9 horas, então fica no mesmo dia. */
 function luta(owner: number, dia: string, jogadores: { account: string; profession: string; role: "dps" | "support"; activeMs?: number; damage?: number }[]) {
   const id = `f${++n}`;
   app.db.prepare("INSERT INTO fights (id, sha256, status, uploaded_at, owner_id, time_start, mode, duration_ms) VALUES (?, ?, 'done', ?, ?, ?, 'wvw', 600000)").run(
-    id, "sha-" + id, new Date().toISOString(), owner, `${dia}T20:00:00.000Z`,
+    id, "sha-" + id, new Date().toISOString(), owner, new Date(Date.parse(`${dia}T20:00:00.000Z`) + n * 11 * 60_000).toISOString(),
   );
   const ins = app.db.prepare("INSERT INTO player_stats (fight_id, account, name, profession, role, active_ms, damage) VALUES (?, ?, ?, ?, ?, ?, ?)");
   for (const j of jogadores) ins.run(id, j.account, j.account.split(".")[0], j.profession, j.role, j.activeMs ?? 600_000, j.damage ?? 1000);
