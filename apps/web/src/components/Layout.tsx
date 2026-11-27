@@ -1,12 +1,13 @@
-import { BarChart3, CalendarDays, ChevronUp, GitCompareArrows, Home, Link2, LogOut, RefreshCw, Shield, Swords, Trash2, Upload, UserRound } from "lucide-react";
+import { BarChart3, CalendarDays, ChevronUp, GitCompareArrows, Home, Link2, LogIn, LogOut, Shield, Swords, Trash2, Upload, UserRound } from "lucide-react";
 import { useState } from "react";
-import { ROUTES, isSpaceOwner } from "@gw2logs/shared";
+import { ROUTES } from "@gw2logs/shared";
 import { NavLink, Outlet } from "react-router-dom";
-import { deleteAccount, logout, rotateShareLink, useMeta, useOwner, useViewer } from "../lib/api";
+import { deleteAccount, logout, useConfig, useMeta, useViewer } from "../lib/api";
 import { useMe } from "../lib/hooks";
-import { spaceBase, spaceId } from "../lib/space";
 import { setLang, useLang, useT } from "../lib/i18n";
-import { Button, Empty, Input, Segmented, cx } from "./ui";
+import { LoginNotice } from "./LoginNotice";
+import { RetentionNotice } from "./RetentionNotice";
+import { Button, Input, Segmented, cx } from "./ui";
 
 const NAV = [
   { to: ROUTES.overview, label: "nav.overview", icon: Home, end: true },
@@ -37,28 +38,17 @@ function LangToggle() {
   );
 }
 
-/** Só o dono do espaço, logado: o nome abre o menu com sair e apagar conta. */
+/** Quem está logado: o nome abre o menu com sair e apagar conta. */
 function AccountMenu({ name }: { name: string }) {
   const t = useT();
   const [open, setOpen] = useState(false);
-  // só uma confirmação aberta por vez: trocar o link de compartilhar ou apagar a conta
-  const [mode, setMode] = useState<"link" | "delete" | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [failed, setFailed] = useState(false);
   const [typed, setTyped] = useState("");
   const item = "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted transition hover:bg-surface-2 hover:text-text";
   const leave = (action: () => Promise<unknown>) => {
     setBusy(true);
     void action().then(() => window.location.assign("/"), () => setBusy(false));
-  };
-  // o link antigo deixa de funcionar na hora; quem trocou vai direto para o novo
-  const renewLink = () => {
-    setBusy(true);
-    setFailed(false);
-    void rotateShareLink().then(
-      (publicId) => window.location.assign(`/u/${publicId}`),
-      () => (setBusy(false), setFailed(true)),
-    );
   };
   return (
     <div className="flex flex-col gap-1">
@@ -67,25 +57,7 @@ function AccountMenu({ name }: { name: string }) {
           <button className={item} onClick={() => leave(logout)} disabled={busy}>
             <LogOut className="size-4" /> {t("space.signOut")}
           </button>
-          {mode === "link" ? (
-            <div className="space-y-2 p-2 text-xs text-muted">
-              <p>{t("account.newLinkWarn")}</p>
-              {failed && <p className="text-bad">{t("account.newLinkError")}</p>}
-              <div className="flex gap-2">
-                <Button size="sm" onClick={renewLink} disabled={busy}>
-                  {t("account.newLinkConfirm")}
-                </Button>
-                <Button size="sm" variant="ghost" onClick={() => (setMode(null), setFailed(false))} disabled={busy}>
-                  {t("account.cancel")}
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <button className={item} onClick={() => (setMode("link"), setTyped(""))}>
-              <RefreshCw className="size-4" /> {t("account.newLink")}
-            </button>
-          )}
-          {mode === "delete" ? (
+          {deleting ? (
             <div className="space-y-2 p-2 text-xs text-bad">
               <p>{t("account.deleteWarn")}</p>
               <Input label={t("account.deleteType", { name })} value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" />
@@ -93,13 +65,13 @@ function AccountMenu({ name }: { name: string }) {
                 <Button size="sm" onClick={() => leave(() => deleteAccount(typed))} disabled={busy || typed !== name}>
                   {t("account.deleteConfirm")}
                 </Button>
-                <Button size="sm" variant="ghost" onClick={() => (setMode(null), setTyped(""))} disabled={busy}>
+                <Button size="sm" variant="ghost" onClick={() => (setDeleting(false), setTyped(""))} disabled={busy}>
                   {t("account.cancel")}
                 </Button>
               </div>
             </div>
           ) : (
-            <button className={cx(item, "hover:text-bad")} onClick={() => (setMode("delete"), setFailed(false))}>
+            <button className={cx(item, "hover:text-bad")} onClick={() => setDeleting(true)}>
               <Trash2 className="size-4" /> {t("account.delete")}
             </button>
           )}
@@ -107,7 +79,7 @@ function AccountMenu({ name }: { name: string }) {
       )}
       <button
         className={cx(item, "justify-between font-medium text-text")}
-        onClick={() => (setOpen(!open), setMode(null), setFailed(false), setTyped(""))}
+        onClick={() => (setOpen(!open), setDeleting(false), setTyped(""))}
         aria-expanded={open}
       >
         <span className="flex min-w-0 items-center gap-2">
@@ -127,7 +99,7 @@ function NavLabel({ label }: { label: string }) {
   return label === ME.label && me ? <MyName account={me} /> : <>{t(label)}</>;
 }
 
-/** Nome do jogador escolhido (o da luta mais recente dele neste espaço). Enquanto a lista carrega, ou se ele não está aqui, fica "Meu perfil". */
+/** Nome do jogador escolhido (o da luta mais recente dele). Enquanto a lista carrega, ou se ele não está aqui, fica "Meu perfil". */
 function MyName({ account }: { account: string }) {
   const t = useT();
   const { data } = useMeta();
@@ -152,12 +124,12 @@ function Brand() {
   );
 }
 
-/** Copia o endereço deste espaço, para compartilhar. */
+/** Copia o endereço da página aberta (com os filtros), para compartilhar. */
 function CopyLink() {
   const t = useT();
   const [copied, setCopied] = useState(false);
   const copy = () => {
-    void navigator.clipboard?.writeText(`${window.location.origin}${spaceBase}`).then(() => {
+    void navigator.clipboard?.writeText(window.location.href).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     });
@@ -169,16 +141,31 @@ function CopyLink() {
   );
 }
 
-export function Layout() {
-  const owner = useOwner();
-  const viewer = useViewer();
-  // o dono, logado, vê o Meu Perfil na lista, o Importar logs e o menu da conta. Quem abre o link vê só o Meu Perfil, embaixo
-  // (no celular não há "embaixo": lá ele entra na lista). O Meu Perfil é do navegador de quem usa, não depende de login.
-  const isOwner = isSpaceOwner(viewer.data?.publicId, spaceId);
-  const nav = isOwner ? [...NAV, ME, IMPORT] : NAV;
-  const mobileNav = isOwner ? nav : [...NAV, ME];
-  const lang = useLang();
+/** Entrar com o Discord, no fim da página, para qualquer visitante: só entra quem tem autorização. */
+function SignInFooter() {
   const t = useT();
+  const { data: cfg } = useConfig();
+  const viewer = useViewer();
+  if (viewer.isLoading || viewer.data || cfg?.loginAvailable === false) return null;
+  return (
+    <footer className="mt-8 flex justify-center">
+      <a href="/api/auth/login">
+        <Button size="sm" variant="ghost">
+          <LogIn className="size-3.5" /> {t("space.signIn")}
+        </Button>
+      </a>
+    </footer>
+  );
+}
+
+export function Layout() {
+  const viewer = useViewer();
+  // quem está logado vê o Meu Perfil na lista, o Importar logs e o menu da conta. Quem não está vê só o Meu Perfil, embaixo
+  // (no celular não há "embaixo": lá ele entra na lista). O Meu Perfil é do navegador de quem usa, não depende de login.
+  const logged = !!viewer.data;
+  const nav = logged ? [...NAV, ME, IMPORT] : NAV;
+  const mobileNav = logged ? nav : [...NAV, ME];
+  const lang = useLang();
   const link = (active: boolean) =>
     cx(
       "flex min-w-0 items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition",
@@ -200,10 +187,10 @@ export function Layout() {
           ))}
         </nav>
         <div className="mt-auto">
-          {isOwner && viewer.data ? (
+          {viewer.data ? (
             <AccountMenu name={viewer.data.name} />
           ) : (
-            // enquanto o login ainda carrega, nada aparece embaixo (evita piscar o Meu Perfil para o dono)
+            // enquanto o login ainda carrega, nada aparece embaixo (evita piscar o Meu Perfil para quem está logado)
             !viewer.isLoading && (
               <NavLink to={ME.to} className={({ isActive }) => link(isActive)}>
                 <ME.icon className="size-4" /> <NavLabel label={ME.label} />
@@ -238,11 +225,13 @@ export function Layout() {
           <LangToggle />
         </div>
         {/* key: ao trocar o idioma a tela é refeita, e os textos e números saem no idioma novo */}
-        {owner.isError ? (
-          <Empty title={t("space.notFound")} />
-        ) : (
-          <Outlet key={lang} />
-        )}
+        <LoginNotice />
+        <Outlet key={lang} />
+        {/* toda tela mostra dados que somem depois de um tempo: o aviso fica no fim da página */}
+        <div className="mt-8">
+          <RetentionNotice />
+        </div>
+        <SignInFooter />
       </main>
     </div>
   );

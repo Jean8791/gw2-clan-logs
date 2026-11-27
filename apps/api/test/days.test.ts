@@ -140,7 +140,7 @@ describe("GET /api/days", () => {
     const app = await buildApp(loadConfig({ DATA_DIR: dir, GW2_API: "off", WEB_DIR: path.join(dir, "sem-site") }));
 
     const ana = criarUsuario(app, "1"); // o primeiro usuário recebe as lutas que já existiam sem dono
-    const res = await app.server.inject({ url: `/api/u/${ana.publicId}/days?mode=wvw` });
+    const res = await app.server.inject({ url: `/api/days?mode=wvw` });
 
     expect(res.statusCode).toBe(200);
     expect(res.json().map((d: any) => d.day)).toEqual(["2026-11-13", "2026-11-12"]);

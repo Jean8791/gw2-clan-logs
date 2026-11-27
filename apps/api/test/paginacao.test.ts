@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { PAGE_SIZE, pageCount, pageSlice } from "@gw2logs/shared";
+import { createSession } from "../src/auth.js";
 import { loadConfig } from "../src/config.js";
 import { buildApp, type App } from "../src/server.js";
 import { criarUsuario } from "./usuarios.js";
@@ -60,8 +61,8 @@ function inserir(owner: number, lutas: Luta[]) {
 const serie = (n: number, extra: (i: number) => Partial<Luta> = () => ({})): Luta[] =>
   Array.from({ length: n }, (_, i) => ({ id: `f${String(i).padStart(4, "0")}`, time: new Date(Date.UTC(2026, 10, 1) + i * 60_000).toISOString(), ...extra(i) }));
 
-const listar = async (publicId: string, query = "") => {
-  const res = await app.server.inject(`/api/u/${publicId}/fights${query}`);
+const listar = async (_publicId: string, query = "", cookie?: string) => {
+  const res = await app.server.inject({ url: `/api/fights${query}`, headers: cookie ? { cookie } : {} });
   return { lutas: res.json() as { id: string; squadDamage: number | null }[], total: Number(res.headers["x-total-count"]), status: res.statusCode };
 };
 const ids = (l: { id: string }[]) => l.map((x) => x.id);
@@ -93,30 +94,22 @@ describe("lutas: paginação no servidor", () => {
     expect(r.lutas).toHaveLength(10);
   });
 
-  it("lutas na fila ou com erro aparecem só na primeira página, e o total conta apenas as prontas", async () => {
+  it("lutas na fila ou com erro aparecem só para quem enviou, só na primeira página, e o total conta apenas as prontas", async () => {
     const ana = criarUsuario(app, "1", "ana");
     inserir(ana.id, [...serie(60), { id: "q1", status: "queued", time: null }, { id: "q2", status: "queued", time: null }, { id: "e1", status: "error", time: null }]);
+    const cookie = `session=${createSession(app.db, ana.id, "web")}`;
 
-    const p1 = await listar(ana.publicId, "?limit=50&offset=0");
-    const p2 = await listar(ana.publicId, "?limit=50&offset=50");
+    const anonimo = await listar(ana.publicId, "?limit=50&offset=0");
+    const p1 = await listar(ana.publicId, "?limit=50&offset=0", cookie);
+    const p2 = await listar(ana.publicId, "?limit=50&offset=50", cookie);
 
+    expect(anonimo.lutas).toHaveLength(50);
+    expect(ids(anonimo.lutas).some((id) => ["q1", "q2", "e1"].includes(id))).toBe(false);
     expect(p1.total).toBe(60);
     expect(p1.lutas).toHaveLength(53);
     expect(ids(p1.lutas)).toEqual(expect.arrayContaining(["q1", "q2", "e1"]));
     expect(p2.lutas).toHaveLength(10);
     expect(ids(p2.lutas).some((id) => ["q1", "q2", "e1"].includes(id))).toBe(false);
-  });
-
-  it("um usuário nunca vê (nem conta) as lutas do outro", async () => {
-    const ana = criarUsuario(app, "1", "ana");
-    const beto = criarUsuario(app, "2", "beto");
-    inserir(ana.id, serie(5));
-    inserir(beto.id, serie(7).map((l) => ({ ...l, id: "b" + l.id })));
-
-    const r = await listar(ana.publicId);
-
-    expect(r.total).toBe(5);
-    expect(ids(r.lutas).every((id) => id.startsWith("f"))).toBe(true);
   });
 
   it("limite acima de 500 vira 500, e offset negativo vira 0", async () => {
@@ -197,7 +190,7 @@ describe("lutas: ordenação vale para todas as lutas, não só para a página",
     expect(ids((await listar(ana.publicId, "?sort=kd&dir=desc")).lutas)).toEqual(["k1", "k0", "k2"]);
   });
 
-  it("nome e quem enviou ordenam como texto, sem diferenciar maiúsculas", async () => {
+  it("nome ordena como texto, sem diferenciar maiúsculas", async () => {
     const ana = criarUsuario(app, "1", "ana");
     inserir(ana.id, [
       { id: "n0", time: "2026-11-01T00:00:00Z", name: "borderlands", uploader: "carla" },
@@ -206,19 +199,6 @@ describe("lutas: ordenação vale para todas as lutas, não só para a página",
     ]);
 
     expect(ids((await listar(ana.publicId, "?sort=name&dir=asc")).lutas)).toEqual(["n1", "n0", "n2"]);
-    expect(ids((await listar(ana.publicId, "?sort=up&dir=asc")).lutas)).toEqual(["n2", "n1", "n0"]);
-  });
-
-  it("quem gravou o log ordena como texto, sem diferenciar maiúsculas, e sem gravador vem antes na ordem crescente", async () => {
-    const ana = criarUsuario(app, "1", "ana");
-    inserir(ana.id, [
-      { id: "r0", time: "2026-11-01T00:00:00Z", recordedBy: "Zeta Char" },
-      { id: "r1", time: "2026-11-02T00:00:00Z", recordedBy: "alfa char" },
-      { id: "r2", time: "2026-11-03T00:00:00Z", recordedBy: null },
-    ]);
-
-    expect(ids((await listar(ana.publicId, "?sort=rec&dir=asc")).lutas)).toEqual(["r2", "r1", "r0"]);
-    expect(ids((await listar(ana.publicId, "?sort=rec&dir=desc")).lutas)).toEqual(["r0", "r1", "r2"]);
   });
 
   it("coluna desconhecida ou com cara de SQL cai na ordem padrão (data, da mais nova), sem erro e sem tocar no banco", async () => {

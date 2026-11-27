@@ -38,7 +38,7 @@ async function entrar(id: string, username = "u" + id, servidores: string[] = []
   const volta = await app.server.inject({ url: `/api/auth/callback?code=abc&state=${state}`, headers: { cookie: cookieDe(ida, "oauth_state")!.split(";")[0]! } });
   const cookie = cookieDe(volta, "session")?.split(";")[0];
   const me = cookie ? await app.server.inject({ url: "/api/auth/me", headers: { cookie } }) : null;
-  return { destino: String(volta.headers.location), status: volta.statusCode, cookie, me: me?.statusCode ?? null, publicId: me?.statusCode === 200 ? me.json().publicId : null };
+  return { destino: String(volta.headers.location), status: volta.statusCode, cookie, me: me?.statusCode ?? null, nome: me?.statusCode === 200 ? me.json().name : null };
 }
 const usuarios = () => (app.db.prepare("SELECT COUNT(*) AS n FROM users").get() as { n: number }).n;
 
@@ -52,7 +52,7 @@ afterEach(async () => {
 });
 
 describe("vários usuários liberados em DISCORD_USER_IDS", () => {
-  it("os dois liberados entram, cada um com a sua sessão e o seu espaço; quem não está na lista recebe notAllowed e nada é criado", async () => {
+  it("os dois liberados entram, cada um com a sua sessão; quem não está na lista recebe notAllowed e nada é criado", async () => {
     await iniciar({ DISCORD_USER_IDS: "111,222" });
 
     const ana = await entrar("111", "ana");
@@ -61,20 +61,20 @@ describe("vários usuários liberados em DISCORD_USER_IDS", () => {
 
     expect(ana.me).toBe(200);
     expect(beto.me).toBe(200);
-    expect(ana.publicId).not.toBe(beto.publicId);
-    expect(ana.destino).toBe(`/u/${ana.publicId}/import`); // sem lutas ainda: vai direto para a importação
+    expect([ana.nome, beto.nome]).toEqual(["ana", "beto"]);
+    expect(ana.destino).toBe("/import"); // sem lutas ainda: vai direto para a importação
     expect(carlos).toMatchObject({ destino: "/?erro=notAllowed", cookie: undefined, me: null });
     expect(usuarios()).toBe(2); // o negado não vira usuário
   });
 
-  it("a sessão de um não atrapalha a do outro, e entrar de novo devolve o mesmo espaço", async () => {
+  it("a sessão de um não atrapalha a do outro, e entrar de novo não cria outro usuário", async () => {
     await iniciar({ DISCORD_USER_IDS: "111,222" });
     const ana = await entrar("111", "ana");
     const beto = await entrar("222", "beto");
 
     const anaDeNovo = await entrar("111", "ana");
 
-    expect(anaDeNovo.publicId).toBe(ana.publicId);
+    expect(anaDeNovo.nome).toBe("ana");
     expect(usuarios()).toBe(2);
     expect((await app.server.inject({ url: "/api/auth/me", headers: { cookie: ana.cookie! } })).statusCode).toBe(200); // a sessão antiga continua valendo
     expect((await app.server.inject({ url: "/api/auth/me", headers: { cookie: beto.cookie! } })).statusCode).toBe(200);

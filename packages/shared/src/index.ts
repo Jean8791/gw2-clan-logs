@@ -230,7 +230,6 @@ export interface Fight {
   status: FightStatus;
   error: string | null;
   uploadedAt: string;
-  uploader: string | null;
   fileName: string | null;
   mode: Mode | null;
   fightName: string | null;
@@ -239,7 +238,6 @@ export interface Fight {
   timeStart: string | null;
   durationMs: number | null;
   success: boolean;
-  recordedBy: string | null;
   squadCount: number | null;
   allyCount: number | null;
   enemyCount: number | null;
@@ -386,8 +384,8 @@ export interface Filters {
   profession?: string;
   /** dias de batalha (AAAA-MM-DD, ver battleDay): vale a união dos dias escolhidos */
   day?: string[];
-  /** id do dono das lutas. Só o servidor preenche (vem da URL /u/:id), nunca da query string. */
-  owner?: number;
+  /** id do usuário logado. Só o servidor preenche (nunca vem da query string): só ele vê as próprias lutas na fila ou com erro. */
+  viewer?: number;
 }
 
 export const FILTER_KEYS = [

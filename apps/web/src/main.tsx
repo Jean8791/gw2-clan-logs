@@ -13,9 +13,7 @@ import { ComparePage } from "./pages/Compare";
 import { GuildsPage } from "./pages/Guilds";
 import { DaysPage } from "./pages/Days";
 import { UploadPage } from "./pages/Upload";
-import { LandingPage } from "./pages/Landing";
-import { OwnerOnly } from "./components/OwnerOnly";
-import { spaceBase, spaceId } from "./lib/space";
+import { LoggedOnly } from "./components/LoggedOnly";
 import { Empty } from "./components/ui";
 import { t } from "./lib/i18n";
 import { queryClient } from "./lib/query-client";
@@ -41,19 +39,18 @@ const routes = [
       { path: ROUTES.me, element: <MePage /> },
       { path: ROUTES.compare, element: <ComparePage /> },
       { path: ROUTES.guilds, element: <GuildsPage /> },
-      { path: ROUTES.import, element: <OwnerOnly><UploadPage /></OwnerOnly> },
+      { path: ROUTES.import, element: <LoggedOnly><UploadPage /></LoggedOnly> },
       { path: "*", element: <NotFound /> },
     ],
   },
 ];
 
-/** Fora de um espaço (/u/:id) só existe a página inicial; dentro dele, o roteador usa o espaço como base dos links. */
-const router = spaceId ? createBrowserRouter(routes, { basename: spaceBase }) : null;
+const router = createBrowserRouter(routes);
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      {router ? <RouterProvider router={router} /> : <LandingPage />}
+      <RouterProvider router={router} />
     </QueryClientProvider>
   </StrictMode>,
 );

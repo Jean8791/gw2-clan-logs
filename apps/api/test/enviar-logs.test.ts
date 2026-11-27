@@ -64,7 +64,7 @@ describe("scripts/enviar-logs.sh", () => {
 
     expect(r.code).toBe(0);
     expect(r.out).toMatch(/2 enviado/);
-    expect((await app.server.inject(`/api/u/${usuario.publicId}/fights`)).json()).toHaveLength(2);
+    expect((await app.server.inject(`/api/fights`)).json()).toHaveLength(2);
   });
 
   it("o que o servidor ainda guarda é ignorado e conta como já enviado", async () => {
@@ -91,7 +91,7 @@ describe("scripts/enviar-logs.sh", () => {
     await app.worker.idle();
 
     expect(again.out).toMatch(/1 enviado/);
-    expect((await app.server.inject(`/api/u/${usuario.publicId}/fights`)).json()).toHaveLength(1);
+    expect((await app.server.inject(`/api/fights`)).json()).toHaveLength(1);
   });
 
   it("chave errada: para com erro e não vaza a chave na saída", async () => {
@@ -101,7 +101,7 @@ describe("scripts/enviar-logs.sh", () => {
     expect(r.code).not.toBe(0);
     expect(r.out).toMatch(/token de envio incorreto/i);
     expect(r.out).not.toContain("chave-errada");
-    expect((await app.server.inject(`/api/u/${usuario.publicId}/fights`)).json()).toHaveLength(0);
+    expect((await app.server.inject(`/api/fights`)).json()).toHaveLength(0);
   });
 
   it("bloqueado por senhas erradas (429): para e avisa para tentar mais tarde", async () => {
@@ -167,7 +167,7 @@ describe("scripts/enviar-logs.sh: casos de borda", () => {
 
     expect(r.out).toMatch(/1 enviado/);
     // o curl codifica as aspas do nome (%22), como todo multipart; o importante é o arquivo entrar inteiro
-    expect((await app.server.inject(`/api/u/${usuario.publicId}/fights`)).json()[0].fileName).toMatch(/^log; .*estranho.*, 1\.json$/);
+    expect((await app.server.inject(`/api/fights`)).json()[0].fileName).toMatch(/^log; .*estranho.*, 1\.json$/);
   });
 
   it("fila cheia: espera e tenta de novo até caber", async () => {

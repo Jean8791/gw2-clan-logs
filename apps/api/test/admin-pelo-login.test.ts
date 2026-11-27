@@ -133,7 +133,7 @@ describe("/api/auth/me e /api/config", () => {
 
     expect(deAna.isAdmin).toBe(true);
     expect(deBeto.isAdmin).toBe(false);
-    expect(Object.keys(deAna).sort()).toEqual(["avatar", "isAdmin", "name", "publicId"]);
+    expect(Object.keys(deAna).sort()).toEqual(["avatar", "isAdmin", "name"]);
     expect(JSON.stringify(deAna)).not.toContain('"10"');
   });
 

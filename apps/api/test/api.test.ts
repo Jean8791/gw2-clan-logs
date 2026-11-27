@@ -11,7 +11,7 @@ import { criarUsuario } from "./usuarios.js";
 let app: App;
 let dir: string;
 let ana: ReturnType<typeof criarUsuario>;
-const u = (rota: string) => `/api/u/${ana.publicId}${rota}`;
+const u = (rota: string) => `/api${rota}`;
 
 function multipart(files: { name: string; content: string }[], fields: Record<string, string> = {}) {
   const boundary = "----teste" + Math.random().toString(16).slice(2);

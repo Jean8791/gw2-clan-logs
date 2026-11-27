@@ -2,11 +2,10 @@
 import crypto from "node:crypto";
 import { ROUTES } from "@gw2logs/shared";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import { paths, type Config } from "./config.js";
-import { checkSession, cookieHeader, createSession, deleteSession, isAdmin, readCookie, revokeAccessByDiscordId, rotatePublicId, sessionExpiry, upsertDiscordUser, userFromToken, type User } from "./auth.js";
+import type { Config } from "./config.js";
+import { checkSession, cookieHeader, createSession, deleteSession, isAdmin, readCookie, revokeAccessByDiscordId, sessionExpiry, upsertDiscordUser, userFromToken, type User } from "./auth.js";
 import type { DB } from "./db.js";
 import { safeEqual } from "./guards.js";
-import { removeFights } from "./retention.js";
 
 const DISCORD = "https://discord.com";
 const WEB_COOKIE = "session";
@@ -92,7 +91,7 @@ export function registerAuthRoutes(server: FastifyInstance, db: DB, cfg: Config,
       const hasFights = db.prepare("SELECT 1 FROM fights WHERE owner_id = ? LIMIT 1").get(user.id) !== undefined;
       return reply
         .header("set-cookie", [cookieHeader(WEB_COOKIE, token, { secure, maxAgeSec: WEB_COOKIE_SECONDS }), clear(STATE_COOKIE, "/api/auth")])
-        .redirect(`/u/${user.publicId}${hasFights ? "" : ROUTES.import}`);
+        .redirect(hasFights ? ROUTES.overview : ROUTES.import);
     } catch (e) {
       req.log.error({ err: e instanceof Error ? e.message : String(e) }, "falha no login com o Discord");
       return backToStart(reply, "loginFailed");
@@ -101,7 +100,7 @@ export function registerAuthRoutes(server: FastifyInstance, db: DB, cfg: Config,
 
   server.get("/api/auth/me", async (req, reply) => {
     const { user, needsNewLogin } = checkSession(db, readCookie(req.headers.cookie, WEB_COOKIE), "web", cfg.discord);
-    if (user) return { publicId: user.publicId, name: user.name, avatar: user.avatar, isAdmin: isAdmin(user, cfg) };
+    if (user) return { name: user.name, avatar: user.avatar, isAdmin: isAdmin(user, cfg) };
     // a conferência dos servidores do Discord venceu: a tela inicial pede para entrar de novo
     if (needsNewLogin) return reply.code(401).send({ error: "Sign in again.", code: "loginExpired" });
     return reply.code(401).send({ error: "Not signed in.", code: "notSignedIn" });
@@ -112,24 +111,17 @@ export function registerAuthRoutes(server: FastifyInstance, db: DB, cfg: Config,
     return reply.header("set-cookie", clear(WEB_COOKIE)).send({ ok: true });
   });
 
-  // apagar a conta zera tudo do usuário: lutas (com os arquivos), sessões e o próprio cadastro. Só pela sessão do navegador.
+  // apagar a conta remove o cadastro e as sessões; as lutas ficam no conjunto único (sem dono e sem o nome de quem enviou).
+  // Só pela sessão do navegador.
   server.delete("/api/auth/account", async (req, reply) => {
     const user = sessionUser(db, cfg, req);
     if (!user) return reply.code(401).send({ error: "Not signed in.", code: "notSignedIn" });
-    // apaga tudo e não dá para desfazer: a pessoa digita o próprio nome (a tela pede), e um pedido sem isso não apaga nada
+    // não dá para desfazer: a pessoa digita o próprio nome (a tela pede), e um pedido sem isso não apaga nada
     const { confirm } = (req.body ?? {}) as { confirm?: unknown };
     if (confirm !== user.name) return reply.code(400).send({ error: "Type your name to confirm.", code: "confirmName" });
-    const ids = (db.prepare("SELECT id FROM fights WHERE owner_id = ?").all(user.id) as { id: string }[]).map((f) => f.id);
-    await removeFights(db, paths(cfg.dataDir), ids);
+    db.prepare("UPDATE fights SET owner_id = NULL, uploader = NULL WHERE owner_id = ?").run(user.id);
     db.prepare("DELETE FROM users WHERE id = ?").run(user.id);
     return reply.header("set-cookie", clear(WEB_COOKIE)).send({ ok: true });
-  });
-
-  // se o link de compartilhar vazar, o dono troca: o antigo passa a dar 404. Só pela sessão do navegador (o token do script não troca link)
-  server.post("/api/auth/share-link/rotate", async (req, reply) => {
-    const user = sessionUser(db, cfg, req);
-    if (!user) return reply.code(401).send({ error: "Not signed in.", code: "notSignedIn" });
-    return { publicId: rotatePublicId(db, user.id) };
   });
 
   // token pessoal para o script de envio; o anterior deixa de valer e o novo só aparece nesta resposta
