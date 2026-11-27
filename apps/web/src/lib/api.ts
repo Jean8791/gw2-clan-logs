@@ -52,7 +52,7 @@ export const useConfig = () => useQuery({ queryKey: ["config"], queryFn: () => g
 export const useMeta = () => useQuery({ queryKey: ["meta"], queryFn: () => get<Meta>(`/api/meta`), staleTime: 60_000 });
 export const useGuilds = () => useQuery({ queryKey: ["guilds"], queryFn: () => get<GuildSummary[]>(`/api/guilds`), staleTime: 60_000 });
 
-export const useOverview = (f: Filters) => useQuery({ queryKey: ["overview", f], queryFn: () => get<Overview>(withFilters(`/api/overview`, f)) });
+export const useOverview = (f: Filters, enabled = true) => useQuery({ queryKey: ["overview", f], queryFn: () => get<Overview>(withFilters(`/api/overview`, f)), enabled });
 
 export const useDays = (f: Filters, enabled = true) =>
   useQuery({ queryKey: ["days", f], queryFn: () => get<DaySummary[]>(withFilters(`/api/days`, f)), enabled });
@@ -83,8 +83,8 @@ export const useFightsPage = (f: Filters, o: { page: number; sort: string; dir: 
 
 export const useFight = (id: string) => useQuery({ queryKey: ["fight", id], queryFn: () => get<FightDetail>(`/api/fights/${encodeURIComponent(id)}`) });
 
-export const useRanking = (f: Filters) =>
-  useQuery({ queryKey: ["ranking", f], queryFn: () => get<{ rows: RankingRow[]; baseline: Aggregate; referenceMs: number }>(withFilters(`/api/ranking`, f)) });
+export const useRanking = (f: Filters, enabled = true) =>
+  useQuery({ queryKey: ["ranking", f], queryFn: () => get<{ rows: RankingRow[]; baseline: Aggregate; referenceMs: number }>(withFilters(`/api/ranking`, f)), enabled });
 
 export const usePlayer = (account: string, f: Filters) =>
   useQuery({ queryKey: ["player", account, f], queryFn: () => get<PlayerProfile>(withFilters(`/api/players/${encodeURIComponent(account)}`, f)), retry: false });

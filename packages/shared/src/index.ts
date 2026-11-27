@@ -438,6 +438,15 @@ export interface DaySummary {
   last: string;
 }
 
+/**
+ * Filtros com que a Visão Geral abre quando o endereço não traz nenhum: o último dia de batalha com lutas, para a pessoa não procurar
+ * a data. Sem nenhum dia (banco vazio) ou sem a lista, os últimos 30 dias, como era antes.
+ */
+export function overviewDefaults(days: { day: string }[] | undefined): Filters {
+  const last = days?.reduce<string | undefined>((max, d) => (max === undefined || d.day > max ? d.day : max), undefined);
+  return last ? { day: [last] } : { days: 30 };
+}
+
 /** Lê filtros de um objeto de query string, descartando valores inválidos. */
 export function parseFilters(q: Record<string, unknown>): Filters {
   const f: Filters = {};

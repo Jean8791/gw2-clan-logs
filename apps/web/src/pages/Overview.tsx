@@ -1,14 +1,14 @@
 import { ArrowRight, X } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { perSecond, ROUTES, topByRate, type RankingRow, type StatKey } from "@gw2logs/shared";
+import { overviewDefaults, perSecond, ROUTES, topByRate, type RankingRow, type StatKey } from "@gw2logs/shared";
 import { DataTable, type Column } from "../components/DataTable";
 import { FilterBar } from "../components/FilterBar";
 import { FightStatus, fightKills, KillDeath, SquadVsEnemy, Won } from "../components/FightBits";
 import { GuildTag, PlayerLink, Profession, ProfessionDot } from "../components/badges";
 import { Card, Empty, ErrorBox, Kpi, Loading, PageHeader, cx } from "../components/ui";
 import { RetentionNotice } from "../components/RetentionNotice";
-import { useOverview, useRanking } from "../lib/api";
+import { useDays, useOverview, useRanking } from "../lib/api";
 import { useFilters } from "../lib/hooks";
 import { t } from "../lib/i18n";
 import { accountShort, compact, dateTime, dec, duration, int, stat } from "../lib/format";
@@ -94,10 +94,14 @@ function BoardDetail({ rows, k, title, onClose }: { rows: RankingRow[]; k: StatK
 }
 
 export function OverviewPage() {
-  const [filters, setFilters] = useFilters({ days: 30 });
+  // abre no último dia de batalha com lutas; a lista de dias é a mesma do seletor de dia (já está em cache), e as consultas esperam por
+  // ela para a tela não abrir nos 30 dias e trocar de dia depois
+  const days = useDays({});
+  const ready = !days.isLoading;
+  const [filters, setFilters] = useFilters(overviewDefaults(days.data));
   const [detail, setDetail] = useState<StatKey | null>(null);
-  const ov = useOverview(filters);
-  const rk = useRanking(filters);
+  const ov = useOverview(filters, ready);
+  const rk = useRanking(filters, ready);
   const nav = useNavigate();
 
   return (
@@ -109,7 +113,7 @@ export function OverviewPage() {
       <FilterBar value={filters} onChange={setFilters} fields={["period", "day", "guild", "size"]} />
 
       {ov.error && <ErrorBox error={ov.error} />}
-      {ov.isLoading && <Loading />}
+      {(!ready || ov.isLoading) && <Loading />}
       {ov.data && ov.data.fights === 0 && (
         <Card>
           <Empty title={t("overview.empty.title")}>
