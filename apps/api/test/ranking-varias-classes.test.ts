@@ -38,7 +38,7 @@ async function luta(classe: string, quando: string, dono = ana) {
   await ingestJson(app.db, new Gw2Api(app.db, false), new MediaStore(app.db, (async () => new Response("")) as unknown as typeof fetch), id, json, false, true);
 }
 const linha = async (conta = ATACANTE, query = "", dono = ana) => {
-  const res = (await app.server.inject(`/api/u/${dono.publicId}/ranking${query}`)).json();
+  const res = (await app.server.inject(`/api/ranking${query}`)).json();
   return res.rows.find((r: { account: string }) => r.account === conta);
 };
 
@@ -99,19 +99,6 @@ describe("ranking de quem jogou de mais de uma classe", () => {
 
     expect(comandante.professions).toEqual([{ profession: "Firebrand", fights: 2 }]);
     expect(comandante.profession).toBe("Firebrand");
-  });
-
-  it("as classes de outro espaço não aparecem: cada ranking só conta as lutas do próprio dono", async () => {
-    const beto = criarUsuario(app, "2", "beto");
-    await luta("Druid", "2026-11-19 22:00:00 -03:00");
-    await luta("Reaper", "2026-11-20 22:00:00 -03:00", beto);
-    await luta("Reaper", "2026-11-20 22:30:00 -03:00", beto);
-
-    const deAna = await linha();
-    const deBeto = await linha(ATACANTE, "", beto);
-
-    expect(deAna.professions).toEqual([{ profession: "Druid", fights: 1 }]);
-    expect(deBeto.professions).toEqual([{ profession: "Reaper", fights: 2 }]);
   });
 
   it("linha sem classe (o log não trouxe) não vira uma classe vazia", async () => {

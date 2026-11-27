@@ -21,8 +21,6 @@ const columns = (): Column<Fight>[] => [
     sort: (f) => f.timeStart ?? f.uploadedAt,
     cell: (f) => <span className="text-muted">{dateTimeSeconds(f.timeStart ?? f.uploadedAt)}</span>,
   },
-  // quem gravou o log no jogo (recorded_by do Elite Insights): com a hora exata, mostra que a mesma luta gravada por outro membro é outro log
-  { id: "rec", header: t("fights.col.recordedBy"), sort: (f) => f.recordedBy ?? "", cell: (f) => <span className="text-muted">{f.recordedBy ?? "—"}</span> },
   {
     id: "name",
     header: t("fights.col.name"),
@@ -38,7 +36,6 @@ const columns = (): Column<Fight>[] => [
   { id: "size", header: t("fights.col.size"), align: "right", sort: (f) => f.squadCount, cell: (f) => <SquadVsEnemy fight={f} /> },
   { id: "kd", header: t("fights.col.kd"), align: "right", sort: (f) => (fightKills(f) ?? 0) - (f.squadDeaths ?? 0), cell: (f) => <KillDeath kills={fightKills(f)} deaths={f.squadDeaths} /> },
   { id: "dmg", header: t("fights.col.damage"), align: "right", sort: (f) => f.squadDamage, cell: (f) => compact(f.squadDamage) },
-  { id: "up", header: t("fights.col.uploader"), sort: (f) => f.uploader ?? "", cell: (f) => <span className="text-muted">{f.uploader ?? "—"}</span> },
 ];
 
 export function FightsPage() {

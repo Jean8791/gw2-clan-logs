@@ -204,7 +204,7 @@ describe("GET /api/players/:account/skills", () => {
     app.db.prepare("INSERT INTO fights (id, sha256, status, uploaded_at, owner_id) VALUES ('l1', 's1', 'parsing', ?, ?)").run(new Date().toISOString(), ana.id);
     await ingestJson(app.db, appApi, new MediaStore(app.db, fakeFetch), "l1", fightWithSkills(), false, true);
 
-    const res = await app.server.inject({ url: `/api/u/${ana.publicId}/players/${ACCOUNT}/skills` });
+    const res = await app.server.inject({ url: `/api/players/${ACCOUNT}/skills` });
 
     expect(res.statusCode).toBe(200);
     expect(res.json().map((r: any) => r.name)).toEqual(["Skill B", "Skill A"]);

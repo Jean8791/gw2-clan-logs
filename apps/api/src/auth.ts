@@ -132,18 +132,6 @@ export function purgeExpiredSessions(db: DB, now = new Date()): number {
   return db.prepare("DELETE FROM sessions WHERE expires_at IS NOT NULL AND expires_at <= ?").run(now.toISOString()).changes;
 }
 
-/** Troca o id que vai na URL de compartilhar: o antigo deixa de achar o usuário (404) e o novo é devolvido. As lutas e as sessões não mudam. */
-export function rotatePublicId(db: DB, userId: number): string {
-  const publicId = newPublicId();
-  db.prepare("UPDATE users SET public_id = ? WHERE id = ?").run(publicId, userId);
-  return publicId;
-}
-
-export function userByPublicId(db: DB, publicId: string): User | null {
-  const row = db.prepare("SELECT * FROM users WHERE public_id = ?").get(publicId) as any;
-  return row ? toUser(row) : null;
-}
-
 /** Valor de um cookie do cabeçalho Cookie. */
 export function readCookie(header: string | undefined, name: string): string | undefined {
   for (const part of (header ?? "").split(";")) {

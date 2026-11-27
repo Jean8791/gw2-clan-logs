@@ -177,7 +177,7 @@ describe("ranking: boon vira média ponderada pelo tempo ativo; o resto continua
     luta("F1", [jogador("A.1", 60, { stabOut: 0.4, damage: 1000 })]);
     luta("F2", [jogador("A.1", 180, { stabOut: 0.1, damage: 1000 })]);
 
-    const a = q.ranking(db, { owner: dono }).find((r) => r.account === "A.1")!;
+    const a = q.ranking(db, {}).find((r) => r.account === "A.1")!;
 
     expect(a.stabOut).toBeCloseTo(0.175, 10);
     expect(a.damage).toBe(2000);
@@ -190,7 +190,7 @@ describe("ranking: boon vira média ponderada pelo tempo ativo; o resto continua
     luta("F2", [jogador("A.1", 180, { stabOut: 0.1 })]);
     luta("F3", [jogador("B.2", 120, { stabOut: 0.2 })]);
 
-    const geral = q.baseline(db, { owner: dono });
+    const geral = q.baseline(db, {});
 
     expect(geral.stabOut).toBeCloseTo((0.4 * 60 + 0.1 * 180 + 0.2 * 120) / 360, 10);
   });
@@ -199,12 +199,12 @@ describe("ranking: boon vira média ponderada pelo tempo ativo; o resto continua
     luta("F1", [jogador("A.1", 60, { stabUp: 30_000 })]);
     luta("F2", [jogador("A.1", 180, { stabUp: 90_000 })]);
 
-    expect(q.ranking(db, { owner: dono }).find((r) => r.account === "A.1")!.stabUp).toBe(120_000);
+    expect(q.ranking(db, {}).find((r) => r.account === "A.1")!.stabUp).toBe(120_000);
   });
 
   it("jogador sem tempo ativo registrado não quebra a média (valor 0)", () => {
     luta("F1", [jogador("Z.9", 0, { stabOut: 0.4 })]);
 
-    expect(q.ranking(db, { owner: dono }).find((r) => r.account === "Z.9")!.stabOut).toBe(0);
+    expect(q.ranking(db, {}).find((r) => r.account === "Z.9")!.stabOut).toBe(0);
   });
 });

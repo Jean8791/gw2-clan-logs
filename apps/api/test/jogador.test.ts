@@ -37,7 +37,7 @@ const jogador = (profession: string, role: "dps" | "support" = "dps", extra: { a
 const outro = (profession: string, role: "dps" | "support" = "dps") => ({ account: "Sicrano.5678", profession, role });
 
 const opcoes = async (publicId: string, query = "", conta = FULANO) => {
-  const res = await app.server.inject(`/api/u/${publicId}/players/${conta}/options${query}`);
+  const res = await app.server.inject(`/api/players/${conta}/options${query}`);
   return { status: res.statusCode, body: res.json() as PlayerOptions };
 };
 
@@ -94,25 +94,11 @@ describe("opções dos filtros da página do jogador: só o que ele jogou", () =
     ]);
   });
 
-  it("não mistura espaços: o mesmo jogador nos logs de outro usuário não entra nas opções", async () => {
+  it("jogador que não está em nenhum log dá 404, como o perfil", async () => {
     const ana = criarUsuario(app, "1", "ana");
-    const beto = criarUsuario(app, "2", "beto");
-    luta(ana.id, "2026-11-10", [jogador("Guardian", "dps")]);
-    luta(beto.id, "2026-11-20", [jogador("Necromancer", "support")]);
+    luta(ana.id, "2026-11-10", [jogador("Guardian")]);
 
-    const daAna = await opcoes(ana.publicId);
-    const doBeto = await opcoes(beto.publicId);
-
-    expect(daAna.body).toEqual({ roles: ["dps"], professions: ["Guardian"], days: [{ day: "2026-11-10", fights: 1 }] });
-    expect(doBeto.body).toEqual({ roles: ["support"], professions: ["Necromancer"], days: [{ day: "2026-11-20", fights: 1 }] });
-  });
-
-  it("jogador que não está nos logs do dono dá 404, como o perfil", async () => {
-    const ana = criarUsuario(app, "1", "ana");
-    const beto = criarUsuario(app, "2", "beto");
-    luta(beto.id, "2026-11-10", [jogador("Guardian")]);
-
-    expect((await opcoes(ana.publicId)).status).toBe(404);
+    expect((await opcoes(ana.publicId, "", "Ninguem.0000")).status).toBe(404);
   });
 });
 
@@ -123,7 +109,7 @@ describe("quem jogou pouco numa luta e morreu continua no perfil", () => {
     luta(ana.id, "2026-11-10", [jogador("Guardian", "dps", { activeMs: 3_000, damage: 20_000 })]); // morreu em 3 s
     luta(ana.id, "2026-11-10", [jogador("Guardian", "dps", { activeMs: 0, damage: 0 })]); // morreu no início
 
-    const perfil = (await app.server.inject(`/api/u/${ana.publicId}/players/${FULANO}`)).json();
+    const perfil = (await app.server.inject(`/api/players/${FULANO}`)).json();
 
     expect(perfil.history).toHaveLength(3);
     expect(perfil.totals.fights).toBe(3);

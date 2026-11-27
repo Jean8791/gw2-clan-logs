@@ -15,7 +15,7 @@ Histórico de **WvW de Guild Wars 2** para clãs e alianças. Os logs do ArcDPS 
 | **Perfil** | O histórico do jogador, a evolução luta a luta, habilidades e a comparação com a média de quem joga na mesma função |
 | **Comparar** | Até 4 jogadores lado a lado, com radar e tabela |
 | **Guildas** | A guilda de cada jogador vem do log; nome e tag vêm da API oficial do GW2. Quem administra o site (`ADMIN_DISCORD_IDS`) marca com ★ as da aliança; os demais veem a estrela |
-| **Importar logs** | Só para o dono, logado: arraste os logs (ou um `.zip`), acompanhe o processamento e gere o token do script de envio. O envio continua se você trocar de tela |
+| **Importar logs** | Só para quem está logado: arraste os logs (ou um `.zip`), acompanhe o processamento e gere o token do script de envio. O envio continua se você trocar de tela |
 
 Métricas: dano, abates e downs (só contra jogadores inimigos), strips, cleanses, **cura e barreira** (total, no grupo, em si mesmo e em quem está caído), **boons gerados** para o squad, o grupo ou só para si, **uptime** dos boons recebidos e defesa. Veja [Como as métricas são calculadas](#como-as-métricas-são-calculadas).
 
@@ -26,8 +26,8 @@ ArcDPS (.zevtc) ──site (Importar logs) ou scripts/enviar-logs.sh──▶ AP
                    (login com Discord)   (token pessoal)          Fastify         (.NET)           + JSON guardado
 ```
 
-- **Cada usuário tem o próprio espaço** (`/u/<id>`), só com os seus logs. Entra-se com o **Discord**, e os logs vão pela tela *Importar logs* ou pelo script `scripts/enviar-logs.sh`, com o token pessoal (veja [Enviar logs](#enviar-logs)). Quem tem o link de um espaço o vê sem login (só leitura); o dono troca o link no menu da conta (*Gerar novo link*), e o antigo deixa de funcionar.
-- O mesmo log enviado duas vezes pelo mesmo usuário é ignorado enquanto a luta ainda está guardada; depois de apagada, pode ser importado de novo. Se outro usuário já enviou o mesmo arquivo e a luta está pronta, ela é copiada do banco, sem rodar o Elite Insights de novo (só o limite por hora vale nesse caso). O site também aceita o `.json` do Elite Insights ou do dps.report (até 15 MB: o JSON ocupa muita memória; acima disso, envie o `.zevtc`).
+- **Os logs de todos ficam num conjunto único, e a leitura é aberta** (sem login, só leitura): qualquer pessoa vê lutas, ranking e jogadores. Contas de jogo e personagens ficam públicos; o site não mostra quem enviou nem quem gravou, e pede aos buscadores para não indexar (`robots.txt` e `X-Robots-Tag`). Entra-se com o **Discord** só para enviar logs, pela tela *Importar logs* ou pelo script `scripts/enviar-logs.sh`, com o token pessoal (veja [Enviar logs](#enviar-logs)); o botão de entrar fica no rodapé. Os links antigos `/u/<id>/...` levam ao mesmo caminho na raiz. Apagar a conta tira o cadastro e o acesso, mas os logs enviados continuam no site.
+- O mesmo log enviado de novo, por qualquer usuário, é ignorado enquanto a luta ainda está guardada; depois de apagada, pode ser importado de novo. Dois envios do mesmo arquivo ao mesmo tempo, com o primeiro ainda na fila, podem gerar duas lutas iguais. O site também aceita o `.json` do Elite Insights ou do dps.report (até 15 MB: o JSON ocupa muita memória; acima disso, envie o `.zevtc`).
 - Depois de processar uma luta, o servidor guarda só o que foi para o banco (cerca de 0,2 MB por luta): o log enviado e o JSON do Elite Insights são apagados. Se o processamento falhar, o log enviado fica para diagnóstico. Por isso uma métrica nova só vale para as lutas enviadas depois dela; as antigas precisam ser enviadas de novo.
 - **O site não é um arquivo de logs:** ele só personaliza a visualização, e quem usa precisa guardar os originais em outro lugar. A tela de importação e a de entrada avisam isso, com o prazo em `RETENTION_DAYS`.
 - As lutas antigas são apagadas depois de `RETENTION_DAYS` dias, contados pela data da luta (no Docker Compose o padrão é 30; fora dele, 0 = guardar para sempre).
@@ -71,7 +71,7 @@ Com Docker: `docker build -t gw2-clan-logs .` e `docker run -p 8080:8080 -v dado
 
 O ArcDPS grava em `Documentos\Guild Wars 2\addons\arcdps\arcdps.cbtlogs\`. Para gravar **WvW**, no jogo use Alt+Shift+T, depois *Logging*, e ative a gravação de WvW. Cura e barreira só aparecem se quem gravou usa o addon **Healing Stats**.
 
-Há duas formas de enviar, e as duas guardam os logs no seu espaço:
+Há duas formas de enviar:
 
 1. **Pelo site**: entre com o Discord, abra *Importar logs* e arraste os arquivos, ou um `.zip` com vários logs (até 300 MB e 150 logs, o equivalente a uma semana de jogo; o zip é aberto no seu navegador e cada log vai como arquivo solto). Eles vão um de cada vez; se o servidor encher, o envio espera sozinho, e ao bater um limite ele para e avisa.
 2. **Por script**, que usa a API e o seu token pessoal. Na página *Importar logs*, o cartão *Envio por script* gera o token (ele só aparece uma vez, o anterior deixa de valer e a data de validade aparece na tela; veja `API_TOKEN_DAYS`).
@@ -165,7 +165,7 @@ Variáveis de ambiente do servidor. No Docker Compose, as principais vêm do arq
 
 | Variável | Para quê | Padrão |
 |---|---|---|
-| `EI_HTML` | `true` gera o relatório HTML do Elite Insights (botão "Relatório completo"). Custa 40 a 50 MB de disco e ~300 MB de memória a mais por luta grande, então fica desligado | `false` |
+| `EI_HTML` | `true` gera o relatório HTML do Elite Insights (botão "Relatório completo"). Custa 40 a 50 MB de disco e ~300 MB de memória a mais por luta grande, então fica desligado. **O relatório mostra quem gravou o log** e, com a leitura aberta, fica visível a todos: não ligue sem antes tirar o nome do gravador do HTML | `false` |
 | `TRUST_PROXY` | `true` atrás do Caddy: conta o IP real do cliente nos bloqueios e no limite de pedidos. O Compose já liga | `false` |
 | `UPLOAD_MAX_FAILS` / `UPLOAD_BLOCK_MIN` | Erros de token ou de senha de administrador seguidos do mesmo IP até bloquear, e por quantos minutos | `5` / `15` |
 | `UPLOAD_MAX_QUEUE` | Logs esperando ou em processamento; acima disso o envio é recusado | `30` |

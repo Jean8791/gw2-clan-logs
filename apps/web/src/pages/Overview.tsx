@@ -7,6 +7,7 @@ import { FilterBar } from "../components/FilterBar";
 import { FightStatus, fightKills, KillDeath, SquadVsEnemy, Won } from "../components/FightBits";
 import { GuildTag, PlayerLink, Profession, ProfessionDot } from "../components/badges";
 import { Card, Empty, ErrorBox, Kpi, Loading, PageHeader, cx } from "../components/ui";
+import { RetentionNotice } from "../components/RetentionNotice";
 import { useOverview, useRanking } from "../lib/api";
 import { useFilters } from "../lib/hooks";
 import { t } from "../lib/i18n";
@@ -184,6 +185,10 @@ export function OverviewPage() {
           )}
         </>
       )}
+      {/* a visão geral é a entrada do site: o aviso de que os logs são temporários fica aqui e em Importar logs, não em toda tela */}
+      <div className="mt-6">
+        <RetentionNotice />
+      </div>
     </>
   );
 }

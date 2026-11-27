@@ -50,41 +50,9 @@ describe("cada usuário vê só os próprios logs", () => {
     expect(res.statusCode).toBe(200);
     await app.worker.idle();
 
-    const lutas = (await app.server.inject(`/api/u/${ana.publicId}/fights`)).json();
+    const lutas = (await app.server.inject(`/api/fights`)).json();
     expect(lutas).toHaveLength(1);
     expect(lutas[0].status).toBe("done");
-  });
-
-  it("outro usuário não vê lutas, ranking, jogadores nem relatório do primeiro", async () => {
-    const ana = criarUsuario(app, "1", "ana");
-    const beto = criarUsuario(app, "2", "beto");
-    const id = (await enviar(ana.token)).json()[0].id;
-    await app.worker.idle();
-    const doBeto = (rota: string) => app.server.inject(`/api/u/${beto.publicId}${rota}`);
-
-    expect((await doBeto("/fights")).json()).toEqual([]);
-    expect((await doBeto(`/fights/${id}`)).statusCode).toBe(404);
-    expect((await doBeto(`/fights/${id}/report`)).statusCode).toBe(404);
-    expect((await doBeto("/ranking")).json().rows).toEqual([]);
-    expect((await doBeto("/players/Atacante.2222")).statusCode).toBe(404);
-    expect((await doBeto("/overview")).json().fights).toBe(0);
-    expect((await doBeto("/days")).json()).toEqual([]);
-    expect((await doBeto("/guilds")).json()).toEqual([]);
-    const meta = (await doBeto("/meta")).json();
-    expect(meta.players).toEqual([]);
-    expect(meta.maps).toEqual([]);
-
-    expect((await app.server.inject(`/api/u/${ana.publicId}/fights/${id}`)).statusCode).toBe(200);
-    expect((await app.server.inject(`/api/u/${ana.publicId}/ranking`)).json().rows.length).toBeGreaterThan(0);
-  });
-
-  it("espaço de usuário que não existe dá 404", async () => {
-    expect((await app.server.inject("/api/u/naoexiste/fights")).statusCode).toBe(404);
-  });
-
-  it("as rotas sem dono deixaram de existir (nada de visão geral misturada)", async () => {
-    expect((await app.server.inject("/api/fights")).statusCode).toBe(404);
-    expect((await app.server.inject("/api/ranking")).statusCode).toBe(404);
   });
 
   it("o id público não é o id do Discord", async () => {
@@ -134,9 +102,9 @@ describe("login com o Discord", () => {
       headers: { cookie: cookieState.split(";")[0]! },
     });
     expect(volta.statusCode).toBe(302);
-    const user = app.db.prepare("SELECT public_id AS p, name FROM users WHERE discord_id = '777'").get() as { p: string; name: string };
+    const user = app.db.prepare("SELECT name FROM users WHERE discord_id = '777'").get() as { name: string };
     expect(user.name).toBe("fulano");
-    expect(volta.headers.location).toBe(`/u/${user.p}/import`); // ainda sem lutas: vai direto importar
+    expect(volta.headers.location).toBe("/import"); // ainda sem lutas: vai direto importar
 
     const sessao = cookieDe(volta, "session")!;
     expect(sessao).toMatch(/HttpOnly/i);
@@ -144,7 +112,7 @@ describe("login com o Discord", () => {
     expect(sessao).toMatch(/Secure/i);
 
     const me = await app.server.inject({ url: "/api/auth/me", headers: { cookie: sessao.split(";")[0]! } });
-    expect(me.json()).toMatchObject({ publicId: user.p, name: "fulano" });
+    expect(me.json()).toMatchObject({ name: "fulano" });
     expect(JSON.stringify(me.json())).not.toContain("777");
   });
 
@@ -171,7 +139,7 @@ describe("login com o Discord", () => {
 
     const volta = await app.server.inject({ url: `/api/auth/callback?code=abc&state=${state}`, headers: { cookie: cookieDe(ida, "oauth_state")!.split(";")[0]! } });
 
-    expect(volta.headers.location).toBe(`/u/${fulano.publicId}`);
+    expect(volta.headers.location).toBe("/");
   });
 
   it("cancelar na tela do Discord volta para a entrada, sem sessão e sem erro", async () => {
@@ -388,35 +356,20 @@ describe("login restrito aos servidores do Discord do clã", () => {
   });
 });
 
-describe("dono do espaço", () => {
-  it("o link mostra o nome do dono, sem login e sem expor o id do Discord", async () => {
-    const ana = criarUsuario(app, "987654321", "ana");
-
-    const res = await app.server.inject(`/api/u/${ana.publicId}`);
-
-    expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual({ publicId: ana.publicId, name: "ana", avatar: null });
-    expect(res.body).not.toContain("987654321");
-  });
-});
-
 describe("o mesmo log enviado por usuários diferentes", () => {
-  it("cada um fica com a própria luta; o repetido do mesmo usuário continua sendo ignorado", async () => {
+  it("vira uma luta só: o envio repetido de qualquer usuário é reconhecido e não gera outra luta", async () => {
     const ana = criarUsuario(app, "1", "ana");
     const beto = criarUsuario(app, "2", "beto");
 
     const daAna = (await enviar(ana.token)).json()[0];
-    await app.worker.idle(); // com a luta da Ana pronta, a do Beto é uma cópia (ver copia-de-luta.test.ts)
+    await app.worker.idle();
     const doBeto = (await enviar(beto.token)).json()[0];
     const repetido = (await enviar(ana.token)).json()[0];
 
     expect(daAna.duplicate).toBeUndefined();
-    expect(doBeto).toMatchObject({ status: "done" });
-    expect(doBeto.duplicate).toBeUndefined();
-    expect(doBeto.id).not.toBe(daAna.id);
+    expect(doBeto).toMatchObject({ id: daAna.id, status: "done", duplicate: true });
     expect(repetido).toMatchObject({ id: daAna.id, duplicate: true });
-    expect((await app.server.inject(`/api/u/${beto.publicId}/fights`)).json()).toHaveLength(1);
-    expect((await app.server.inject(`/api/u/${ana.publicId}/fights`)).json()).toHaveLength(1);
+    expect((await app.server.inject("/api/fights")).json()).toHaveLength(1);
   });
 });
 
@@ -443,17 +396,15 @@ describe("administração e sessões", () => {
 });
 
 describe("apagar a conta", () => {
-  it("zera as lutas e os arquivos do usuário, tira o acesso dele e não toca no outro", async () => {
+  it("tira o cadastro e o acesso do usuário, mas as lutas e os arquivos continuam, sem o nome de quem enviou", async () => {
     const ana = criarUsuario(app, "1", "ana");
     const beto = criarUsuario(app, "2", "beto");
     const idAna = (await enviar(ana.token)).json()[0].id;
-    const idBeto = (await enviar(beto.token)).json()[0].id;
+    const idBeto = (await enviar(beto.token, "outro.json", JSON.stringify({ ...wvwFixture(), fightName: "Outra" }))).json()[0].id;
     await app.worker.idle();
-    // o servidor já não guarda o original nem o JSON; planta o que ainda pode existir (relatório e log de uma luta que falhou)
     const pastaAna = path.join(dir, "fights", idAna);
     fs.mkdirSync(pastaAna, { recursive: true });
     fs.writeFileSync(path.join(pastaAna, "report.html"), "<html></html>");
-    fs.writeFileSync(path.join(dir, "uploads", idAna + ".zevtc"), "x");
 
     const cookie = `session=${createSession(app.db, ana.id, "web")}`;
     expect((await app.server.inject({ method: "DELETE", url: "/api/auth/account", headers: { "x-upload-key": ana.token } })).statusCode).toBe(401);
@@ -461,13 +412,12 @@ describe("apagar a conta", () => {
 
     expect(res.statusCode).toBe(200);
     expect(cookieDe(res, "session")).toContain("Max-Age=0");
-    expect(fs.existsSync(pastaAna)).toBe(false);
-    expect(fs.readdirSync(path.join(dir, "uploads")).some((f) => f.startsWith(idAna + "."))).toBe(false);
+    expect(fs.existsSync(pastaAna)).toBe(true);
     expect((await app.server.inject({ url: "/api/auth/me", headers: { cookie } })).statusCode).toBe(401);
     expect((await enviar(ana.token)).statusCode).toBe(401);
-    expect((await app.server.inject(`/api/u/${ana.publicId}/fights`)).statusCode).toBe(404);
-    const restam = (await app.server.inject(`/api/u/${beto.publicId}/fights`)).json();
-    expect(restam.map((f: { id: string }) => f.id)).toEqual([idBeto]);
+    const restam = (await app.server.inject("/api/fights")).json();
+    expect(restam.map((f: { id: string }) => f.id).sort()).toEqual([idAna, idBeto].sort());
+    expect(app.db.prepare("SELECT owner_id, uploader FROM fights WHERE id = ?").get(idAna)).toEqual({ owner_id: null, uploader: null });
   });
 });
 
@@ -479,7 +429,7 @@ describe("o que fica guardado depois de processar", () => {
     const id = (await enviar(ana.token)).json()[0].id;
     await app.worker.idle();
 
-    expect((await app.server.inject(`/api/u/${ana.publicId}/fights/${id}`)).statusCode).toBe(200);
+    expect((await app.server.inject(`/api/fights/${id}`)).statusCode).toBe(200);
     expect(arquivos("uploads")).toEqual([]);
     expect(arquivos("fights")).toEqual([]);
   });
@@ -489,7 +439,8 @@ describe("o que fica guardado depois de processar", () => {
     const id = (await enviar(ana.token, "quebrado.json", "isto não é json")).json()[0].id;
     await app.worker.idle();
 
-    const luta = (await app.server.inject(`/api/u/${ana.publicId}/fights`)).json().find((f: { id: string }) => f.id === id);
+    const cookie = `session=${createSession(app.db, ana.id, "web")}`; // a luta com erro só aparece para quem enviou
+    const luta = (await app.server.inject({ url: "/api/fights", headers: { cookie } })).json().find((f: { id: string }) => f.id === id);
     expect(luta.status).toBe("error");
     expect(arquivos("uploads")).toEqual([id + ".json"]);
   });

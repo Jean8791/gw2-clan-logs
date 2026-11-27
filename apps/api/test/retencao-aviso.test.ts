@@ -28,7 +28,7 @@ const horas = (h: number) => new Date(Date.parse(CORTE) + h * 3_600_000).toISOSt
 
 const luta = (owner: number, id: string, timeStart: string) =>
   app.db.prepare("INSERT INTO fights (id, sha256, status, uploaded_at, owner_id, time_start, mode) VALUES (?, ?, 'done', ?, ?, ?, 'wvw')").run(id, "sha-" + id, AGORA.toISOString(), owner, timeStart);
-const foraDoPrazo = async (publicId: string) => ((await app.server.inject(`/api/u/${publicId}/fights?to=${encodeURIComponent(CORTE)}&limit=500`)).json() as { id: string }[]).map((f) => f.id).sort();
+const foraDoPrazo = async (publicId: string) => ((await app.server.inject(`/api/fights?to=${encodeURIComponent(CORTE)}&limit=500`)).json() as { id: string }[]).map((f) => f.id).sort();
 const restantes = () => (app.db.prepare("SELECT id FROM fights ORDER BY id").all() as { id: string }[]).map((r) => r.id);
 
 describe("retentionCutoff: o corte do prazo é o mesmo no servidor e na tela", () => {
@@ -50,16 +50,6 @@ describe("a lista de lutas fora do prazo (a que a tela de importar usa para avis
 
     await purgeOldFights(app.db, paths(dir), DIAS, AGORA);
     expect(restantes()).toEqual(["no-corte", "recente"]);
-  });
-
-  it("só aparecem as lutas do dono do espaço", async () => {
-    const ana = criarUsuario(app, "1", "ana");
-    const beto = criarUsuario(app, "2", "beto");
-    luta(ana.id, "da-ana", horas(-1));
-    luta(beto.id, "do-beto", horas(-1));
-
-    expect(await foraDoPrazo(ana.publicId)).toEqual(["da-ana"]);
-    expect(await foraDoPrazo(beto.publicId)).toEqual(["do-beto"]);
   });
 
   it("sem luta fora do prazo, a lista é vazia", async () => {
