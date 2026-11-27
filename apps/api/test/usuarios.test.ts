@@ -400,7 +400,7 @@ describe("apagar a conta", () => {
     const ana = criarUsuario(app, "1", "ana");
     const beto = criarUsuario(app, "2", "beto");
     const idAna = (await enviar(ana.token)).json()[0].id;
-    const idBeto = (await enviar(beto.token, "outro.json", JSON.stringify({ ...wvwFixture(), fightName: "Outra" }))).json()[0].id;
+    const idBeto = (await enviar(beto.token, "outro.json", JSON.stringify({ ...wvwFixture(), fightName: "Outra", timeStartStd: "2026-11-19 23:33:54 -03:00" }))).json()[0].id;
     await app.worker.idle();
     const pastaAna = path.join(dir, "fights", idAna);
     fs.mkdirSync(pastaAna, { recursive: true });

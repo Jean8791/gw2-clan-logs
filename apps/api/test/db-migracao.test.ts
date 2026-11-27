@@ -13,7 +13,7 @@ afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
 function bancoAntigo(file: string) {
   const db = new Database(file);
   db.exec(`
-    CREATE TABLE fights (id TEXT PRIMARY KEY, sha256 TEXT NOT NULL UNIQUE, status TEXT NOT NULL, uploaded_at TEXT NOT NULL, time_start TEXT);
+    CREATE TABLE fights (id TEXT PRIMARY KEY, sha256 TEXT NOT NULL UNIQUE, status TEXT NOT NULL, uploaded_at TEXT NOT NULL, time_start TEXT, map_id INTEGER);
     CREATE TABLE player_stats (
       fight_id TEXT NOT NULL REFERENCES fights(id) ON DELETE CASCADE, account TEXT NOT NULL, name TEXT, profession TEXT, guild_id TEXT,
       grp INTEGER, commander INTEGER NOT NULL DEFAULT 0, role TEXT NOT NULL DEFAULT 'dps', active_ms INTEGER NOT NULL DEFAULT 0, dist_to_com REAL,

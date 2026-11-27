@@ -146,6 +146,7 @@ function migrate(db: DB) {
   dropGlobalShaUnique(db);
   db.exec(`
     CREATE INDEX IF NOT EXISTS ix_fights_time ON fights(time_start);
+    CREATE INDEX IF NOT EXISTS ix_fights_map_time ON fights(map_id, time_start);
     CREATE INDEX IF NOT EXISTS ix_fights_owner ON fights(owner_id);
     CREATE UNIQUE INDEX IF NOT EXISTS ux_fights_owner_sha ON fights(owner_id, sha256);
   `);

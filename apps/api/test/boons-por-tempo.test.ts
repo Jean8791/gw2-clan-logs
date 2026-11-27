@@ -163,10 +163,13 @@ describe("ranking: boon vira média ponderada pelo tempo ativo; o resto continua
     skills: [],
     ...o,
   });
+  let n = 0;
+  // cada luta começa 10 minutos depois da anterior: lutas no mesmo horário, mapa e jogadores seriam a mesma luta gravada duas vezes
   const luta = (id: string, players: ExtractedPlayer[]) => {
+    const timeStart = new Date(Date.UTC(2026, 10, 12, 20, 0, 0) + n++ * 600_000).toISOString();
     db.prepare("INSERT INTO fights (id, sha256, status, uploaded_at, owner_id) VALUES (?, ?, 'queued', ?, ?)").run(id, id, new Date().toISOString(), dono);
     const f: ExtractedFight = {
-      mode: "wvw", fightName: "WvW", mapId: null, timeStart: "2026-11-12T20:00:00.000Z", durationMs: 300_000, success: true, recordedBy: null,
+      mode: "wvw", fightName: "WvW", mapId: null, timeStart, durationMs: 300_000, success: true, recordedBy: null,
       squadCount: players.length, allyCount: 0, enemyCount: 0, squadDamage: 0, squadKills: 0, squadDowns: 0, squadDeaths: 0, enemyDowns: 0, enemyDeaths: 0,
       eiVersion: null, players,
     };

@@ -26,11 +26,65 @@ type Params = Record<string, string | number>;
 /** Dia de batalha de uma luta (ver battleDay em shared): data da luta menos 9 horas. */
 const BATTLE_DAY = `date(f.time_start, '-${BATTLE_DAY_SHIFT_HOURS} hours')`;
 
+// ---------- A mesma luta gravada por mais de uma pessoa ----------
+
+/** Quanto do log menor precisa estar dentro do outro para as duas serem a mesma luta. */
+const SAME_FIGHT_OVERLAP = 0.5;
+/** Quanto do tempo do log o comandante precisa estar presente para o log valer como "acompanhou a tag". */
+const COMMANDER_PRESENCE = 0.8;
+/** Só se comparam logs que começam, no máximo, tantas horas antes de outro: é o que deixa o índice (mapa, início) servir. Nenhum log chega perto disso (o maior do histórico tem 13 minutos). */
+const SAME_FIGHT_MAX_HOURS = 1;
+
+const startMs = (x: string) => `(CAST(strftime('%s', ${x}.time_start) AS INTEGER) * 1000)`;
+const endMs = (x: string) => `(${startMs(x)} + ${x}.duration_ms)`;
+/** Um instante de `x` no mesmo formato do banco (ISO com milissegundos e Z), para comparar o texto e usar o índice. */
+const startShifted = (x: string, shift: string) => `strftime('%Y-%m-%dT%H:%M:%fZ', ${x}.time_start, '${shift}')`;
+const endIso = (x: string) => `strftime('%Y-%m-%dT%H:%M:%fZ', ${x}.time_start, '+' || (${x}.duration_ms / 1000.0) || ' seconds')`;
+const commander = (x: string) => `(SELECT account FROM player_stats WHERE fight_id = ${x}.id AND commander = 1 LIMIT 1)`;
+const commanderMs = (x: string) => `(SELECT active_ms FROM player_stats WHERE fight_id = ${x}.id AND commander = 1 LIMIT 1)`;
+const playersOf = (x: string) => `(SELECT COUNT(*) FROM player_stats WHERE fight_id = ${x}.id)`;
+/** 1 se o log acompanhou a tag: o comandante está presente em 80% ou mais do tempo (ou não há tag marcada para conferir). */
+const followedTag = (x: string) => `(CASE WHEN ${commander(x)} IS NULL OR ${commanderMs(x)} >= ${COMMANDER_PRESENCE} * ${x}.duration_ms THEN 1 ELSE 0 END)`;
+
+/**
+ * `b` é a mesma luta que `a`: mesmo mapa (um mapa desconhecido nunca junta) e modo, começos próximos, tempos sobrepostos em mais da metade
+ * do log menor (lutas seguidas que só encostam ficam separadas) e o mesmo grupo: o mesmo comandante ou, se um dos dois não tem tag marcada,
+ * mais da metade dos jogadores do log menor em comum. Os termos mais baratos vêm primeiro.
+ */
+const sameFight = (a: string, b: string) => `${b}.status = 'done' AND ${b}.id <> ${a}.id AND ${b}.map_id = ${a}.map_id AND ${b}.mode IS ${a}.mode
+      AND ${b}.time_start > ${startShifted(a, `-${SAME_FIGHT_MAX_HOURS} hours`)} AND ${b}.time_start < ${endIso(a)}
+      AND ${b}.duration_ms IS NOT NULL
+      AND MIN(${endMs(a)}, ${endMs(b)}) - MAX(${startMs(a)}, ${startMs(b)}) > ${SAME_FIGHT_OVERLAP} * MIN(${a}.duration_ms, ${b}.duration_ms)
+      AND ((${commander(a)} IS NOT NULL AND ${commander(b)} IS NOT NULL AND ${commander(a)} = ${commander(b)})
+        OR ((${commander(a)} IS NULL OR ${commander(b)} IS NULL)
+          AND (SELECT COUNT(*) FROM player_stats x JOIN player_stats y ON y.account = x.account AND y.fight_id = ${b}.id WHERE x.fight_id = ${a}.id) > ${SAME_FIGHT_OVERLAP} * MIN(${playersOf(a)}, ${playersOf(b)})))`;
+
+/** O que decide entre dois logs da mesma luta: acompanhou a tag, mais dano do squad, mais duração, mais jogadores e, por fim, o id menor (sempre o mesmo). */
+const rank = (x: string) => `${followedTag(x)}, COALESCE(${x}.squad_damage, 0), COALESCE(${x}.duration_ms, 0), COALESCE(${x}.squad_count, 0)`;
+/** `b` ganha de `a`. O id entra com os lados trocados: na comparação de tuplas o menor id é o que ganha. */
+const beats = (b: string, a: string) => `(${rank(b)}, ${a}.id) > (${rank(a)}, ${b}.id)`;
+
+/**
+ * Fora as lutas escondidas por um log melhor da mesma luta. Só esconde quem também está visível: um log que perdeu para outro (`c`) não
+ * esconde mais ninguém, senão uma cadeia A~B~C faria sumir A por causa de B, que já sumiu por causa de C, sem A e C serem a mesma luta.
+ * Os logs escondidos continuam no banco (abrem pelo link) e voltam a aparecer sozinhos se o melhor for apagado. A subconsulta não depende
+ * da linha de fora, então o SQLite a calcula uma vez por consulta (e não uma vez por jogador, que deixava o ranking lento).
+ */
+const MOST_COMPLETE = `f.id NOT IN (
+  SELECT a.id FROM fights a
+  WHERE a.status = 'done' AND a.time_start IS NOT NULL AND a.duration_ms IS NOT NULL AND a.map_id IS NOT NULL
+    AND EXISTS (
+      SELECT 1 FROM fights b
+      WHERE ${sameFight("a", "b")} AND ${beats("b", "a")}
+        AND NOT EXISTS (SELECT 1 FROM fights c WHERE ${sameFight("b", "c")} AND ${beats("c", "b")})
+    )
+)`;
+
 // ---------- Filtros → SQL ----------
 
 /** Condições sobre a luta (tabela f). */
 export function fightConditions(fl: Filters, now = new Date()): { where: string[]; params: Params } {
-  const where = ["f.status = 'done'"];
+  const where = ["f.status = 'done'", MOST_COMPLETE];
   const params: Params = {};
   if (fl.mode) (where.push("f.mode = @mode"), (params.mode = fl.mode));
   if (fl.days) (where.push("f.time_start >= @since"), (params.since = new Date(now.getTime() - fl.days * 86_400_000).toISOString()));
