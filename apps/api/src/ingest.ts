@@ -228,6 +228,10 @@ export function extractFight(r: J): ExtractedFight {
   const inch = num(r.combatReplayMetaData, "inchToPixel");
   const replayMeta = rate > 0 && inch > 0 ? { rate, inch } : null;
 
+  // A geração efetiva vale na luta toda ou não vale: quem não gerou nenhum boon tem as listas vazias, e isso é um zero de verdade, não dado ausente.
+  // Num EI antigo, sem squadBuffVolumes em ninguém, o volume cai na própria geração (abaixo) e a razão entre os dois seria 100% por construção.
+  const fightHasGeneration = squad.some((p) => arr(p, "squadBuffs").length > 0) && squad.some((p) => arr(p, "squadBuffVolumes").length > 0);
+
   const instances: ExtractedPlayer[] = squad.map((p) => {
     const dpsAll = phase0(p, "dpsAll");
     const statsAll = phase0(p, "statsAll");
@@ -307,9 +311,7 @@ export function extractFight(r: J): ExtractedFight {
       }
     }
     // Geração efetiva: o `generation` de squadBuffs. O volume (`outgoing`) é outra conta do Elite Insights e inclui também a perda registrada (`wasted`).
-    // Só vale com os dois no log: num EI antigo, sem squadBuffVolumes, o volume cai na própria geração (abaixo), e a razão entre os dois seria 100% por construção.
-    const hasGeneration = arr(p, "squadBuffs").length > 0 && arr(p, "squadBuffVolumes").length > 0;
-    if (hasGeneration) {
+    if (fightHasGeneration) {
       for (const b of arr(p, "squadBuffs")) {
         const key = EFFECTIVE_BOONS[num(b, "id")];
         if (key) s[key] = num(arr(b, "buffData")[0], "generation");
@@ -339,7 +341,7 @@ export function extractFight(r: J): ExtractedFight {
       distToCom: typeof statsAll.distToCom === "number" ? statsAll.distToCom : null,
       distCoverMs: tag.distCoverMs,
       nearCoverMs: tag.nearCoverMs,
-      genCoverMs: hasGeneration ? activeMs : 0,
+      genCoverMs: fightHasGeneration ? activeMs : 0,
       skills: skillDamage(p, targetIdx, skillMap, buffMap),
       supportSkills: supportSkills(p, skillMap, buffMap),
       skillUsage: skillUsage(p, skillMap, buffMap),

@@ -259,13 +259,14 @@ function addWeekToDayStats(db: DB, statCols: string) {
 
 /**
  * A cobertura da geração efetiva (`gen_cover_ms`) nasce com o banco. As lutas que já tinham geração efetiva (a coluna `<boon>_eff` só foi
- * gravada por quem a leu do log) passam a cobrir o tempo ativo todo; as demais ficam com 0 (sem dado). Os dias ainda abertos do resumo diário
+ * gravada por quem a leu do log, e algum jogador dela tem valor) passam a cobrir o tempo ativo de todos os jogadores, inclusive os que não
+ * geraram nada; as demais ficam com 0 (sem dado). Os dias ainda abertos do resumo diário
  * são refeitos com a cobertura; os congelados ficam como estão.
  */
 function backfillGenCover(db: DB) {
   const eff = STAT_KEYS.filter((k) => k.endsWith("Eff")).map((k) => `${STAT_COL[k]} > 0`);
   db.transaction(() => {
-    db.exec(`UPDATE player_stats SET gen_cover_ms = active_ms WHERE ${eff.join(" OR ")}`);
+    db.exec(`UPDATE player_stats SET gen_cover_ms = active_ms WHERE fight_id IN (SELECT DISTINCT fight_id FROM player_stats WHERE ${eff.join(" OR ")})`);
     db.exec("DELETE FROM day_snapshots WHERE frozen = 0");
   })();
 }

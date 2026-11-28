@@ -31,7 +31,18 @@ describe("extractFight: a cobertura da geração efetiva (genCoverMs)", () => {
     expect(p.genCoverMs).toBeGreaterThan(0);
   });
 
-  it("sem squadBuffs, não cobre nada (a geração efetiva é dado ausente, não zero)", () => {
+  it("quem não gerou nenhum boon (listas vazias) num log que tem a geração tem cobertura cheia: o zero é verdadeiro", () => {
+    const f: any = comGeracao();
+    f.players[1].squadBuffs = [];
+    f.players[1].squadBuffVolumes = [];
+
+    const outro = extractFight(f).players.find((p) => p.account === "Atacante.2222")!;
+
+    expect(outro.stabEff).toBe(0);
+    expect(outro.genCoverMs).toBe(outro.activeMs);
+  });
+
+  it("sem squadBuffs em ninguém, não cobre nada (a geração efetiva é dado ausente, não zero)", () => {
     const p = comandante(wvwFixture());
 
     expect(p.stabOut).toBe(3);
@@ -40,7 +51,7 @@ describe("extractFight: a cobertura da geração efetiva (genCoverMs)", () => {
 
   it("log de EI antigo, sem squadBuffVolumes: o volume vem de generation, então não há par válido e a cobertura é zero", () => {
     const f: any = comGeracao();
-    delete f.players[0].squadBuffVolumes;
+    for (const j of f.players) delete j.squadBuffVolumes;
 
     const p = comandante(f);
 
@@ -49,16 +60,15 @@ describe("extractFight: a cobertura da geração efetiva (genCoverMs)", () => {
     expect(p.genCoverMs).toBe(0);
   });
 
-  it("a mesma conta em duas instâncias soma a cobertura de cada uma", () => {
+  it("a mesma conta em duas instâncias soma a cobertura de cada uma (a luta tem a geração)", () => {
     const f: any = comGeracao();
     const segunda = JSON.parse(JSON.stringify(f.players[0]));
     segunda.hasCommanderTag = false;
-    delete segunda.squadBuffs;
     f.players.push(segunda);
 
     const p = comandante(f);
 
-    expect(p.genCoverMs).toBe(60_000);
+    expect(p.genCoverMs).toBe(120_000);
     expect(p.activeMs).toBe(120_000);
   });
 });
@@ -182,16 +192,17 @@ describe("migração: a cobertura da geração efetiva nasce com o banco", () =>
         fight_id TEXT NOT NULL REFERENCES fights(id) ON DELETE CASCADE, account TEXT NOT NULL, name TEXT, profession TEXT, guild_id TEXT,
         grp INTEGER, commander INTEGER NOT NULL DEFAULT 0, role TEXT NOT NULL DEFAULT 'dps', active_ms INTEGER NOT NULL DEFAULT 0, dist_to_com REAL,
         stab_out REAL NOT NULL DEFAULT 0, stab_eff REAL NOT NULL DEFAULT 0, PRIMARY KEY (fight_id, account));
-      INSERT INTO fights (id, sha256, status, uploaded_at) VALUES ('f1', 'a', 'done', 'x');
-      INSERT INTO player_stats (fight_id, account, active_ms, stab_out, stab_eff) VALUES ('f1', 'Com', 60000, 1, 0.5), ('f1', 'Sem', 60000, 1, 0);
+      INSERT INTO fights (id, sha256, status, uploaded_at) VALUES ('f1', 'a', 'done', 'x'), ('f2', 'b', 'done', 'x');
+      INSERT INTO player_stats (fight_id, account, active_ms, stab_out, stab_eff) VALUES ('f1', 'Com', 60000, 1, 0.5), ('f1', 'Sem', 60000, 0, 0), ('f2', 'Antiga', 60000, 1, 0);
     `);
     velho.close();
 
     const db = openDb(file);
 
     expect(db.prepare("SELECT account, gen_cover_ms AS c FROM player_stats ORDER BY account").all()).toEqual([
+      { account: "Antiga", c: 0 }, // luta sem nenhuma geração efetiva: sem dado
       { account: "Com", c: 60_000 },
-      { account: "Sem", c: 0 },
+      { account: "Sem", c: 60_000 }, // na mesma luta de quem tem: não gerou nada, e é um zero de verdade
     ]);
     expect((db.pragma("table_info(day_stats)") as { name: string }[]).map((c) => c.name)).toContain("gen_cover_ms");
     db.close();
