@@ -68,6 +68,7 @@ describe("métricas por alcance", () => {
     expect(statsOfGroup("boons")).toEqual(bases.map((b) => `${b}Out`));
     expect(statsOfGroup("boons", "group")).toEqual(bases.map((b) => `${b}Group`));
     expect(statsOfGroup("boons", "self")).toEqual(bases.map((b) => `${b}Self`));
+    expect(statsOfGroup("boons", "useful")).toEqual(bases.map((b) => `${b}Eff`));
   });
 
   it("outros grupos não mudam com o alcance", () => {
@@ -75,14 +76,14 @@ describe("métricas por alcance", () => {
   });
 });
 
-describe("os 30 boons por alcance, em todos os lugares", () => {
+describe("os 40 boons por alcance, em todos os lugares", () => {
   it("STAT_KEYS, STAT_META e STAT_EN têm exatamente as mesmas chaves", () => {
     expect(Object.keys(STAT_META).sort()).toEqual([...new Set(STAT_KEYS)].sort());
     expect(Object.keys(STAT_EN).sort()).toEqual([...new Set(STAT_KEYS)].sort());
   });
 
-  it("a lista de boons gera as chaves Out, Group e Self de STAT_KEYS", () => {
-    const esperadas = BOON_BASES.flatMap((b) => [`${b}Out`, `${b}Group`, `${b}Self`]);
+  it("a lista de boons gera as chaves Out, Group, Self e Eff de STAT_KEYS", () => {
+    const esperadas = BOON_BASES.flatMap((b) => [`${b}Out`, `${b}Group`, `${b}Self`, `${b}Eff`]);
     expect(esperadas.filter((k) => !STAT_KEYS.includes(k as StatKey))).toEqual([]);
     expect(STAT_KEYS.filter((k) => STAT_META[k].group === "boons")).toHaveLength(esperadas.length);
   });

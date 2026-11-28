@@ -78,6 +78,8 @@ export interface ExtractedFight {
 const boonsOf = (scope: BoonScope): Record<number, keyof Stats> =>
   Object.fromEntries(STAT_KEYS.flatMap((k) => (STAT_META[k].group === "boons" && STAT_META[k].buffId && (STAT_META[k].scope ?? "squad") === scope ? [[STAT_META[k].buffId, k]] : [])));
 export const BOONS = boonsOf("squad");
+/** A geração útil de cada boon (`<boon>Eff`), pelo id do buff. */
+const USEFUL_BOONS = boonsOf("useful");
 const BOON_VOLUMES: [string, Record<number, keyof Stats>][] = [
   ["selfBuffVolumes", boonsOf("self")],
   ["groupBuffVolumes", boonsOf("group")],
@@ -301,6 +303,11 @@ export function extractFight(r: J): ExtractedFight {
         const key = keys[num(b, "id")];
         if (key) s[key] = num(arr(b, "buffVolumeData")[0], "outgoing");
       }
+    }
+    // Geração útil: o `generation` de squadBuffs, sem o desperdício (`wasted`) que o volume traz junto
+    for (const b of arr(p, "squadBuffs")) {
+      const key = USEFUL_BOONS[num(b, "id")];
+      if (key) s[key] = num(arr(b, "buffData")[0], "generation");
     }
     if (!arr(p, "squadBuffVolumes").length) {
       for (const b of arr(p, "squadBuffs")) {

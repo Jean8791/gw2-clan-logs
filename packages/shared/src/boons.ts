@@ -2,6 +2,8 @@
 export const BOON_BASES = ["stab", "quick", "alac", "prot", "might", "aegis", "resist", "resol", "fury", "superspeed"] as const;
 export type BoonBase = (typeof BOON_BASES)[number];
 export type ScopedKey = `${BoonBase}${"Group" | "Self"}`;
+/** O volume gerado que foi útil (sem o que passou do limite de pilhas): `<boon>Eff`, no alcance da squad. */
+export type EffKey = `${BoonBase}Eff`;
 
 /** Os boons com uptime guardado; cada um tem `<boon>Up` (do próprio jogador) e `<boon>GroupUp` (média do grupo dele). */
 export const GROUP_UP_BASES = ["stab", "quick", "alac", "prot", "might", "aegis", "resist", "resol", "fury", "swift", "vigor", "regen"] as const;

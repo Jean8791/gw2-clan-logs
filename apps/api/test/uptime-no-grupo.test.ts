@@ -100,12 +100,12 @@ describe("as métricas de uptime no grupo", () => {
 });
 
 describe("boonViewKeys: as métricas de um boon lado a lado", () => {
-  it("estabilidade: volume para squad, grupo e si, uptime recebido e uptime no grupo", () => {
-    expect(boonViewKeys("stab")).toEqual(["stabOut", "stabGroup", "stabSelf", "stabUp", "stabGroupUp"]);
+  it("estabilidade: volume para squad, geração útil, volume para grupo e si, uptime recebido e uptime no grupo", () => {
+    expect(boonViewKeys("stab")).toEqual(["stabOut", "stabEff", "stabGroup", "stabSelf", "stabUp", "stabGroupUp"]);
   });
 
-  it("supervelocidade só tem volume, e swiftness, vigor e regeneração só têm uptime", () => {
-    expect(boonViewKeys("superspeed")).toEqual(["superspeedOut", "superspeedGroup", "superspeedSelf"]);
+  it("supervelocidade só tem volume (e a geração útil), e swiftness, vigor e regeneração só têm uptime", () => {
+    expect(boonViewKeys("superspeed")).toEqual(["superspeedOut", "superspeedEff", "superspeedGroup", "superspeedSelf"]);
     expect(boonViewKeys("swift")).toEqual(["swiftUp", "swiftGroupUp"]);
     expect(boonViewKeys("regen")).toEqual(["regenUp", "regenGroupUp"]);
   });

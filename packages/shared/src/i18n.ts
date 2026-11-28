@@ -1,5 +1,5 @@
 // Idiomas do site: português (padrão) e inglês. Sem biblioteca: um dicionário por idioma e a função translate.
-import { BOON_BASES, GROUP_UP_BASES, type GroupUpKey, type ScopedKey } from "./boons.js";
+import { BOON_BASES, GROUP_UP_BASES, type EffKey, type GroupUpKey, type ScopedKey } from "./boons.js";
 import type { StatKey } from "./index.js";
 import { STAT_META } from "./index.js";
 
@@ -361,6 +361,9 @@ export const DICT: Record<Lang, Dict> = {
     "scope.squad": "Squad",
     "scope.group": "Grupo",
     "scope.self": "Próprio",
+    "scope.useful": "Squad útil",
+    "boon.efficiency": "Eficiência",
+    "boon.efficiencyHint": "Parte do volume gerado que foi útil (sem o que passou do limite de pilhas): geração útil ÷ volume. Quem joga as habilidades todas de uma vez tem volume alto e eficiência baixa. Traço = sem dado (logs enviados antes do site guardar a geração útil)",
     "api.tooManyAttempts": "Muitas senhas erradas. Tente de novo mais tarde.",
     "nav.import": "Importar logs",
     "page.import.title": "Importar logs",
@@ -797,6 +800,9 @@ export const DICT: Record<Lang, Dict> = {
     "scope.squad": "Squad",
     "scope.group": "Group",
     "scope.self": "Self",
+    "scope.useful": "Squad useful",
+    "boon.efficiency": "Efficiency",
+    "boon.efficiencyHint": "Share of the generated volume that was useful (without what went past the stack limit): useful generation ÷ volume. Whoever casts all skills at once gets a high volume and a low efficiency. Dash = no data (logs uploaded before the site stored useful generation)",
     "api.tooManyAttempts": "Too many wrong passwords. Try again later.",
     "nav.import": "Import logs",
     "page.import.title": "Import logs",
@@ -897,7 +903,7 @@ export const DICT: Record<Lang, Dict> = {
 
 /** Nome das métricas em inglês (o português fica em STAT_META). */
 type StatEn = { label: string; short: string; hint?: string };
-const BASE_EN: Record<Exclude<StatKey, ScopedKey | GroupUpKey>, StatEn> = {
+const BASE_EN: Record<Exclude<StatKey, ScopedKey | GroupUpKey | EffKey>, StatEn> = {
   damage: { label: "Damage", short: "Damage", hint: "Damage to enemy players (WvW) or to the target (PvE)" },
   powerDamage: { label: "Power damage", short: "Power" },
   condiDamage: { label: "Condition damage", short: "Condi" },
@@ -961,6 +967,13 @@ const scopedEn = (): Record<ScopedKey, StatEn> =>
     ),
   ) as Record<ScopedKey, StatEn>;
 
+const EFF_HINT_EN =
+  "Volume generated for the squad without what went past the stack limit (overstack): what actually counted. Whoever casts all skills at once gets a high volume and a low useful generation. Only logs uploaded after the site started storing it have it";
+
+/** Cada boon "Out" (squad) ganha a geração útil, com o mesmo nome e a dica do que ela mede. */
+const effEn = (): Record<EffKey, StatEn> =>
+  Object.fromEntries(BOON_BASES.map((b) => [`${b}Eff`, { label: `Useful ${BASE_EN[`${b}Out`].label}`, short: `${BASE_EN[`${b}Out`].short} useful`, hint: EFF_HINT_EN }])) as Record<EffKey, StatEn>;
+
 const GROUP_UP_HINT_EN =
   "Average uptime of the player's group (whoever is in the same squad group, the player included), over the player's active time. It measures the group's result, not only what the player does: two supports in the same group get the same value";
 
@@ -968,7 +981,7 @@ const GROUP_UP_HINT_EN =
 const groupUpEn = (): Record<GroupUpKey, StatEn> =>
   Object.fromEntries(GROUP_UP_BASES.map((b) => [`${b}GroupUp`, { label: `${BASE_EN[`${b}Up`].label} in group`, short: `${BASE_EN[`${b}Up`].short} grp.`, hint: GROUP_UP_HINT_EN }])) as Record<GroupUpKey, StatEn>;
 
-export const STAT_EN: Record<StatKey, StatEn> = { ...BASE_EN, ...scopedEn(), ...groupUpEn() };
+export const STAT_EN: Record<StatKey, StatEn> = { ...BASE_EN, ...scopedEn(), ...effEn(), ...groupUpEn() };
 
 /** Nome, abreviação e dica de uma métrica no idioma (português = o que está em STAT_META). */
 export function statText(key: StatKey, lang: Lang): { label: string; short: string; hint?: string } {

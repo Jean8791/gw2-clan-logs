@@ -1,8 +1,8 @@
-import { BOON_SCOPES, bestValue, hasStatData, isUptimeStat, STAT_GROUPS, STAT_META, statsOfGroup, statText, statValue, type BoonScope, type StatGroup, type StatKey, type Stats, type TagCover, type TimeAdjust, type ValueMode } from "@gw2logs/shared";
+import { BOON_SCOPES, bestValue, boonEfficiency, type BoonBase, hasStatData, isUptimeStat, STAT_GROUPS, STAT_META, statsOfGroup, statText, statValue, type BoonScope, type StatGroup, type StatKey, type Stats, type TagCover, type TimeAdjust, type ValueMode } from "@gw2logs/shared";
 import { BuffIcon } from "./MediaIcon";
 import type { Column } from "./DataTable";
 import { Segmented, cx } from "./ui";
-import { stat } from "../lib/format";
+import { dec, stat } from "../lib/format";
 import { getLang, t } from "../lib/i18n";
 
 export type { ValueMode };
@@ -59,6 +59,22 @@ export function statColumnsFor<T extends Stats & { activeMs: number }>(keys: Sta
       },
     } satisfies Column<T>;
   });
+}
+
+/** Eficiência do boon: a parte do volume gerado que foi útil (sem o overstack). Só tem sentido onde há as duas métricas (volume e geração útil). */
+export function efficiencyColumn<T extends Stats>(base: BoonBase): Column<T> {
+  return {
+    id: `${base}Efficiency`,
+    label: t("boon.efficiency"),
+    header: t("boon.efficiency"),
+    title: t("boon.efficiencyHint"),
+    align: "right",
+    sort: (r: T) => boonEfficiency(r, base),
+    cell: (r: T) => {
+      const e = boonEfficiency(r, base);
+      return <span className={e === 0 ? "text-faint" : "text-text"}>{e === 0 ? "—" : `${dec(e * 100, 1)}%`}</span>;
+    },
+  };
 }
 
 const SORT_BY_GROUP: Record<StatGroup, StatKey> = { offense: "damage", support: "strips", boons: "stabOut", uptime: "stabUp", defense: "damageTaken" };

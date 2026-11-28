@@ -1,10 +1,10 @@
 import { GitCompareArrows, Link2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { boonViewKeys, BOON_VIEW_BASES, filtersToQuery, PAGE_SIZE, ROUTES, statsOfGroup, statText, STAT_KEYS, type BoonScope, type BoonViewBase, type RankingRow, type StatGroup, type StatKey } from "@gw2logs/shared";
+import { boonViewKeys, BOON_VIEW_BASES, filtersToQuery, PAGE_SIZE, ROUTES, statsOfGroup, statText, STAT_KEYS, type BoonBase, type BoonScope, type BoonViewBase, type RankingRow, type StatGroup, type StatKey } from "@gw2logs/shared";
 import { DataTable, type Column } from "../components/DataTable";
 import { FilterBar } from "../components/FilterBar";
-import { defaultSort, GroupTabs, pickerView, ModeToggle, statColumnsFor, type ValueMode } from "../components/statColumns";
+import { defaultSort, efficiencyColumn, GroupTabs, pickerView, ModeToggle, statColumnsFor, type ValueMode } from "../components/statColumns";
 import { GuildTag, NoAllianceNote, PlayerLink, Profession } from "../components/badges";
 import { Button, Card, Empty, ErrorBox, Loading, PageHeader, Select } from "../components/ui";
 import { useRanking } from "../lib/api";
@@ -31,6 +31,7 @@ export function RankingPage() {
   // com um boon escolhido, a tabela mostra as métricas dele lado a lado (volume para squad, grupo e si, uptime e uptime no grupo)
   const oneBoon = group === "boons" && boon !== "all";
   const keys: StatKey[] = oneBoon ? boonViewKeys(boon) : statsOfGroup(group, scope);
+  const effKey = oneBoon ? keys.find((k) => k.endsWith("Eff")) : undefined;
   const sort = oneBoon ? { id: (keys.find((k) => k.endsWith("GroupUp")) ?? keys[0]!) as StatKey, desc: true } : defaultSort(group, scope);
 
   const rows = useMemo(() => (data?.rows ?? []).filter((r) => r.activeMs >= minMinutes * 60000), [data, minMinutes]);
@@ -90,6 +91,7 @@ export function RankingPage() {
       cell: (r) => <span className="text-muted">{Math.round((r.supportFights / r.fights) * 100)}%</span>,
     },
     ...statColumnsFor(keys, mode, rows, data ? { baseline: data.baseline, refMs: data.referenceMs } : undefined),
+    ...(effKey ? [efficiencyColumn<RankingRow>(effKey.slice(0, -3) as BoonBase)] : []),
   ];
 
   const copyLink = async () => {
