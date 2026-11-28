@@ -1,4 +1,4 @@
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQueries, useQuery } from "@tanstack/react-query";
 import {
   filtersToQuery,
   PAGE_SIZE,
@@ -12,7 +12,9 @@ import {
   type PlayerOptions,
   type PlayerProfile,
   type PlayerSkill,
+  type PlayerSupportSkill,
   type RankingRow,
+  type SupportKind,
   type UploadResult,
 } from "@gw2logs/shared";
 
@@ -101,6 +103,40 @@ export const usePlayerOptions = (account: string, f: Filters) =>
 
 export const usePlayerSkills = (account: string, f: Filters) =>
   useQuery({ queryKey: ["player-skills", account, f], queryFn: () => get<PlayerSkill[]>(withFilters(`/api/players/${encodeURIComponent(account)}/skills`, f)) });
+
+/** Cura ou barreira do jogador por habilidade (só de quem grava com o Healing Stats). */
+export const usePlayerSupportSkills = (account: string, f: Filters, kind: SupportKind, enabled = true) =>
+  useQuery({
+    queryKey: ["player-support-skills", account, f, kind],
+    enabled,
+    queryFn: () => get<PlayerSupportSkill[]>(withFilters(`/api/players/${encodeURIComponent(account)}/support-skills`, f, { kind })),
+  });
+
+/** Uma habilidade de um jogador na comparação: o total e a parte (%) que ela é do total dele, para dano, cura ou barreira. */
+export interface SkillShare {
+  /** identifica a habilidade (a direta e o efeito de mesmo id são linhas diferentes) */
+  key: string;
+  skillId: number;
+  name: string | null;
+  indirect: boolean;
+  total: number;
+  pct: number;
+}
+
+/** As habilidades de vários jogadores, na mesma forma para dano, cura e barreira (a ordem é a dos jogadores). */
+export const usePlayersSkills = (accounts: string[], f: Filters, kind: "damage" | SupportKind) =>
+  useQueries({
+    queries: accounts.map((account) => ({
+      queryKey: ["player-skill-shares", account, f, kind],
+      queryFn: async (): Promise<SkillShare[]> => {
+        const base = `/api/players/${encodeURIComponent(account)}`;
+        if (kind === "damage") {
+          return (await get<PlayerSkill[]>(withFilters(`${base}/skills`, f))).map((s) => ({ key: `s${s.skillId}`, skillId: s.skillId, name: s.name, indirect: false, total: s.damage, pct: s.pct }));
+        }
+        return (await get<PlayerSupportSkill[]>(withFilters(`${base}/support-skills`, f, { kind }))).map((s) => ({ key: `${s.indirect ? "b" : "s"}${s.skillId}`, skillId: s.skillId, name: s.name, indirect: s.indirect, total: s.amount, pct: s.pct }));
+      },
+    })),
+  });
 
 export const useCompare = (accounts: string[], f: Filters) =>
   useQuery({

@@ -410,6 +410,25 @@ export interface PlayerSkill {
   avgHit: number;
 }
 
+/** O que um jogador curou ou protegeu: cura ou barreira. */
+export type SupportKind = "heal" | "barrier";
+export const SUPPORT_KINDS: SupportKind[] = ["heal", "barrier"];
+
+/** Cura ou barreira de um jogador por habilidade, somada nas lutas filtradas. `indirect`: o id é de um buff (cura que vem de um efeito). */
+export interface PlayerSupportSkill {
+  skillId: number;
+  name: string | null;
+  indirect: boolean;
+  amount: number;
+  /** parte da cura que foi em jogadores caídos (zero na barreira) */
+  downedAmount: number;
+  hits: number;
+  /** % do total de cura (ou de barreira) em habilidades (0 a 100) */
+  pct: number;
+  /** cura (ou barreira) média por acerto */
+  avgHit: number;
+}
+
 export interface GuildSummary extends Guild {
   players: number;
   fights: number;
