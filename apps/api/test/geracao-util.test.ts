@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { boonVolumeUtilization, cardOptions, DICT, emptyStats, inScope, STAT_EN, STAT_KEYS, STAT_META, statsOfGroup } from "@gw2logs/shared";
+import { cardOptions, DICT, emptyStats, inScope, STAT_EN, STAT_KEYS, STAT_META, statsOfGroup } from "@gw2logs/shared";
 import { openDb, type DB } from "../src/db.js";
 import { extractFight } from "../src/ingest.js";
 import * as q from "../src/queries.js";
@@ -66,20 +66,6 @@ describe("métricas <boon>Eff: ficam na aba Boons, no alcance \"effective\"", ()
     expect(opcoes).toContain("stabEff");
     expect(opcoes).not.toContain("stabGroup");
     expect(opcoes).not.toContain("stabSelf");
-  });
-});
-
-describe("boonVolumeUtilization: o aproveitamento do volume (geração efetiva ÷ volume)", () => {
-  it("é a geração efetiva dividida pelo volume (de 0 a 1)", () => {
-    expect(boonVolumeUtilization({ ...emptyStats(), stabOut: 3, stabEff: 2.4 }, "stab")).toBeCloseTo(0.8, 9);
-  });
-
-  it("sem volume gerado não há eficiência (zero, sem dividir por zero)", () => {
-    expect(boonVolumeUtilization(emptyStats(), "stab")).toBe(0);
-  });
-
-  it("nunca passa de 1, mesmo quando o arredondamento do log faz a efetiva passar do volume", () => {
-    expect(boonVolumeUtilization({ ...emptyStats(), quickOut: 1, quickEff: 1.01 }, "quick")).toBe(1);
   });
 });
 

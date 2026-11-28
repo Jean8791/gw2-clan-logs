@@ -35,6 +35,7 @@ const dayStatsDdl = (name: string, statCols: string, ifNotExists = false) => `
       active_ms     INTEGER NOT NULL DEFAULT 0,
       dist_cover_ms REAL NOT NULL DEFAULT 0,
       near_cover_ms REAL NOT NULL DEFAULT 0,
+      gen_cover_ms  REAL NOT NULL DEFAULT 0,
       ${statCols},
       PRIMARY KEY (day, mode, account, profession, role, guild_id, week)
     );`;
@@ -113,6 +114,7 @@ function migrate(db: DB) {
       dist_to_com   REAL,
       dist_cover_ms REAL NOT NULL DEFAULT 0,   -- tempo (ms) que o dado da tag cobre: 0 nos logs lidos sem replay
       near_cover_ms REAL NOT NULL DEFAULT 0,   -- idem, para o tempo perto da tag (precisa das posições)
+      gen_cover_ms  REAL NOT NULL DEFAULT 0,   -- tempo (ms) em que o log trouxe a geração efetiva dos boons (squadBuffs e squadBuffVolumes): 0 nos logs sem ela
       ${statCols},
       PRIMARY KEY (fight_id, account)
     );
@@ -203,14 +205,16 @@ function migrate(db: DB) {
     db.exec(`ALTER TABLE player_stats ADD COLUMN ${STAT_COL[k]} REAL NOT NULL DEFAULT 0`);
     if (k.endsWith("GroupUp")) addedGroupUptime = true;
   }
-  for (const col of ["dist_cover_ms", "near_cover_ms"]) {
+  for (const col of ["dist_cover_ms", "near_cover_ms", "gen_cover_ms"]) {
     if (!have.has(col)) db.exec(`ALTER TABLE player_stats ADD COLUMN ${col} REAL NOT NULL DEFAULT 0`);
   }
+  const addedGenCover = !have.has("gen_cover_ms");
   // o resumo diário tem as mesmas colunas de métrica: métrica nova entra nas duas tabelas
   const haveDay = new Set((db.pragma("table_info(day_stats)") as { name: string }[]).map((c) => c.name));
   for (const k of STAT_KEYS) {
     if (!haveDay.has(STAT_COL[k])) db.exec(`ALTER TABLE day_stats ADD COLUMN ${STAT_COL[k]} REAL NOT NULL DEFAULT 0`);
   }
+  if (!haveDay.has("gen_cover_ms")) db.exec("ALTER TABLE day_stats ADD COLUMN gen_cover_ms REAL NOT NULL DEFAULT 0");
   addWeekToDayStats(db, statCols);
   const haveFights = new Set((db.pragma("table_info(fights)") as { name: string }[]).map((c) => c.name));
   for (const col of ["enemy_downs", "enemy_deaths"]) {
@@ -226,6 +230,7 @@ function migrate(db: DB) {
     db.prepare("UPDATE users SET verified_at = ?").run(new Date().toISOString());
   }
   if (addedGroupUptime) backfillGroupUptime(db);
+  if (addedGenCover) backfillGenCover(db);
   dropGlobalShaUnique(db);
   db.exec(`
     CREATE INDEX IF NOT EXISTS ix_fights_time ON fights(time_start);
@@ -248,6 +253,19 @@ function addWeekToDayStats(db: DB, statCols: string) {
     db.exec(`INSERT INTO day_stats_novo (${cols.join(", ")}) SELECT ${cols.join(", ")} FROM day_stats`);
     db.exec("DROP TABLE day_stats");
     db.exec("ALTER TABLE day_stats_novo RENAME TO day_stats");
+    db.exec("DELETE FROM day_snapshots WHERE frozen = 0");
+  })();
+}
+
+/**
+ * A cobertura da geração efetiva (`gen_cover_ms`) nasce com o banco. As lutas que já tinham geração efetiva (a coluna `<boon>_eff` só foi
+ * gravada por quem a leu do log) passam a cobrir o tempo ativo todo; as demais ficam com 0 (sem dado). Os dias ainda abertos do resumo diário
+ * são refeitos com a cobertura; os congelados ficam como estão.
+ */
+function backfillGenCover(db: DB) {
+  const eff = STAT_KEYS.filter((k) => k.endsWith("Eff")).map((k) => `${STAT_COL[k]} > 0`);
+  db.transaction(() => {
+    db.exec(`UPDATE player_stats SET gen_cover_ms = active_ms WHERE ${eff.join(" OR ")}`);
     db.exec("DELETE FROM day_snapshots WHERE frozen = 0");
   })();
 }

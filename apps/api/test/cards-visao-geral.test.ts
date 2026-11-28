@@ -7,7 +7,7 @@ import {
 const MIN = 120_000;
 /** Jogador com `min` minutos ativos e as métricas dadas. */
 const jogador = (account: string, min: number, o: Partial<RankingRow> = {}): RankingRow =>
-  ({ ...emptyStats(), fights: 1, distCoverMs: 0, nearCoverMs: 0, name: account, profession: null, professions: [], guildId: null, supportFights: 0, account, activeMs: min * 60_000, ...o });
+  ({ ...emptyStats(), fights: 1, distCoverMs: 0, nearCoverMs: 0, genCoverMs: 0, name: account, profession: null, professions: [], guildId: null, supportFights: 0, account, activeMs: min * 60_000, ...o });
 const contas = (l: { row: { account: string } }[]) => l.map((x) => x.row.account);
 
 describe("cards da Visão geral: o que cada card oferece", () => {
@@ -90,7 +90,7 @@ describe("topByCard: o top de cada card", () => {
 
   it("uptime e boon: o valor não é por minuto (é % do tempo ou a média do volume) e sai ajustado pelo tempo jogado", () => {
     // média geral do filtro: 100 min ativos com 50% de estabilidade
-    const geral = { ...emptyStats(), fights: 10, distCoverMs: 0, nearCoverMs: 0, activeMs: 100 * 60_000, stabUp: 0.5 * 100 * 60_000 };
+    const geral = { ...emptyStats(), fights: 10, distCoverMs: 0, nearCoverMs: 0, genCoverMs: 0, activeMs: 100 * 60_000, stabUp: 0.5 * 100 * 60_000 };
     const longo = jogador("longo", 100, { stabUp: 0.9 * 100 * 60_000 }); // 90% do tempo, muito tempo jogado
     const curto = jogador("curto", 2, { stabUp: 1.0 * 2 * 60_000 }); // 100% do tempo, mas só 2 min
 

@@ -34,6 +34,8 @@ export function RankingPage() {
   const effKey = oneBoon ? keys.find((k) => k.endsWith("Eff")) : undefined;
   const sort = oneBoon ? { id: (keys.find((k) => k.endsWith("GroupUp")) ?? keys[0]!) as StatKey, desc: true } : defaultSort(group, scope);
 
+  // boons e uptime saem ajustados pelo tempo jogado; o aproveitamento usa os mesmos valores
+  const adjust = data ? { baseline: data.baseline, refMs: data.referenceMs } : undefined;
   const rows = useMemo(() => (data?.rows ?? []).filter((r) => r.activeMs >= minMinutes * 60000), [data, minMinutes]);
 
   const toggle = (account: string) =>
@@ -90,8 +92,8 @@ export function RankingPage() {
       sort: (r) => r.supportFights / r.fights,
       cell: (r) => <span className="text-muted">{Math.round((r.supportFights / r.fights) * 100)}%</span>,
     },
-    ...statColumnsFor(keys, mode, rows, data ? { baseline: data.baseline, refMs: data.referenceMs } : undefined),
-    ...(effKey ? [utilizationColumn<RankingRow>(effKey.slice(0, -3) as BoonBase)] : []),
+    ...statColumnsFor(keys, mode, rows, adjust),
+    ...(effKey ? [utilizationColumn<RankingRow>(effKey.slice(0, -3) as BoonBase, adjust)] : []),
   ];
 
   const copyLink = async () => {

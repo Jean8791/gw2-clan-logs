@@ -47,6 +47,8 @@ export interface ExtractedPlayer extends Stats {
   /** tempo (ms) coberto pelo dado da tag: 0 quando o log não tem replay */
   distCoverMs: number;
   nearCoverMs: number;
+  /** tempo (ms) em que o log trouxe a geração efetiva e o volume do jogador; 0 se não trouxe (ver GenCover em shared) */
+  genCoverMs: number;
   skills: ExtractedSkill[];
   supportSkills: ExtractedSupportSkill[];
   skillUsage: ExtractedSkillUsage[];
@@ -304,10 +306,14 @@ export function extractFight(r: J): ExtractedFight {
         if (key) s[key] = num(arr(b, "buffVolumeData")[0], "outgoing");
       }
     }
-    // Geração efetiva: o `generation` de squadBuffs. O volume (`outgoing`) é outra conta do Elite Insights e inclui também a perda registrada (`wasted`)
-    for (const b of arr(p, "squadBuffs")) {
-      const key = EFFECTIVE_BOONS[num(b, "id")];
-      if (key) s[key] = num(arr(b, "buffData")[0], "generation");
+    // Geração efetiva: o `generation` de squadBuffs. O volume (`outgoing`) é outra conta do Elite Insights e inclui também a perda registrada (`wasted`).
+    // Só vale com os dois no log: num EI antigo, sem squadBuffVolumes, o volume cai na própria geração (abaixo), e a razão entre os dois seria 100% por construção.
+    const hasGeneration = arr(p, "squadBuffs").length > 0 && arr(p, "squadBuffVolumes").length > 0;
+    if (hasGeneration) {
+      for (const b of arr(p, "squadBuffs")) {
+        const key = EFFECTIVE_BOONS[num(b, "id")];
+        if (key) s[key] = num(arr(b, "buffData")[0], "generation");
+      }
     }
     if (!arr(p, "squadBuffVolumes").length) {
       for (const b of arr(p, "squadBuffs")) {
@@ -333,6 +339,7 @@ export function extractFight(r: J): ExtractedFight {
       distToCom: typeof statsAll.distToCom === "number" ? statsAll.distToCom : null,
       distCoverMs: tag.distCoverMs,
       nearCoverMs: tag.nearCoverMs,
+      genCoverMs: hasGeneration ? activeMs : 0,
       skills: skillDamage(p, targetIdx, skillMap, buffMap),
       supportSkills: supportSkills(p, skillMap, buffMap),
       skillUsage: skillUsage(p, skillMap, buffMap),
@@ -381,6 +388,7 @@ function mergeSameAccount(players: ExtractedPlayer[]): ExtractedPlayer[] {
     merged.activeMs = group.reduce((a, p) => a + p.activeMs, 0);
     merged.distCoverMs = group.reduce((a, p) => a + p.distCoverMs, 0);
     merged.nearCoverMs = group.reduce((a, p) => a + p.nearCoverMs, 0);
+    merged.genCoverMs = group.reduce((a, p) => a + p.genCoverMs, 0);
     const skills = new Map<number, ExtractedSkill>();
     for (const sk of group.flatMap((p) => p.skills)) {
       const cur = skills.get(sk.id) ?? { ...sk, damage: 0, hits: 0, connectedHits: 0 };

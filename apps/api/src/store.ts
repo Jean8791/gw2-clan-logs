@@ -7,7 +7,7 @@ import type { ExtractedFight, ExtractedPlayer } from "./ingest.js";
  * substitui o nome de habilidade já salvo. Num .json enviado pelo usuário o nome só entra se ainda estiver vazio (a tabela é de todos).
  */
 export function saveFight(db: DB, id: string, f: ExtractedFight, mapName: string | null, hasReport: boolean, trusted: boolean) {
-  const cols = ["fight_id", "account", "name", "profession", "guild_id", "grp", "commander", "role", "active_ms", "dist_to_com", "dist_cover_ms", "near_cover_ms", ...STAT_KEYS.map((k) => STAT_COL[k])];
+  const cols = ["fight_id", "account", "name", "profession", "guild_id", "grp", "commander", "role", "active_ms", "dist_to_com", "dist_cover_ms", "near_cover_ms", "gen_cover_ms", ...STAT_KEYS.map((k) => STAT_COL[k])];
   const insertPlayer = db.prepare(`INSERT OR REPLACE INTO player_stats (${cols.join(",")}) VALUES (${cols.map(() => "?").join(",")})`);
   const insertGuild = db.prepare("INSERT OR IGNORE INTO guilds (id) VALUES (?)");
 
@@ -48,7 +48,7 @@ export function saveFight(db: DB, id: string, f: ExtractedFight, mapName: string
     for (const p of f.players) {
       if (p.guildId) insertGuild.run(p.guildId);
       insertPlayer.run(
-        id, p.account, p.name, p.profession, p.guildId, p.group, p.commander ? 1 : 0, roleOf(p), Math.round(p.activeMs), p.distToCom, p.distCoverMs, p.nearCoverMs,
+        id, p.account, p.name, p.profession, p.guildId, p.group, p.commander ? 1 : 0, roleOf(p), Math.round(p.activeMs), p.distToCom, p.distCoverMs, p.nearCoverMs, p.genCoverMs,
         ...STAT_KEYS.map((k) => p[k]),
       );
       for (const sk of p.skills) {

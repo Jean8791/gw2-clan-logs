@@ -272,11 +272,20 @@ export const STAT_GROUPS: { id: StatGroup; label: string }[] = [
 export const TAG_COVER = { tagNear: "nearCoverMs", tagDist: "distCoverMs" } as const;
 export type TagCover = { [C in (typeof TAG_COVER)[keyof typeof TAG_COVER]]: number };
 export const isTagStat = (k: StatKey): k is keyof typeof TAG_COVER => k in TAG_COVER;
-/** A linha tem o dado da métrica? Só as da tag podem faltar (log lido sem replay); sem dado a tela mostra traço, e não 0. */
-export const hasStatData = (k: StatKey, r: Partial<TagCover>): boolean => !isTagStat(k) || (r[TAG_COVER[k]] ?? 0) > 0;
+
+/**
+ * Cobertura da geração efetiva (`<boon>Eff`): o tempo ativo (ms) das linhas em que o log trouxe a geração (`squadBuffs`) e o volume
+ * (`squadBuffVolumes`) do jogador. Logs anteriores ao site guardá-la, e logs de EI antigo (cujo volume vem da própria geração), têm 0.
+ */
+export type GenCover = { genCoverMs: number };
+export type Cover = TagCover & GenCover;
+export const isGenStat = (k: StatKey): boolean => k.endsWith("Eff");
+
+/** A linha tem o dado da métrica? Podem faltar as da tag (log lido sem replay) e a geração efetiva (log sem ela); sem dado a tela mostra N/D ou traço, e não 0. */
+export const hasStatData = (k: StatKey, r: Partial<Cover>): boolean => (isTagStat(k) ? (r[TAG_COVER[k]] ?? 0) > 0 : isGenStat(k) ? (r.genCoverMs ?? 0) > 0 : true);
 
 /** O melhor valor da métrica entre as linhas que têm o dado (o menor, se menos é melhor); 0 sem nenhuma. Quem não tem dado não disputa. */
-export function bestValue<T extends Partial<TagCover>>(k: StatKey, rows: T[], value: (r: T) => number): number {
+export function bestValue<T extends Partial<Cover>>(k: StatKey, rows: T[], value: (r: T) => number): number {
   const values = rows.filter((r) => hasStatData(k, r)).map(value);
   if (!values.length) return 0;
   return STAT_META[k].higherIsBetter ? Math.max(...values) : Math.min(...values);
@@ -322,14 +331,32 @@ export function boonViewKeys(base: BoonViewBase): StatKey[] {
 /** Primeira métrica de um grupo (nos boons, no alcance pedido): para onde o gráfico vai quando o grupo muda. */
 export const metricForGroup = (g: StatGroup, scope: BoonScope = "squad"): StatKey => statsOfGroup(g, scope)[0]!;
 
+/** O aproveitamento do volume de um boon: o valor (0 ou mais; null = N/D), por que é N/D e se a geração passou do volume. */
+export interface Utilization {
+  value: number | null;
+  reason?: "noData" | "partial" | "noVolume";
+  exceeds: boolean;
+}
+
+/** Tolerância do arredondamento (3 casas no log) antes de avisar que a geração passou do volume. */
+const UTILIZATION_TOLERANCE = 1.005;
+
 /**
- * Aproveitamento do volume (BVU, métrica derivada do site, não do Elite Insights): a geração efetiva sobre o volume gerado (0 a 1). A parte que
- * falta é a perda registrada, que não é erro do jogador (ver docs/research). Sem volume, 0. Por ora limitado a 1; a Etapa 2 troca isso por um aviso.
+ * Aproveitamento do volume (BVU, métrica derivada do site, não do Elite Insights): a geração efetiva sobre o volume gerado, com os mesmos
+ * valores (inclusive o ajuste por tempo jogado, com `adjust`) das colunas vizinhas, para elas dividirem até o número mostrado. A parte que
+ * falta é a perda registrada, que não é erro do jogador (ver docs/research). É N/D, e não 0 nem 100%, quando falta a geração efetiva
+ * (`noData`), quando só parte do período a tem (`partial`: as lutas antigas puxariam o número) ou quando não há volume (`noVolume`).
+ * Não é limitado a 100%: a geração acima do volume (`exceeds`) é divergência do Elite Insights para ser vista, não escondida.
  */
-export const boonVolumeUtilization = (a: Stats, base: BoonBase): number => {
-  const out = a[`${base}Out`];
-  return out > 0 ? Math.min(1, a[`${base}Eff`] / out) : 0;
-};
+export function boonUtilization(r: Stats & { activeMs: number; genCoverMs?: number }, base: BoonBase, adjust?: TimeAdjust): Utilization {
+  const cover = r.genCoverMs ?? 0;
+  if (cover <= 0) return { value: null, reason: "noData", exceeds: false };
+  if (cover < r.activeMs * 0.999) return { value: null, reason: "partial", exceeds: false };
+  const out = statValue(`${base}Out`, "perMin", r, adjust);
+  if (out <= 0) return { value: null, reason: "noVolume", exceeds: false };
+  const value = statValue(`${base}Eff`, "perMin", r, adjust) / out;
+  return { value, exceeds: value > UTILIZATION_TOLERANCE };
+}
 
 /** A mesma métrica de boon em outro alcance (stabOut vira stabGroup ou stabSelf); métricas que não são de boon não mudam. */
 export function inScope(k: StatKey, scope: BoonScope): StatKey {
@@ -390,6 +417,8 @@ export interface PlayerFight extends Stats {
   /** tempo coberto pelo dado da tag (0 = o log não tem) */
   distCoverMs: number;
   nearCoverMs: number;
+  /** tempo coberto pela geração efetiva dos boons (0 = o log não a tem) */
+  genCoverMs: number;
 }
 
 export interface FightDetail {
@@ -399,7 +428,7 @@ export interface FightDetail {
 }
 
 /** Totais de um jogador (ou de um grupo) num conjunto de lutas. */
-export interface Aggregate extends Stats, TagCover {
+export interface Aggregate extends Stats, TagCover, GenCover {
   fights: number;
   activeMs: number;
 }

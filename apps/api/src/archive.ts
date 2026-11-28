@@ -23,9 +23,9 @@ const STAT_COLUMNS = STAT_KEYS.map((k) => STAT_COL[k]).join(", ");
  * atravessa o corte de sexta (23:03) gera uma linha por semana.
  */
 const SUMMARIZE_DAY = (where: string) => `
-  INSERT INTO day_stats (day, mode, account, profession, role, guild_id, week, name, last_seen, fights, active_ms, dist_cover_ms, near_cover_ms, ${STAT_COLUMNS})
+  INSERT INTO day_stats (day, mode, account, profession, role, guild_id, week, name, last_seen, fights, active_ms, dist_cover_ms, near_cover_ms, gen_cover_ms, ${STAT_COLUMNS})
   SELECT ${BATTLE_DAY}, COALESCE(f.mode, ''), ps.account, COALESCE(ps.profession, ''), ps.role, COALESCE(ps.guild_id, ''), week_of(f.time_start), ps.name, MAX(f.time_start),
-         COUNT(*), SUM(ps.active_ms), SUM(ps.dist_cover_ms), SUM(ps.near_cover_ms), ${STAT_KEYS.map(sumOf).join(", ")}
+         COUNT(*), SUM(ps.active_ms), SUM(ps.dist_cover_ms), SUM(ps.near_cover_ms), SUM(ps.gen_cover_ms), ${STAT_KEYS.map(sumOf).join(", ")}
   FROM player_stats ps JOIN fights f ON f.id = ps.fight_id
   WHERE ${where} AND f.time_start IS NOT NULL AND ${BATTLE_DAY} = @day
   GROUP BY ${BATTLE_DAY}, COALESCE(f.mode, ''), ps.account, COALESCE(ps.profession, ''), ps.role, COALESCE(ps.guild_id, ''), week_of(f.time_start)`;

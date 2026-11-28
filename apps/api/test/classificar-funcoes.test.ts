@@ -20,6 +20,7 @@ const jogador = (id: string, over: Partial<Stats> & Partial<ExtractedPlayer> = {
   skills: [],
   supportSkills: [],
   skillUsage: [],
+  genCoverMs: 0,
   damage: 1000,
   ...over,
 });

@@ -3,6 +3,7 @@ import {
   battleDay,
   BATTLE_DAY_SHIFT_HOURS,
   FIGHT_SORT_KEYS,
+  isGenStat,
   isTagStat,
   referenceTimeMs,
   STAT_KEYS,
@@ -153,7 +154,7 @@ const statSelect = (k: (typeof STAT_KEYS)[number]) =>
   isTagStat(k) ? `CASE WHEN ps.${coverCol(k)} > 0 THEN ps.${STAT_COL[k]} * ps.active_ms / ps.${coverCol(k)} ELSE 0 END AS "${k}"` : `ps.${STAT_COL[k]} AS "${k}"`;
 const STAT_SELECT = STAT_KEYS.map(statSelect).join(", ");
 const PLAYER_COLS = `ps.fight_id AS fightId, ps.account, ps.name, ps.profession, ps.guild_id AS guildId, ps.grp AS "group",
-  ps.commander, ps.role, ps.active_ms AS activeMs, ps.dist_to_com AS distToCom, ps.dist_cover_ms AS distCoverMs, ps.near_cover_ms AS nearCoverMs, ${STAT_SELECT}`;
+  ps.commander, ps.role, ps.active_ms AS activeMs, ps.dist_to_com AS distToCom, ps.dist_cover_ms AS distCoverMs, ps.near_cover_ms AS nearCoverMs, ps.gen_cover_ms AS genCoverMs, ${STAT_SELECT}`;
 const toPlayer = <T extends PlayerFight>(r: any): T => ({ ...r, commander: !!r.commander });
 
 /**
@@ -165,14 +166,17 @@ const aggColumnOf = (k: (typeof STAT_KEYS)[number], a: "ps" | "ds") =>
   isTagStat(k)
     ? // soma sobre soma, só das lutas com o dado: Σ valor ÷ Σ coberto, reescalado para o tempo ativo (ver statSelect)
       `COALESCE(SUM(${a}.${STAT_COL[k]}) * 1.0 * SUM(${a}.active_ms) / NULLIF(SUM(${a}.${coverCol(k)}), 0), 0) AS "${k}"`
-    : STAT_META[k].format === "volume"
+    : isGenStat(k)
+      ? // a geração efetiva é a média só das lutas que a têm: Σ(valor × tempo) ÷ Σ coberto (as lutas sem ela têm 0 e não puxam a média)
+        `COALESCE(SUM(${a === "ps" ? `ps.${STAT_COL[k]} * ps.active_ms` : `ds.${STAT_COL[k]}`}) * 1.0 / NULLIF(SUM(${a}.gen_cover_ms), 0), 0) AS "${k}"`
+      : STAT_META[k].format === "volume"
       ? // o resumo diário (ds) já guarda o boon como Σ(valor × tempo ativo); nas lutas (ps) a conta é feita aqui
         `COALESCE(SUM(${a === "ps" ? `ps.${STAT_COL[k]} * ps.active_ms` : `ds.${STAT_COL[k]}`}) * 1.0 / NULLIF(SUM(${a}.active_ms), 0), 0) AS "${k}"`
       : `SUM(${a}.${STAT_COL[k]}) AS "${k}"`;
 const aggColumn = (k: (typeof STAT_KEYS)[number]) => aggColumnOf(k, "ps");
-const AGG_SELECT = `COUNT(*) AS fights, SUM(ps.active_ms) AS activeMs, SUM(ps.dist_cover_ms) AS distCoverMs, SUM(ps.near_cover_ms) AS nearCoverMs, ${STAT_KEYS.map(aggColumn).join(", ")}`;
+const AGG_SELECT = `COUNT(*) AS fights, SUM(ps.active_ms) AS activeMs, SUM(ps.dist_cover_ms) AS distCoverMs, SUM(ps.near_cover_ms) AS nearCoverMs, SUM(ps.gen_cover_ms) AS genCoverMs, ${STAT_KEYS.map(aggColumn).join(", ")}`;
 const toAggregate = (r: any): Aggregate => {
-  const a: any = { fights: r?.fights ?? 0, activeMs: r?.activeMs ?? 0, distCoverMs: r?.distCoverMs ?? 0, nearCoverMs: r?.nearCoverMs ?? 0 };
+  const a: any = { fights: r?.fights ?? 0, activeMs: r?.activeMs ?? 0, distCoverMs: r?.distCoverMs ?? 0, nearCoverMs: r?.nearCoverMs ?? 0, genCoverMs: r?.genCoverMs ?? 0 };
   for (const k of STAT_KEYS) a[k] = r?.[k] ?? 0;
   return a;
 };
@@ -323,7 +327,7 @@ function archiveConditions(month: string, fl: Filters): { where: string; params:
   return { where: where.join(" AND "), params };
 }
 
-const ARCHIVE_AGG = `SUM(ds.fights) AS fights, SUM(ds.active_ms) AS activeMs, SUM(ds.dist_cover_ms) AS distCoverMs, SUM(ds.near_cover_ms) AS nearCoverMs, ${STAT_KEYS.map((k) => aggColumnOf(k, "ds")).join(", ")}`;
+const ARCHIVE_AGG = `SUM(ds.fights) AS fights, SUM(ds.active_ms) AS activeMs, SUM(ds.dist_cover_ms) AS distCoverMs, SUM(ds.near_cover_ms) AS nearCoverMs, SUM(ds.gen_cover_ms) AS genCoverMs, ${STAT_KEYS.map((k) => aggColumnOf(k, "ds")).join(", ")}`;
 
 /**
  * O Ranking de um mês (ou de uma semana, com `fl.week`), somado do resumo diário (as lutas dele podem já ter sido apagadas pela retenção): as mesmas linhas, o mesmo
