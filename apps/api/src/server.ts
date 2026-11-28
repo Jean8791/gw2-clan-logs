@@ -8,7 +8,7 @@ import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest, 
 import multipart from "@fastify/multipart";
 import rateLimit from "@fastify/rate-limit";
 import fastifyStatic from "@fastify/static";
-import { MAX_JSON_MB, MAX_UPLOAD_MB, parseFilters, referenceTimeMs, type Filters, type UploadResult } from "@gw2logs/shared";
+import { isMonth, MAX_JSON_MB, MAX_UPLOAD_MB, parseFilters, referenceTimeMs, SUPPORT_KINDS, USAGE_KINDS, type Filters, type SupportKind, type UploadResult, type UsageKind } from "@gw2logs/shared";
 import { isAdmin, type User } from "./auth.js";
 import { apiUser, registerAuthRoutes, sessionUser } from "./auth-routes.js";
 import { paths, type Config } from "./config.js";
@@ -71,7 +71,7 @@ export async function buildApp(cfg: Config, opts: { logger?: FastifyServerOption
 
   // Limite de pedidos por IP (o IP do X-Forwarded-For só vale com TRUST_PROXY). Só a API conta: o site (HTML, JS e CSS), os ícones e o alerta de
   // fora do ar ficam de fora, para uma página que faz dezenas de pedidos, ou vários usuários atrás do mesmo IP, não esbarrem no limite.
-  // O login e o retorno do Discord têm um limite próprio e mais baixo (ver auth-routes.ts).
+  // O login, o retorno do Discord e a geração da chave do script têm um limite próprio e mais baixo (ver auth-routes.ts).
   if (cfg.rateLimit.perMin > 0 || cfg.rateLimit.authPerMin > 0) {
     await server.register(rateLimit, {
       global: cfg.rateLimit.perMin > 0,
@@ -291,6 +291,18 @@ export async function buildApp(cfg: Config, opts: { logger?: FastifyServerOption
     return d ?? reply.code(404).send({ error: "Fight not found.", code: "fightNotFound" });
   });
 
+  // habilidades de um jogador na luta: dano (padrão), cura e barreira (só de quem grava com o addon Healing Stats), usos (cast) e dano recebido (taken)
+  server.get<{ Params: { id: string; account: string } }>("/api/fights/:id/players/:account/skills", async (req, reply) => {
+    const kind = String((req.query as Record<string, unknown>).kind ?? "") || "damage";
+    if (kind !== "damage" && !(SUPPORT_KINDS as string[]).includes(kind) && !(USAGE_KINDS as string[]).includes(kind)) {
+      return reply.code(400).send({ error: "Use kind=damage, heal, barrier, cast or taken.", code: "badKind" });
+    }
+    if (!db.prepare("SELECT 1 FROM fights WHERE id = ?").get(req.params.id)) return reply.code(404).send({ error: "Fight not found.", code: "fightNotFound" });
+    const { id, account } = req.params;
+    if (kind === "damage") return q.fightPlayerSkills(db, id, account);
+    return (USAGE_KINDS as string[]).includes(kind) ? q.fightPlayerUsage(db, id, account, kind as UsageKind) : q.fightPlayerSupportSkills(db, id, account, kind as SupportKind);
+  });
+
   // relatório HTML completo do Elite Insights (rotação, linha do tempo, replay)
   server.get<{ Params: { id: string } }>("/api/fights/:id/report", async (req, reply) => {
     const id = req.params.id;
@@ -308,6 +320,26 @@ export async function buildApp(cfg: Config, opts: { logger?: FastifyServerOption
     return { rows, baseline: q.baseline(db, fl), referenceMs: referenceTimeMs(rows.map((r) => r.activeMs)) };
   });
 
+  // o Ranking de um mês, somado do resumo diário (vale mesmo depois de as lutas serem apagadas); só modo, guilda, função e classe filtram
+  server.get("/api/archive/months", async () => q.archiveMonths(db));
+  server.get("/api/archive/weeks", async () => q.archiveWeeks(db));
+  server.get("/api/archive/ranking", async (req, reply) => {
+    const month = String((req.query as Record<string, unknown>).month ?? "");
+    const fl = parseFilters(req.query as Record<string, string>);
+    if (!fl.week && !isMonth(month)) return reply.code(400).send({ error: "Use month=AAAA-MM or week=AAAA-MM-DD (the Friday the week starts).", code: "badMonth" });
+    const { rows, baseline } = q.archiveRanking(db, month, fl);
+    return { rows, baseline, referenceMs: referenceTimeMs(rows.map((r) => r.activeMs)) };
+  });
+
+  // o perfil de um jogador num mês ou semana arquivados (do resumo diário, vale depois de as lutas serem apagadas)
+  server.get<{ Params: { account: string } }>("/api/archive/players/:account", async (req, reply) => {
+    const month = String((req.query as Record<string, unknown>).month ?? "");
+    const fl = parseFilters(req.query as Record<string, string>);
+    if (!fl.week && !isMonth(month)) return reply.code(400).send({ error: "Use month=AAAA-MM or week=AAAA-MM-DD (the Friday the week starts).", code: "badMonth" });
+    const profile = q.archivePlayer(db, month, req.params.account, fl);
+    return profile ?? reply.code(404).send({ error: "Player not found.", code: "playerNotFound" });
+  });
+
   server.get<{ Params: { account: string } }>("/api/players/:account", async (req, reply) => {
     const prof = q.playerProfile(db, req.params.account, filtersOf(req));
     return prof ?? reply.code(404).send({ error: "Player not found.", code: "playerNotFound" });
@@ -320,6 +352,20 @@ export async function buildApp(cfg: Config, opts: { logger?: FastifyServerOption
   });
 
   server.get<{ Params: { account: string } }>("/api/players/:account/skills", async (req) => q.playerSkills(db, req.params.account, filtersOf(req)));
+
+  // cura ou barreira por habilidade (só de quem grava com o addon Healing Stats); sem kind, a cura
+  server.get<{ Params: { account: string } }>("/api/players/:account/support-skills", async (req, reply) => {
+    const kind = String((req.query as Record<string, unknown>).kind ?? "") || "heal";
+    if (!(SUPPORT_KINDS as string[]).includes(kind)) return reply.code(400).send({ error: "Use kind=heal or kind=barrier.", code: "badKind" });
+    return q.playerSupportSkills(db, req.params.account, filtersOf(req), kind as SupportKind);
+  });
+
+  // usos de cada habilidade (cast) ou dano recebido por habilidade (taken) do jogador
+  server.get<{ Params: { account: string } }>("/api/players/:account/skill-usage", async (req, reply) => {
+    const kind = String((req.query as Record<string, unknown>).kind ?? "") || "cast";
+    if (!(USAGE_KINDS as string[]).includes(kind)) return reply.code(400).send({ error: "Use kind=cast or kind=taken.", code: "badKind" });
+    return q.playerUsage(db, req.params.account, filtersOf(req), kind as UsageKind);
+  });
 
   server.get("/api/compare", async (req, reply) => {
     const qs = req.query as Record<string, string>;

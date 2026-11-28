@@ -1,10 +1,12 @@
 import fs from "node:fs/promises";
 import { retentionCutoff } from "@gw2logs/shared";
+import { snapshotDays } from "./archive.js";
 import type { paths } from "./config.js";
 import type { DB } from "./db.js";
 
-/** Apaga as lutas mais antigas que o prazo. */
+/** Apaga as lutas mais antigas que o prazo, depois de guardar o resumo dos dias que o prazo alcança (o que se apaga não volta). */
 export async function purgeOldFights(db: DB, p: ReturnType<typeof paths>, retentionDays: number, now = new Date()): Promise<number> {
+  snapshotDays(db, now, retentionDays);
   const cutoff = retentionCutoff(now, retentionDays);
   // lutas sem data (na fila ou com erro) valem pela data do envio
   const old = db.prepare("SELECT id FROM fights WHERE COALESCE(time_start, uploaded_at) < ?").all(cutoff) as { id: string }[];

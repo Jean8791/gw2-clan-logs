@@ -1,5 +1,5 @@
 import Database from "better-sqlite3";
-import { STAT_KEYS, type StatKey } from "@gw2logs/shared";
+import { STAT_KEYS, weekOf, type StatKey } from "@gw2logs/shared";
 
 export type DB = Database.Database;
 
@@ -14,10 +14,38 @@ export const STAT_COL: Record<StatKey, string> = Object.fromEntries(STAT_KEYS.ma
  */
 export const SCHEMA_VERSION = 5;
 
+/**
+ * O resumo de um dia de batalha por jogador. `week` é a semana da luta (a data da sexta em que ela começa, ver weekOf em shared), '' quando a
+ * luta cai na janela de 23:00 a 23:03 de sexta ou quando o dia foi resumido antes de a semana existir; um dia que atravessa o corte de sexta
+ * se divide em duas linhas por jogador. As métricas são somas, para a soma de vários dias dar o mesmo valor do Ranking; o boon em volume guarda
+ * Σ(valor × active_ms). profession e guild_id são '' quando não há (uma chave composta não trata dois NULL como iguais).
+ */
+const dayStatsDdl = (name: string, statCols: string, ifNotExists = false) => `
+    CREATE TABLE ${ifNotExists ? "IF NOT EXISTS " : ""}${name} (
+      day           TEXT NOT NULL,
+      mode          TEXT NOT NULL,
+      account       TEXT NOT NULL,
+      profession    TEXT NOT NULL,
+      role          TEXT NOT NULL,
+      guild_id      TEXT NOT NULL,
+      week          TEXT NOT NULL DEFAULT '',
+      name          TEXT,
+      last_seen     TEXT,
+      fights        INTEGER NOT NULL DEFAULT 0,
+      active_ms     INTEGER NOT NULL DEFAULT 0,
+      dist_cover_ms REAL NOT NULL DEFAULT 0,
+      near_cover_ms REAL NOT NULL DEFAULT 0,
+      gen_cover_ms  REAL NOT NULL DEFAULT 0,
+      ${statCols},
+      PRIMARY KEY (day, mode, account, profession, role, guild_id, week)
+    );`;
+
 export function openDb(file: string): DB {
   const db = new Database(file);
   db.pragma("journal_mode = WAL");
   db.pragma("foreign_keys = ON");
+  // a semana de uma luta, para o resumo diário (sem semana, ''); o SQLite não calcula a janela de sexta sozinho
+  db.function("week_of", { deterministic: true }, (iso: unknown) => weekOf(typeof iso === "string" ? iso : null) ?? "");
   migrate(db);
   return db;
 }
@@ -86,6 +114,7 @@ function migrate(db: DB) {
       dist_to_com   REAL,
       dist_cover_ms REAL NOT NULL DEFAULT 0,   -- tempo (ms) que o dado da tag cobre: 0 nos logs lidos sem replay
       near_cover_ms REAL NOT NULL DEFAULT 0,   -- idem, para o tempo perto da tag (precisa das posições)
+      gen_cover_ms  REAL NOT NULL DEFAULT 0,   -- tempo (ms) em que o log trouxe a geração efetiva dos boons (squadBuffs e squadBuffVolumes): 0 nos logs sem ela
       ${statCols},
       PRIMARY KEY (fight_id, account)
     );
@@ -115,6 +144,47 @@ function migrate(db: DB) {
     );
     CREATE INDEX IF NOT EXISTS ix_pskills_account ON player_skills(account);
 
+    -- cura e barreira por habilidade de cada jogador em cada luta (Healing Stats; some com a luta, pela retenção).
+    -- kind: heal | barrier; indirect: 1 quando skill_id é de um buff (o nome está na mesma tabela skills)
+    CREATE TABLE IF NOT EXISTS player_support_skills (
+      fight_id      TEXT NOT NULL REFERENCES fights(id) ON DELETE CASCADE,
+      account       TEXT NOT NULL,
+      skill_id      INTEGER NOT NULL,
+      kind          TEXT NOT NULL,
+      amount        REAL NOT NULL,
+      downed_amount REAL NOT NULL,
+      hits          INTEGER NOT NULL,
+      indirect      INTEGER NOT NULL,
+      PRIMARY KEY (fight_id, account, skill_id, kind, indirect)
+    );
+    CREATE INDEX IF NOT EXISTS ix_psupskills_account ON player_support_skills(account);
+
+    -- usos de cada habilidade (rotação) e dano recebido por habilidade, de cada jogador em cada luta (some com a luta, pela retenção).
+    -- kind: cast (amount = usos) | taken (amount = dano recebido); indirect: 1 quando skill_id é de um buff (condição)
+    CREATE TABLE IF NOT EXISTS player_skill_usage (
+      fight_id TEXT NOT NULL REFERENCES fights(id) ON DELETE CASCADE,
+      account  TEXT NOT NULL,
+      skill_id INTEGER NOT NULL,
+      kind     TEXT NOT NULL,
+      amount   REAL NOT NULL,
+      hits     INTEGER NOT NULL,
+      indirect INTEGER NOT NULL,
+      PRIMARY KEY (fight_id, account, skill_id, kind, indirect)
+    );
+    CREATE INDEX IF NOT EXISTS ix_pskillusage_account ON player_skill_usage(account);
+
+    -- resumo de cada dia de batalha, guardado antes de a retenção apagar as lutas (ver archive.ts). Uma linha por jogador, classe, função e guilda.
+    -- As métricas são somas, para a soma de vários dias dar o mesmo valor do Ranking; o boon em volume guarda Σ(valor × active_ms).
+    -- profession e guild_id são '' quando não há (uma chave composta não trata dois NULL como iguais).
+    ${dayStatsDdl("day_stats", statCols, true)}
+    -- signature: quais lutas o dia tinha quando foi resumido (muda quando entra, sai ou troca uma luta); frozen: a retenção já o alcançou
+    CREATE TABLE IF NOT EXISTS day_snapshots (
+      day       TEXT PRIMARY KEY,
+      built_at  TEXT NOT NULL,
+      signature TEXT NOT NULL,
+      frozen    INTEGER NOT NULL DEFAULT 0
+    );
+
     -- ícones baixados uma vez (chave ex.: "buff:1122"); não são apagados com as lutas antigas
     CREATE TABLE IF NOT EXISTS media (
       key          TEXT PRIMARY KEY,
@@ -129,17 +199,31 @@ function migrate(db: DB) {
   // CREATE TABLE IF NOT EXISTS não mexe numa tabela que já existe: métricas novas precisam de ALTER TABLE.
   // Os nomes das colunas vêm de STAT_KEYS (código), nunca de entrada do usuário.
   const have = new Set((db.pragma("table_info(player_stats)") as { name: string }[]).map((c) => c.name));
+  let addedGroupUptime = false;
+  let addedGenLoss = false;
   for (const k of STAT_KEYS) {
-    if (!have.has(STAT_COL[k])) db.exec(`ALTER TABLE player_stats ADD COLUMN ${STAT_COL[k]} REAL NOT NULL DEFAULT 0`);
+    if (have.has(STAT_COL[k])) continue;
+    db.exec(`ALTER TABLE player_stats ADD COLUMN ${STAT_COL[k]} REAL NOT NULL DEFAULT 0`);
+    if (k.endsWith("GroupUp")) addedGroupUptime = true;
+    if (k.endsWith("Waste")) addedGenLoss = true;
   }
-  for (const col of ["dist_cover_ms", "near_cover_ms"]) {
+  for (const col of ["dist_cover_ms", "near_cover_ms", "gen_cover_ms"]) {
     if (!have.has(col)) db.exec(`ALTER TABLE player_stats ADD COLUMN ${col} REAL NOT NULL DEFAULT 0`);
   }
+  // o resumo diário tem as mesmas colunas de métrica: métrica nova entra nas duas tabelas
+  const haveDay = new Set((db.pragma("table_info(day_stats)") as { name: string }[]).map((c) => c.name));
+  for (const k of STAT_KEYS) {
+    if (!haveDay.has(STAT_COL[k])) db.exec(`ALTER TABLE day_stats ADD COLUMN ${STAT_COL[k]} REAL NOT NULL DEFAULT 0`);
+  }
+  if (!haveDay.has("gen_cover_ms")) db.exec("ALTER TABLE day_stats ADD COLUMN gen_cover_ms REAL NOT NULL DEFAULT 0");
+  addWeekToDayStats(db, statCols);
   const haveFights = new Set((db.pragma("table_info(fights)") as { name: string }[]).map((c) => c.name));
   for (const col of ["enemy_downs", "enemy_deaths"]) {
     if (!haveFights.has(col)) db.exec(`ALTER TABLE fights ADD COLUMN ${col} INTEGER`);
   }
   if (!haveFights.has("process_ms")) db.exec("ALTER TABLE fights ADD COLUMN process_ms INTEGER");
+  // a versão da fórmula dos boons com que a luta foi lida (BOON_FORMULA_VERSION); NULL nas lutas anteriores à versão 3
+  if (!haveFights.has("boon_formula")) db.exec("ALTER TABLE fights ADD COLUMN boon_formula INTEGER");
   // dono da luta; as lutas anteriores ao login ficam sem dono até o primeiro usuário entrar
   if (!haveFights.has("owner_id")) db.exec("ALTER TABLE fights ADD COLUMN owner_id INTEGER REFERENCES users(id)");
   // última vez que o login conferiu o Discord (listas de usuários e servidores); quem já existe começa a contar da migração
@@ -148,6 +232,8 @@ function migrate(db: DB) {
     db.exec("ALTER TABLE users ADD COLUMN verified_at TEXT");
     db.prepare("UPDATE users SET verified_at = ?").run(new Date().toISOString());
   }
+  if (addedGroupUptime) backfillGroupUptime(db);
+  if (addedGenLoss) dropGenCover(db);
   dropGlobalShaUnique(db);
   db.exec(`
     CREATE INDEX IF NOT EXISTS ix_fights_time ON fights(time_start);
@@ -155,6 +241,56 @@ function migrate(db: DB) {
     CREATE INDEX IF NOT EXISTS ix_fights_owner ON fights(owner_id);
     CREATE UNIQUE INDEX IF NOT EXISTS ux_fights_owner_sha ON fights(owner_id, sha256);
   `);
+}
+
+/**
+ * O resumo diário de antes da semana não tem a coluna `week` na chave: a tabela é refeita (o SQLite não muda a chave com ALTER) e as linhas
+ * antigas ficam com semana ''. Os dias ainda abertos são refeitos com a semana na próxima rodada do resumo; os congelados (as lutas deles já
+ * foram apagadas) ficam como estão, só no mês.
+ */
+function addWeekToDayStats(db: DB, statCols: string) {
+  const cols = (db.pragma("table_info(day_stats)") as { name: string }[]).map((c) => c.name);
+  if (cols.includes("week")) return;
+  db.transaction(() => {
+    db.exec(dayStatsDdl("day_stats_novo", statCols));
+    db.exec(`INSERT INTO day_stats_novo (${cols.join(", ")}) SELECT ${cols.join(", ")} FROM day_stats`);
+    db.exec("DROP TABLE day_stats");
+    db.exec("ALTER TABLE day_stats_novo RENAME TO day_stats");
+    db.exec("DELETE FROM day_snapshots WHERE frozen = 0");
+  })();
+}
+
+/**
+ * A cobertura da geração (`gen_cover_ms`) só vale com a perda registrada e a rejeição explícita guardadas junto: quando as colunas delas nascem,
+ * as lutas que já estavam no banco perdem a cobertura (a geração efetiva delas fica, mas o aproveitamento passa a ser N/D, não 100% por falta de
+ * perda). Os dias ainda abertos do resumo diário são refeitos; os congelados ficam como estão.
+ */
+function dropGenCover(db: DB) {
+  db.transaction(() => {
+    db.exec("UPDATE player_stats SET gen_cover_ms = 0");
+    db.exec("DELETE FROM day_snapshots WHERE frozen = 0");
+  })();
+}
+
+/**
+ * O uptime no grupo (`<boon>GroupUp`) sai do uptime e do grupo de cada jogador, que já estavam no banco: as lutas anteriores à métrica são
+ * preenchidas uma vez, quando as colunas nascem. Os dias ainda abertos do resumo diário são refeitos com a métrica; os congelados não (as
+ * lutas deles já foram apagadas). A conta é a mesma de ingest.ts: Σ uptime do grupo ÷ Σ tempo ativo do grupo × tempo ativo do jogador.
+ */
+function backfillGroupUptime(db: DB) {
+  const pairs = STAT_KEYS.filter((k) => k.endsWith("GroupUp")).map((k) => ({ up: STAT_COL[k.replace("GroupUp", "Up") as StatKey], groupUp: STAT_COL[k] }));
+  db.transaction(() => {
+    db.exec(
+      `CREATE TEMP TABLE grupo_uptime AS SELECT fight_id, grp, SUM(active_ms) AS active, ${pairs.map((p) => `SUM(${p.up}) AS ${p.up}`).join(", ")}
+       FROM player_stats WHERE grp IS NOT NULL GROUP BY fight_id, grp`,
+    );
+    db.exec(
+      `UPDATE player_stats SET ${pairs.map((p) => `${p.groupUp} = g.${p.up} * 1.0 / g.active * player_stats.active_ms`).join(", ")}
+       FROM grupo_uptime g WHERE g.fight_id = player_stats.fight_id AND g.grp = player_stats.grp AND g.active > 0`,
+    );
+    db.exec("DROP TABLE grupo_uptime");
+    db.exec("DELETE FROM day_snapshots WHERE frozen = 0");
+  })();
 }
 
 /**

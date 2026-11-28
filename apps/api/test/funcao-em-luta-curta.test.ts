@@ -41,6 +41,9 @@ const jogador = (account: string, role: Role, activeSeg: number, profession: str
   distCoverMs: 0,
   nearCoverMs: 0,
   skills: [],
+  supportSkills: [],
+  skillUsage: [],
+  genCoverMs: 0,
 });
 
 const luta = (players: ExtractedPlayer[]): ExtractedFight => ({

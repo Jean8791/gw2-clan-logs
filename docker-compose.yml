@@ -65,15 +65,32 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - certificados:/data
 
+  # Único que monta o socket do Docker (só leitura do arquivo) e só deixa passar a leitura de containers, eventos e informações do sistema:
+  # criar, parar ou executar nada no Docker volta 403. A rede logs-interno não tem saída e só o Dozzle está nela.
+  socket-proxy:
+    image: tecnativa/docker-socket-proxy:3.4
+    restart: unless-stopped
+    environment:
+      CONTAINERS: "1"
+      INFO: "1"
+    mem_limit: 64m
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks: [logs-interno]
+
   # Painel web dos logs dos containers. Só o Caddy chega nele (a porta não é publicada), e o Caddy exige senha.
-  # O socket do Docker dá a ele acesso de leitura a TODOS os containers da VM: por isso o filtro limita ao projeto,
-  # e por isso a senha do /logs precisa ser forte.
+  # Lê o Docker pelo socket-proxy (não monta o socket). O filtro limita aos containers do projeto, e a senha do /logs precisa ser forte.
   dozzle:
     image: amir20/dozzle:v11.5.0
     restart: unless-stopped
+    depends_on: [socket-proxy]
+    networks: [default, logs-interno]
     environment:
       DOZZLE_BASE: /logs
       DOZZLE_NO_ANALYTICS: "true"
+      DOZZLE_REMOTE_HOST: tcp://socket-proxy:2375
       DOZZLE_FILTER: name=gw2-clan-logs
       # o acesso já é protegido pelo Caddy: sem assistente de configuração, sem login próprio (precisaria do /data),
       # e sem ações nem shell nos containers (com o socket do Docker, seriam controle da VM)
@@ -88,9 +105,12 @@ services:
     security_opt:
       - no-new-privileges:true
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
       # o Dozzle grava aqui as preferências da tela; o resto do sistema de arquivos segue só de leitura
       - dozzle-dados:/data
+
+networks:
+  logs-interno:
+    internal: true
 
 volumes:
   dados:

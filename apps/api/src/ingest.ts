@@ -12,6 +12,28 @@ export interface ExtractedSkill {
   connectedHits: number;
 }
 
+/** Cura ou barreira de uma habilidade (Healing Stats). `indirect`: o id é de um buff (cura que vem de um efeito, como Regeneração). */
+export interface ExtractedSupportSkill {
+  id: number;
+  name: string | null;
+  kind: "heal" | "barrier";
+  amount: number;
+  /** parte da cura que foi em jogadores caídos (a barreira não tem) */
+  downedAmount: number;
+  hits: number;
+  indirect: boolean;
+}
+
+/** Usos de uma habilidade (rotação) ou dano recebido dela. `indirect`: o id é de um buff (condição). */
+export interface ExtractedSkillUsage {
+  id: number;
+  name: string | null;
+  kind: "cast" | "taken";
+  amount: number;
+  hits: number;
+  indirect: boolean;
+}
+
 export interface ExtractedPlayer extends Stats {
   account: string;
   name: string | null;
@@ -25,7 +47,11 @@ export interface ExtractedPlayer extends Stats {
   /** tempo (ms) coberto pelo dado da tag: 0 quando o log não tem replay */
   distCoverMs: number;
   nearCoverMs: number;
+  /** tempo (ms) em que o log trouxe a geração efetiva e o volume do jogador; 0 se não trouxe (ver GenCover em shared) */
+  genCoverMs: number;
   skills: ExtractedSkill[];
+  supportSkills: ExtractedSupportSkill[];
+  skillUsage: ExtractedSkillUsage[];
 }
 
 export interface ExtractedFight {
@@ -54,6 +80,10 @@ export interface ExtractedFight {
 const boonsOf = (scope: BoonScope): Record<number, keyof Stats> =>
   Object.fromEntries(STAT_KEYS.flatMap((k) => (STAT_META[k].group === "boons" && STAT_META[k].buffId && (STAT_META[k].scope ?? "squad") === scope ? [[STAT_META[k].buffId, k]] : [])));
 export const BOONS = boonsOf("squad");
+/** Diferença de arredondamento (3 casas no log) tolerada entre `overstack` e `generation` antes de tratar como inconsistência. */
+const OVERSTACK_TOLERANCE = 0.002;
+/** A geração efetiva de cada boon (`<boon>Eff`), pelo id do buff. */
+const EFFECTIVE_BOONS = boonsOf("effective");
 const BOON_VOLUMES: [string, Record<number, keyof Stats>][] = [
   ["selfBuffVolumes", boonsOf("self")],
   ["groupBuffVolumes", boonsOf("group")],
@@ -62,8 +92,13 @@ const BOON_VOLUMES: [string, Record<number, keyof Stats>][] = [
 
 /** Boons cujo uptime recebido guardamos (a média de pilhas do might, mightStacks, sai do mesmo buff). */
 const UPTIME_BOONS: Record<number, keyof Stats> = Object.fromEntries(
-  STAT_KEYS.flatMap((k) => (STAT_META[k].group === "uptime" && STAT_META[k].format === "pct" && STAT_META[k].buffId ? [[STAT_META[k].buffId, k]] : [])),
+  STAT_KEYS.flatMap((k) =>
+    // a versão do grupo (`<boon>GroupUp`) tem o mesmo buff, mas não vem do log: é calculada depois, a partir do uptime de cada um
+    STAT_META[k].group === "uptime" && STAT_META[k].format === "pct" && STAT_META[k].buffId && !STAT_META[k].scope ? [[STAT_META[k].buffId, k]] : [],
+  ),
 );
+/** O uptime de cada boon e o dele no grupo: `stabUp` → `stabGroupUp`. */
+const GROUP_UPTIME: [up: keyof Stats, groupUp: keyof Stats][] = STAT_KEYS.filter((k) => k.endsWith("GroupUp")).map((k) => [k.replace("GroupUp", "Up") as keyof Stats, k]);
 const MIGHT_ID = STAT_META.mightStacks.buffId!;
 
 const SUPPORT_BOONS: (keyof Stats)[] = ["stabOut", "protOut", "aegisOut", "resistOut", "resolOut", "quickOut", "alacOut"];
@@ -195,7 +230,12 @@ export function extractFight(r: J): ExtractedFight {
   const inch = num(r.combatReplayMetaData, "inchToPixel");
   const replayMeta = rate > 0 && inch > 0 ? { rate, inch } : null;
 
+  // A geração efetiva vale na luta toda ou não vale: quem não gerou nenhum boon tem as listas vazias, e isso é um zero de verdade, não dado ausente.
+  // Num EI antigo, sem squadBuffVolumes em ninguém, o volume cai na própria geração (abaixo) e a razão entre os dois seria 100% por construção.
+  const fightHasGeneration = squad.some((p) => arr(p, "squadBuffs").length > 0) && squad.some((p) => arr(p, "squadBuffVolumes").length > 0);
+
   const instances: ExtractedPlayer[] = squad.map((p) => {
+    let inconsistent = false;
     const dpsAll = phase0(p, "dpsAll");
     const statsAll = phase0(p, "statsAll");
     const def = phase0(p, "defenses");
@@ -273,6 +313,22 @@ export function extractFight(r: J): ExtractedFight {
         if (key) s[key] = num(arr(b, "buffVolumeData")[0], "outgoing");
       }
     }
+    // Geração efetiva, perda registrada e rejeição explícita, de squadBuffs: `generation`, `wasted` e `overstack − generation`. O volume (`outgoing`) é
+    // outra conta do Elite Insights. Se algum boon vier com `overstack` menor que `generation` (inconsistente), o jogador fica sem cobertura nesta
+    // luta (N/D) e nenhum dos três é guardado, em vez de mascarar ou somar valor negativo.
+    if (fightHasGeneration) {
+      const gen: [keyof Stats, number][] = [];
+      for (const b of arr(p, "squadBuffs")) {
+        const eff = EFFECTIVE_BOONS[num(b, "id")];
+        if (!eff) continue;
+        const d = arr(b, "buffData")[0];
+        const g = num(d, "generation");
+        const over = num(d, "overstack");
+        if (over < g - OVERSTACK_TOLERANCE) inconsistent = true;
+        gen.push([eff, g], [String(eff).replace(/Eff$/, "Waste") as keyof Stats, num(d, "wasted")], [String(eff).replace(/Eff$/, "Rej") as keyof Stats, Math.max(0, over - g)]);
+      }
+      if (!inconsistent) for (const [k, v] of gen) s[k] = v;
+    }
     if (!arr(p, "squadBuffVolumes").length) {
       for (const b of arr(p, "squadBuffs")) {
         const key = BOONS[num(b, "id")];
@@ -297,11 +353,15 @@ export function extractFight(r: J): ExtractedFight {
       distToCom: typeof statsAll.distToCom === "number" ? statsAll.distToCom : null,
       distCoverMs: tag.distCoverMs,
       nearCoverMs: tag.nearCoverMs,
+      genCoverMs: fightHasGeneration && !inconsistent ? activeMs : 0,
       skills: skillDamage(p, targetIdx, skillMap, buffMap),
+      supportSkills: supportSkills(p, skillMap, buffMap),
+      skillUsage: skillUsage(p, skillMap, buffMap),
     };
   });
 
   const players = mergeSameAccount(instances);
+  addGroupUptime(players);
   classifyRoles(players);
 
   const sum = (k: keyof Stats) => players.reduce((a, p) => a + p[k], 0);
@@ -337,11 +397,12 @@ function mergeSameAccount(players: ExtractedPlayer[]): ExtractedPlayer[] {
   return [...byAccount.values()].map((group) => {
     if (group.length === 1) return group[0]!;
     const main = group.reduce((a, b) => (b.activeMs > a.activeMs ? b : a));
-    const merged: ExtractedPlayer = { ...main, activeMs: 0, commander: group.some((p) => p.commander), skills: [] };
+    const merged: ExtractedPlayer = { ...main, activeMs: 0, commander: group.some((p) => p.commander), skills: [], supportSkills: [], skillUsage: [] };
     for (const k of STAT_KEYS) merged[k] = group.reduce((a, p) => a + p[k], 0);
     merged.activeMs = group.reduce((a, p) => a + p.activeMs, 0);
     merged.distCoverMs = group.reduce((a, p) => a + p.distCoverMs, 0);
     merged.nearCoverMs = group.reduce((a, p) => a + p.nearCoverMs, 0);
+    merged.genCoverMs = group.reduce((a, p) => a + p.genCoverMs, 0);
     const skills = new Map<number, ExtractedSkill>();
     for (const sk of group.flatMap((p) => p.skills)) {
       const cur = skills.get(sk.id) ?? { ...sk, damage: 0, hits: 0, connectedHits: 0 };
@@ -352,6 +413,27 @@ function mergeSameAccount(players: ExtractedPlayer[]): ExtractedPlayer[] {
       skills.set(sk.id, cur);
     }
     merged.skills = [...skills.values()];
+    const support = new Map<string, ExtractedSupportSkill>();
+    for (const sk of group.flatMap((p) => p.supportSkills)) {
+      const key = `${sk.kind}:${sk.indirect}:${sk.id}`;
+      const cur = support.get(key) ?? { ...sk, amount: 0, downedAmount: 0, hits: 0 };
+      cur.amount += sk.amount;
+      cur.downedAmount += sk.downedAmount;
+      cur.hits += sk.hits;
+      cur.name ??= sk.name;
+      support.set(key, cur);
+    }
+    merged.supportSkills = [...support.values()];
+    const usage = new Map<string, ExtractedSkillUsage>();
+    for (const u of group.flatMap((p) => p.skillUsage)) {
+      const key = `${u.kind}:${u.indirect}:${u.id}`;
+      const cur = usage.get(key) ?? { ...u, amount: 0, hits: 0 };
+      cur.amount += u.amount;
+      cur.hits += u.hits;
+      cur.name ??= u.name;
+      usage.set(key, cur);
+    }
+    merged.skillUsage = [...usage.values()];
     return merged;
   });
 }
@@ -378,6 +460,75 @@ function skillDamage(p: J, targetIdx: number[], skillMap: J, buffMap: J): Extrac
     }
   }
   return [...sum.values()].filter((s) => s.damage > 0);
+}
+
+/**
+ * O uptime médio do grupo de cada jogador: a média do uptime dos jogadores do mesmo grupo do squad (ele incluído), ponderada pelo tempo
+ * ativo, guardada como os outros uptimes: ms com o boon sobre o tempo ativo do próprio jogador (a % é Σ ms ÷ Σ tempo). Sem grupo no log, zero.
+ * Mede o resultado do grupo, não só o que o jogador faz.
+ */
+function addGroupUptime(players: ExtractedPlayer[]) {
+  const groups = new Map<number, ExtractedPlayer[]>();
+  for (const p of players) if (p.group !== null) groups.set(p.group, [...(groups.get(p.group) ?? []), p]);
+  for (const members of groups.values()) {
+    const active = members.reduce((a, p) => a + p.activeMs, 0);
+    if (active <= 0) continue;
+    for (const [up, groupUp] of GROUP_UPTIME) {
+      const share = members.reduce((a, p) => a + p[up], 0) / active;
+      for (const p of members) p[groupUp] = share * p.activeMs;
+    }
+  }
+}
+
+/**
+ * Cura e barreira por habilidade, da distribuição do Healing Stats (`totalHealingDist` e `totalBarrierDist`, fase 0). A soma bate com a cura
+ * e a barreira totais do jogador, que não incluem a cura dos minions: por isso eles ficam de fora aqui também (conferido em logs do EI 3.32).
+ * A habilidade indireta tem id de buff, então o nome vem do `buffMap`. Sem Healing Stats o jogador não tem esses blocos e a lista sai vazia.
+ */
+function supportSkills(p: J, skillMap: J, buffMap: J): ExtractedSupportSkill[] {
+  const nameOf = (id: number, indirect: boolean) => {
+    const [first, second] = indirect ? [buffMap[`b${id}`], skillMap[`s${id}`]] : [skillMap[`s${id}`], buffMap[`b${id}`]];
+    return str(first, "name") ?? str(second, "name");
+  };
+  const phase0 = (owner: unknown, field: string): J[] => {
+    const first = arr(owner, field)[0] as unknown;
+    return Array.isArray(first) ? first : [];
+  };
+  const heals = phase0(p.extHealingStats, "totalHealingDist").map((d): ExtractedSupportSkill => {
+    const id = num(d, "id");
+    const indirect = d.indirectHealing === true;
+    return { id, name: nameOf(id, indirect), kind: "heal", amount: num(d, "totalHealing"), downedAmount: num(d, "totalDownedHealing"), hits: num(d, "hits"), indirect };
+  });
+  const barriers = phase0(p.extBarrierStats, "totalBarrierDist").map((d): ExtractedSupportSkill => {
+    const id = num(d, "id");
+    const indirect = d.indirectBarrier === true;
+    return { id, name: nameOf(id, indirect), kind: "barrier", amount: num(d, "totalBarrier"), downedAmount: 0, hits: num(d, "hits"), indirect };
+  });
+  return [...heals, ...barriers].filter((s) => s.amount > 0 || s.downedAmount > 0);
+}
+
+/**
+ * Usos de cada habilidade (`rotation`: cada uso é uma entrada de `skills`, inclusive as que não causam dano, como utilitárias, esquivas e troca
+ * de arma) e dano recebido por habilidade (`totalDamageTaken`, fase 0). No dano recebido a habilidade indireta (condição) tem id de buff, então
+ * o nome vem do `buffMap`. Habilidade sem nenhum uso, ou que não causou dano, não vira linha.
+ */
+function skillUsage(p: J, skillMap: J, buffMap: J): ExtractedSkillUsage[] {
+  const nameOf = (id: number, indirect: boolean) => {
+    const [first, second] = indirect ? [buffMap[`b${id}`], skillMap[`s${id}`]] : [skillMap[`s${id}`], buffMap[`b${id}`]];
+    return str(first, "name") ?? str(second, "name");
+  };
+  const casts = arr(p, "rotation").map((r): ExtractedSkillUsage => {
+    const id = num(r, "id");
+    const uses = arr(r, "skills").length;
+    return { id, name: nameOf(id, false), kind: "cast", amount: uses, hits: uses, indirect: false };
+  });
+  const firstPhase = arr(p, "totalDamageTaken")[0] as unknown;
+  const taken = (Array.isArray(firstPhase) ? (firstPhase as J[]) : []).map((d): ExtractedSkillUsage => {
+    const id = num(d, "id");
+    const indirect = d.indirectDamage === true;
+    return { id, name: nameOf(id, indirect), kind: "taken", amount: num(d, "totalDamage"), hits: num(d, "hits"), indirect };
+  });
+  return [...casts, ...taken].filter((u) => u.amount > 0);
 }
 
 /**

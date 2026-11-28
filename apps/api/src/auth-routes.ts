@@ -55,7 +55,7 @@ export function registerAuthRoutes(server: FastifyInstance, db: DB, cfg: Config,
   /** Erro no retorno do Discord: volta para a página inicial com o aviso (quem está no navegador não vê JSON) e limpa o state para a próxima tentativa. */
   const backToStart = (reply: FastifyReply, erro: "badState" | "loginFailed") => reply.header("set-cookie", clearLogin()).redirect(`/?erro=${erro}`);
 
-  // o login e o retorno chamam o Discord: limite próprio e mais baixo por IP (uma pessoa normal não chega perto)
+  // o login, o retorno do Discord e a geração da chave do script: limite próprio e mais baixo por IP (uma pessoa normal não chega perto)
   const authLimit = cfg.rateLimit.authPerMin > 0 ? { config: { rateLimit: { max: cfg.rateLimit.authPerMin, timeWindow: "1 minute" } } } : {};
 
   // ?next=/caminho: a tela de onde a pessoa saiu; o retorno do Discord volta para lá
@@ -136,7 +136,7 @@ export function registerAuthRoutes(server: FastifyInstance, db: DB, cfg: Config,
   });
 
   // token pessoal para o script de envio; o anterior deixa de valer e o novo só aparece nesta resposta
-  server.post("/api/auth/token", async (req, reply) => {
+  server.post("/api/auth/token", authLimit, async (req, reply) => {
     const user = sessionUser(db, cfg, req);
     if (!user) return reply.code(401).send({ error: "Not signed in.", code: "notSignedIn" });
     const now = new Date();

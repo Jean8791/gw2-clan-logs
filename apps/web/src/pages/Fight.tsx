@@ -2,14 +2,15 @@ import { ArrowLeft, ExternalLink } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { emptyStats, isUptimeStat, professionColor, ROUTES, STAT_KEYS, STAT_META, statsOfGroup, statText, topByStat, type BoonScope, type PlayerFight, type StatGroup, type StatKey, type Stats } from "@gw2logs/shared";
+import { emptyStats, isUptimeStat, type PlayerSkill, type PlayerSkillUsage, type PlayerSupportSkill, type SkillKind, SKILL_KINDS, professionColor, ROUTES, STAT_KEYS, STAT_META, statsOfGroup, statText, topByStat, type BoonScope, type PlayerFight, type StatGroup, type StatKey, type Stats } from "@gw2logs/shared";
 import { DataTable, type Column } from "../components/DataTable";
+import { SkillsBody } from "../components/SkillTables";
 import { defaultSort, GroupTabs, pickerView, ModeToggle, statColumns, type ValueMode } from "../components/statColumns";
 import { GuildTag, NoAllianceNote, PlayerLink, Profession } from "../components/badges";
 import { AXIS, GRID, TOOLTIP } from "../components/charts";
 import { fightKills, KillDeath } from "../components/FightBits";
 import { Badge, Button, Card, Empty, ErrorBox, Kpi, Loading, PageHeader, Segmented, Select } from "../components/ui";
-import { useFight } from "../lib/api";
+import { useFight, useFightPlayerSkills } from "../lib/api";
 import { useMe } from "../lib/hooks";
 import { accountShort, axis, compact, dateTime, duration, int, stat } from "../lib/format";
 import { getLang, t } from "../lib/i18n";
@@ -28,12 +29,41 @@ interface GuildRow extends Stats {
   activeMs: number;
 }
 
+/** Dano, cura ou barreira por habilidade de um jogador desta luta; começa em quem mais causou dano (ou em você, se estiver na luta). */
+function FightSkills({ fightId, players, me }: { fightId: string; players: PlayerFight[]; me: string | null | undefined }) {
+  const [kind, setKind] = useState<SkillKind>("damage");
+  const [picked, setPicked] = useState("");
+  const sorted = useMemo(() => [...players].sort((a, b) => b.damage - a.damage), [players]);
+  const account = picked || (sorted.find((p) => p.account === me) ?? sorted[0])?.account || "";
+  const skills = useFightPlayerSkills<PlayerSkill | PlayerSupportSkill | PlayerSkillUsage>(fightId, account, kind);
+  return (
+    <Card
+      className="mt-6"
+      title={t("fight.skills.title")}
+      action={
+        <div className="flex flex-wrap items-center gap-2">
+          <Select className="w-56" value={account} onChange={(e) => setPicked(e.target.value)} aria-label={t("fight.skills.player")}>
+            {sorted.map((p) => (
+              <option key={p.account} value={p.account}>
+                {p.name ?? accountShort(p.account)}
+              </option>
+            ))}
+          </Select>
+          <Segmented size="sm" value={kind} onChange={setKind} options={SKILL_KINDS.map((k) => ({ value: k, label: t(`skills.kind.${k}`) }))} />
+        </div>
+      }
+    >
+      <SkillsBody kind={kind} data={skills.data} isLoading={skills.isLoading} error={skills.error} scope="fight" />
+    </Card>
+  );
+}
+
 export function FightPage() {
   const { id = "" } = useParams();
   const { data, error, isLoading } = useFight(id);
   const [group, setGroup] = useState<StatGroup>("offense");
   const [scope, setScope] = useState<BoonScope>("squad");
-  const [mode, setMode] = useState<ValueMode>("total");
+  const [mode, setMode] = useState<ValueMode>("perMin");
   const [view, setView] = useState<"players" | "guilds" | "groups">("players");
   const [guild, setGuild] = useState("");
   // coluna que a pessoa ordenou na tabela de jogadores (guardada com o grupo e o alcance em que foi escolhida)
@@ -238,6 +268,8 @@ export function FightPage() {
           </p>
         )}
       </Card>
+
+      <FightSkills fightId={id} players={data.players} me={me} />
     </>
   );
 }

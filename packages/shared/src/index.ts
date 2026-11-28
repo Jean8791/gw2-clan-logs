@@ -10,7 +10,7 @@ export * from "./pagination.js";
 export * from "./fit-height.js";
 export * from "./search.js";
 export * from "./retention.js";
-import { BOON_BASES, type ScopedKey } from "./boons.js";
+import { BOON_BASES, GROUP_UP_BASES, STACKING_BOONS, type BoonBase, type EffKey, type GroupUpKey, type RejKey, type ScopedKey, type WasteKey } from "./boons.js";
 
 export type Mode = "wvw" | "pve";
 export type Role = "dps" | "support";
@@ -76,6 +76,38 @@ export const STAT_KEYS = [
   "resolSelf",
   "furySelf",
   "superspeedSelf",
+  // a geração efetiva da squad (`generation` do Elite Insights): o volume gerado sem a perda registrada (`wasted`)
+  "stabEff",
+  "quickEff",
+  "alacEff",
+  "protEff",
+  "mightEff",
+  "aegisEff",
+  "resistEff",
+  "resolEff",
+  "furyEff",
+  "superspeedEff",
+  // a perda registrada (`wasted`) e a rejeição explícita (`overstack − generation`), para o aproveitamento contabilizado
+  "stabWaste",
+  "quickWaste",
+  "alacWaste",
+  "protWaste",
+  "mightWaste",
+  "aegisWaste",
+  "resistWaste",
+  "resolWaste",
+  "furyWaste",
+  "superspeedWaste",
+  "stabRej",
+  "quickRej",
+  "alacRej",
+  "protRej",
+  "mightRej",
+  "aegisRej",
+  "resistRej",
+  "resolRej",
+  "furyRej",
+  "superspeedRej",
   // uptime recebido: milissegundos com o boon (% × tempo ativo), para somar entre lutas; o % é uptimeValue
   "stabUp",
   "quickUp",
@@ -89,6 +121,19 @@ export const STAT_KEYS = [
   "swiftUp",
   "vigorUp",
   "regenUp",
+  // o uptime médio do grupo do jogador (quem está no mesmo grupo do squad, ele incluído), na mesma conta: ms com o boon sobre o tempo ativo dele
+  "stabGroupUp",
+  "quickGroupUp",
+  "alacGroupUp",
+  "protGroupUp",
+  "mightGroupUp",
+  "aegisGroupUp",
+  "resistGroupUp",
+  "resolGroupUp",
+  "furyGroupUp",
+  "swiftGroupUp",
+  "vigorGroupUp",
+  "regenGroupUp",
   "mightStacks",
   // posição em relação à tag (o comandante), só nos logs com o replay do Elite Insights: tempo perto (ms) e distância × tempo (ms)
   "tagNear",
@@ -99,8 +144,12 @@ export type StatKey = (typeof STAT_KEYS)[number];
 export type Stats = Record<StatKey, number>;
 
 /** Para quem o boon é gerado: o squad todo (padrão, as métricas "Out"), só o grupo ou só o próprio jogador. */
-export type BoonScope = "squad" | "group" | "self";
-export const BOON_SCOPES: BoonScope[] = ["squad", "group", "self"];
+/**
+ * Para quem o boon foi gerado; "effective" é a geração efetiva da squad (`generation` do Elite Insights), sem a perda registrada (`wasted`).
+ * "loss" guarda a perda registrada e a rejeição explícita: não é um alcance que a tela alterna (fica fora de BOON_SCOPES), só alimenta o aproveitamento.
+ */
+export type BoonScope = "squad" | "effective" | "group" | "self" | "loss";
+export const BOON_SCOPES: BoonScope[] = ["squad", "effective", "group", "self"];
 
 export type StatGroup = "offense" | "support" | "boons" | "uptime" | "defense";
 
@@ -116,13 +165,15 @@ export interface StatMeta {
    */
   format: "int" | "volume" | "pct" | "avg";
   hint?: string;
+  /** boon de intensidade (pilhas): o volume é em pilhas médias, mostrado com mais casas decimais. */
+  stacks?: boolean;
   /** id do buff na API do GW2 (boons): liga a métrica ao ícone e ao buffMap do Elite Insights. */
   buffId?: number;
   /** Só nos boons: para quem o volume é gerado. Sem isso vale "squad". */
   scope?: BoonScope;
 }
 
-const BASE_META: Record<Exclude<StatKey, ScopedKey>, StatMeta> = {
+const BASE_META: Record<Exclude<StatKey, ScopedKey | GroupUpKey | EffKey | WasteKey | RejKey>, StatMeta> = {
   damage: { label: "Dano", short: "Dano", group: "offense", higherIsBetter: true, format: "int", hint: "Dano em jogadores inimigos (WvW) ou no alvo (PvE)" },
   powerDamage: { label: "Dano físico", short: "Físico", group: "offense", higherIsBetter: true, format: "int" },
   condiDamage: { label: "Dano de condição", short: "Condi", group: "offense", higherIsBetter: true, format: "int" },
@@ -181,18 +232,71 @@ const SCOPE_HINT: Record<"group" | "self", string> = {
   self: "Volume gerado só para você",
 };
 
-/** Cada boon "Out" (squad) ganha as versões Group e Self, com o mesmo nome e buff e a dica do alcance. */
+/** A unidade do volume de um boon, já normalizada pelo Elite Insights: pilhas médias (intensidade) ou % do tempo (duração, pode passar de 100%). */
+const unitHint = (base: BoonBase): string =>
+  STACKING_BOONS.includes(base) ? "Unidade: pilhas médias" : "Unidade: % do tempo, normalizado pelo Elite Insights (pode passar de 100%)";
+
+/** O volume e a geração efetiva de um boon: marca os de pilhas e acrescenta a unidade à dica. */
+const withUnit = (m: StatMeta, base: BoonBase, hint: string): StatMeta => ({ ...m, hint: `${hint}. ${unitHint(base)}`, ...(STACKING_BOONS.includes(base) ? { stacks: true } : {}) });
+
+const OUT_HINT = "Volume de boon que o jogador gerou para a squad: a duração das aplicações e extensões registradas pelo Elite Insights, já normalizada";
+
+/** Cada boon "Out" (squad) ganha a unidade na dica, e as versões Group e Self, com o mesmo nome e buff e a dica do alcance. */
+const outMeta = (): Record<`${BoonBase}Out`, StatMeta> =>
+  Object.fromEntries(BOON_BASES.map((b) => [`${b}Out`, withUnit(BASE_META[`${b}Out`], b, OUT_HINT)])) as Record<`${BoonBase}Out`, StatMeta>;
+
 const scopedMeta = (): Record<ScopedKey, StatMeta> =>
   Object.fromEntries(
     (["Group", "Self"] as const).flatMap((suffix) =>
       BOON_BASES.map((b) => {
         const scope = suffix === "Group" ? "group" : "self";
-        return [`${b}${suffix}`, { ...BASE_META[`${b}Out`], scope, hint: SCOPE_HINT[scope] }];
+        return [`${b}${suffix}`, { ...withUnit(BASE_META[`${b}Out`], b, SCOPE_HINT[scope]), scope }];
       }),
     ),
   ) as Record<ScopedKey, StatMeta>;
 
-export const STAT_META: Record<StatKey, StatMeta> = { ...BASE_META, ...scopedMeta() };
+const EFF_HINT =
+  "Geração efetiva (campo `generation` do Elite Insights): a duração de boon que ficou ativa e é atribuída ao jogador para a squad. O volume gerado inclui também a perda registrada (`wasted`), que vem da remoção ou substituição das pilhas (strip inimigo, substituição e boon consumido por design, como a Aegis ao bloquear). A diferença entre os dois não mede erro do jogador. Só existe para logs enviados depois que o site passou a guardá-la";
+
+/** Cada boon "Out" (squad) ganha a geração efetiva, com o mesmo buff, no alcance "effective". */
+const effMeta = (): Record<EffKey, StatMeta> =>
+  Object.fromEntries(
+    BOON_BASES.map((b) => [
+      `${b}Eff`,
+      { ...withUnit(BASE_META[`${b}Out`], b, EFF_HINT), label: `${BASE_META[`${b}Out`].label} (geração efetiva)`, short: `${BASE_META[`${b}Out`].short} efet.`, scope: "effective" },
+    ]),
+  ) as Record<EffKey, StatMeta>;
+
+const WASTE_HINT =
+  "Perda registrada (campo `wasted` do Elite Insights): a duração restante de pilhas que foi removida ou substituída (strip inimigo, substituição, boon consumido por design, como a Aegis ao bloquear). Não é excesso de aplicação nem erro do jogador, e o agregado não separa as causas. Só existe para logs enviados depois que o site passou a guardá-la";
+const REJ_HINT =
+  "Rejeição explícita (`overstack` menos `generation` do Elite Insights): aplicações que o simulador rejeitou por excesso de pilhas ou de duração. Em todos os 1.644 pares medidos foi zero, então zero não prova que não houve excesso: o EI só a registra em um dos seus simuladores. Só existe para logs enviados depois que o site passou a guardá-la";
+
+/** Cada boon "Out" (squad) ganha a perda registrada e a rejeição explícita, no alcance "loss". */
+const lossMeta = (): Record<WasteKey | RejKey, StatMeta> =>
+  Object.fromEntries(
+    BOON_BASES.flatMap((b) => {
+      const out = BASE_META[`${b}Out`];
+      return [
+        [`${b}Waste`, { ...withUnit(out, b, WASTE_HINT), label: `${out.label} (perda registrada)`, short: `${out.short} perda`, scope: "loss", higherIsBetter: false }],
+        [`${b}Rej`, { ...withUnit(out, b, REJ_HINT), label: `${out.label} (rejeição explícita)`, short: `${out.short} rej.`, scope: "loss", higherIsBetter: false }],
+      ];
+    }),
+  ) as Record<WasteKey | RejKey, StatMeta>;
+
+const GROUP_UP_HINT =
+  "Uptime médio do grupo do jogador (quem está no mesmo grupo do squad, ele incluído), sobre o tempo ativo dele. Mede o resultado do grupo, não só o que o jogador faz: dois suportes no mesmo grupo têm o mesmo valor";
+
+/** Cada uptime ganha a versão do grupo, com o mesmo boon e ícone; fica no grupo Uptime e não conta como alcance dos boons. */
+const groupUpMeta = (): Record<GroupUpKey, StatMeta> =>
+  Object.fromEntries(
+    GROUP_UP_BASES.map((b) => {
+      const up = BASE_META[`${b}Up`];
+      return [`${b}GroupUp`, { ...up, label: `${up.label} no grupo`, short: `${up.short} grupo`, scope: "group", hint: GROUP_UP_HINT }];
+    }),
+  ) as Record<GroupUpKey, StatMeta>;
+
+export const STAT_META: Record<StatKey, StatMeta> = { ...BASE_META, ...outMeta(), ...scopedMeta(), ...effMeta(), ...lossMeta(), ...groupUpMeta() };
 
 export const STAT_GROUPS: { id: StatGroup; label: string }[] = [
   { id: "offense", label: "Dano" },
@@ -209,11 +313,21 @@ export const STAT_GROUPS: { id: StatGroup; label: string }[] = [
 export const TAG_COVER = { tagNear: "nearCoverMs", tagDist: "distCoverMs" } as const;
 export type TagCover = { [C in (typeof TAG_COVER)[keyof typeof TAG_COVER]]: number };
 export const isTagStat = (k: StatKey): k is keyof typeof TAG_COVER => k in TAG_COVER;
-/** A linha tem o dado da métrica? Só as da tag podem faltar (log lido sem replay); sem dado a tela mostra traço, e não 0. */
-export const hasStatData = (k: StatKey, r: Partial<TagCover>): boolean => !isTagStat(k) || (r[TAG_COVER[k]] ?? 0) > 0;
+
+/**
+ * Cobertura da geração efetiva (`<boon>Eff`): o tempo ativo (ms) das linhas em que o log trouxe a geração (`squadBuffs`) e o volume
+ * (`squadBuffVolumes`) do jogador. Logs anteriores ao site guardá-la, e logs de EI antigo (cujo volume vem da própria geração), têm 0.
+ */
+export type GenCover = { genCoverMs: number };
+export type Cover = TagCover & GenCover;
+/** Métrica que vem da geração do log (efetiva, perda registrada e rejeição explícita): só vale onde há cobertura. */
+export const isGenStat = (k: StatKey): boolean => /(Eff|Waste|Rej)$/.test(k);
+
+/** A linha tem o dado da métrica? Podem faltar as da tag (log lido sem replay) e a geração efetiva (log sem ela); sem dado a tela mostra N/D ou traço, e não 0. */
+export const hasStatData = (k: StatKey, r: Partial<Cover>): boolean => (isTagStat(k) ? (r[TAG_COVER[k]] ?? 0) > 0 : isGenStat(k) ? (r.genCoverMs ?? 0) > 0 : true);
 
 /** O melhor valor da métrica entre as linhas que têm o dado (o menor, se menos é melhor); 0 sem nenhuma. Quem não tem dado não disputa. */
-export function bestValue<T extends Partial<TagCover>>(k: StatKey, rows: T[], value: (r: T) => number): number {
+export function bestValue<T extends Partial<Cover>>(k: StatKey, rows: T[], value: (r: T) => number): number {
   const values = rows.filter((r) => hasStatData(k, r)).map(value);
   if (!values.length) return 0;
   return STAT_META[k].higherIsBetter ? Math.max(...values) : Math.min(...values);
@@ -246,14 +360,91 @@ export function uptimeValue(k: StatKey, ms: number, activeMs: number): number {
 export const statsOfGroup = (g: StatGroup, scope: BoonScope = "squad"): StatKey[] =>
   STAT_KEYS.filter((k) => STAT_META[k].group === g && (g !== "boons" || (STAT_META[k].scope ?? "squad") === scope));
 
+/** Os boons que a aba Boons deixa escolher: os com volume gerado e os que só têm uptime (swiftness, vigor e regeneração). */
+export const BOON_VIEW_BASES = [...BOON_BASES, "swift", "vigor", "regen"] as const;
+export type BoonViewBase = (typeof BOON_VIEW_BASES)[number];
+
+/** As métricas de um boon lado a lado: volume gerado (squad, grupo, si), a geração efetiva, a perda registrada, a rejeição explícita, uptime recebido e uptime no grupo; só as que existem. */
+export function boonViewKeys(base: BoonViewBase): StatKey[] {
+  const all = STAT_KEYS as readonly string[];
+  return [`${base}Out`, `${base}Eff`, `${base}Waste`, `${base}Rej`, `${base}Group`, `${base}Self`, `${base}Up`, `${base}GroupUp`].filter((k): k is StatKey => all.includes(k));
+}
+
 /** Primeira métrica de um grupo (nos boons, no alcance pedido): para onde o gráfico vai quando o grupo muda. */
 export const metricForGroup = (g: StatGroup, scope: BoonScope = "squad"): StatKey => statsOfGroup(g, scope)[0]!;
+
+/** As medidas derivadas de um boon (do site, não do Elite Insights), a partir da geração, do volume, da rejeição explícita e da perda registrada. */
+export interface BoonMetrics {
+  /** BVU: geração ÷ volume. Pode passar de 1. */
+  volumeUtilization: number | null;
+  /** ABU: geração ÷ (geração + rejeição + perda), o aproveitamento dentro do que o EI contabilizou. */
+  accountedUtilization: number | null;
+  /** perda registrada ÷ (geração + rejeição + perda) */
+  wasteRate: number | null;
+  /** rejeição explícita ÷ (geração + rejeição + perda); zero não prova ausência de excesso */
+  rejectionRate: number | null;
+  /** volume − (geração + rejeição + perda): a divergência entre as duas cadeias de cálculo do EI, para auditoria */
+  residual: number;
+  /** a geração passou do volume (acima da tolerância do arredondamento) */
+  exceeds: boolean;
+}
+
+/** Tolerância do arredondamento (3 casas no log) antes de avisar que a geração passou do volume. */
+const UTILIZATION_TOLERANCE = 1.005;
+const ratio = (a: number, b: number): number | null => (b > 0 ? a / b : null);
+
+export function boonMetrics(v: { generation: number; outgoing: number; rejected: number; wasted: number }): BoonMetrics {
+  const accounted = v.generation + v.rejected + v.wasted;
+  const volumeUtilization = ratio(v.generation, v.outgoing);
+  return {
+    volumeUtilization,
+    accountedUtilization: ratio(v.generation, accounted),
+    wasteRate: ratio(v.wasted, accounted),
+    rejectionRate: ratio(v.rejected, accounted),
+    residual: v.outgoing - accounted,
+    exceeds: volumeUtilization !== null && volumeUtilization > UTILIZATION_TOLERANCE,
+  };
+}
+
+/** Uma medida derivada de um boon numa linha: o valor (null = N/D), por que é N/D e se a geração passou do volume. */
+export interface Utilization {
+  value: number | null;
+  reason?: "noData" | "partial" | "noVolume";
+  exceeds: boolean;
+}
+
+/**
+ * Uma medida derivada de um boon numa linha (ou soma de lutas), com os mesmos valores (inclusive o ajuste por tempo jogado, com `adjust`)
+ * das colunas vizinhas, para elas dividirem até o número mostrado. É N/D, e não 0 nem 100%, quando falta a geração do log (`noData`), quando só
+ * parte do período a tem (`partial`: as lutas antigas puxariam o número) ou quando não há o que dividir (`noVolume`). Não é limitada a 100%.
+ */
+function boonMeasure(r: Stats & { activeMs: number; genCoverMs?: number }, base: BoonBase, adjust: TimeAdjust | undefined, pick: (m: BoonMetrics) => number | null): Utilization {
+  const cover = r.genCoverMs ?? 0;
+  if (cover <= 0) return { value: null, reason: "noData", exceeds: false };
+  if (cover < r.activeMs * 0.999) return { value: null, reason: "partial", exceeds: false };
+  const at = (suffix: string) => statValue(`${base}${suffix}` as StatKey, "perMin", r, adjust);
+  const m = boonMetrics({ generation: at("Eff"), outgoing: at("Out"), rejected: at("Rej"), wasted: at("Waste") });
+  const value = pick(m);
+  return value === null ? { value: null, reason: "noVolume", exceeds: false } : { value, exceeds: pick === volumePick && m.exceeds };
+}
+const volumePick = (m: BoonMetrics) => m.volumeUtilization;
+const accountedPick = (m: BoonMetrics) => m.accountedUtilization;
+const wastePick = (m: BoonMetrics) => m.wasteRate;
+
+type MeasureRow = Stats & { activeMs: number; genCoverMs?: number };
+/** ABU: o aproveitamento principal, dentro do que o Elite Insights contabilizou (geração, rejeição e perda registrada). */
+export const boonAccountedUtilization = (r: MeasureRow, base: BoonBase, adjust?: TimeAdjust): Utilization => boonMeasure(r, base, adjust, accountedPick);
+/** BVU: a geração sobre o volume gerado; complementar, pode passar de 100%. */
+export const boonVolumeUtilization = (r: MeasureRow, base: BoonBase, adjust?: TimeAdjust): Utilization => boonMeasure(r, base, adjust, volumePick);
+/** A parte contabilizada que foi perda registrada (remoção ou substituição das pilhas): não mede erro do jogador. */
+export const boonWasteRate = (r: MeasureRow, base: BoonBase, adjust?: TimeAdjust): Utilization => boonMeasure(r, base, adjust, wastePick);
 
 /** A mesma métrica de boon em outro alcance (stabOut vira stabGroup ou stabSelf); métricas que não são de boon não mudam. */
 export function inScope(k: StatKey, scope: BoonScope): StatKey {
   if (STAT_META[k].group !== "boons") return k;
   const base = BOON_BASES.find((b) => k.startsWith(b));
-  return base ? (`${base}${scope === "squad" ? "Out" : scope === "group" ? "Group" : "Self"}` as StatKey) : k;
+  const suffix = { squad: "Out", group: "Group", self: "Self", effective: "Eff", loss: "Waste" }[scope];
+  return base ? (`${base}${suffix}` as StatKey) : k;
 }
 
 export const emptyStats = (): Stats => Object.fromEntries(STAT_KEYS.map((k) => [k, 0])) as Stats;
@@ -307,6 +498,8 @@ export interface PlayerFight extends Stats {
   /** tempo coberto pelo dado da tag (0 = o log não tem) */
   distCoverMs: number;
   nearCoverMs: number;
+  /** tempo coberto pela geração efetiva dos boons (0 = o log não a tem) */
+  genCoverMs: number;
 }
 
 export interface FightDetail {
@@ -316,7 +509,7 @@ export interface FightDetail {
 }
 
 /** Totais de um jogador (ou de um grupo) num conjunto de lutas. */
-export interface Aggregate extends Stats, TagCover {
+export interface Aggregate extends Stats, TagCover, GenCover {
   fights: number;
   activeMs: number;
 }
@@ -375,6 +568,48 @@ export interface PlayerSkill {
   avgHit: number;
 }
 
+/** O que um jogador curou ou protegeu: cura ou barreira. */
+export type SupportKind = "heal" | "barrier";
+
+/** Usos de cada habilidade (rotação) ou dano recebido por habilidade. */
+export type UsageKind = "cast" | "taken";
+export const USAGE_KINDS: UsageKind[] = ["cast", "taken"];
+
+/** Os tipos da tabela de habilidades: dano, cura, barreira, usos e dano recebido. */
+export type SkillKind = "damage" | SupportKind | UsageKind;
+export const SKILL_KINDS: SkillKind[] = ["damage", "heal", "barrier", "cast", "taken"];
+
+/** Uma habilidade usada (`amount` = usos) ou que causou dano ao jogador (`amount` = dano recebido). */
+export interface PlayerSkillUsage {
+  skillId: number;
+  name: string | null;
+  /** o id é de um buff (condição que causou dano) */
+  indirect: boolean;
+  amount: number;
+  /** nos usos, igual a `amount`; no dano recebido, os acertos */
+  hits: number;
+  /** % do total (de usos ou de dano recebido) em habilidades (0 a 100) */
+  pct: number;
+  /** dano médio por acerto (zero nos usos) */
+  avgHit: number;
+}
+export const SUPPORT_KINDS: SupportKind[] = ["heal", "barrier"];
+
+/** Cura ou barreira de um jogador por habilidade, somada nas lutas filtradas. `indirect`: o id é de um buff (cura que vem de um efeito). */
+export interface PlayerSupportSkill {
+  skillId: number;
+  name: string | null;
+  indirect: boolean;
+  amount: number;
+  /** parte da cura que foi em jogadores caídos (zero na barreira) */
+  downedAmount: number;
+  hits: number;
+  /** % do total de cura (ou de barreira) em habilidades (0 a 100) */
+  pct: number;
+  /** cura (ou barreira) média por acerto */
+  avgHit: number;
+}
+
 export interface GuildSummary extends Guild {
   players: number;
   fights: number;
@@ -422,6 +657,8 @@ export interface Filters {
   profession?: string;
   /** dias de batalha (AAAA-MM-DD, ver battleDay): vale a união dos dias escolhidos */
   day?: string[];
+  /** semana (ver weekRange): a data da sexta em que ela começa, AAAA-MM-DD */
+  week?: string;
   /** id do usuário logado. Só o servidor preenche (nunca vem da query string): só ele vê as próprias lutas na fila ou com erro. */
   viewer?: number;
 }
@@ -440,6 +677,7 @@ export const FILTER_KEYS = [
   "role",
   "profession",
   "day",
+  "week",
 ] as const satisfies readonly (keyof Filters)[];
 
 const NUMERIC_FILTERS = new Set<keyof Filters>(["days", "map", "minSquad", "maxSquad", "minEnemies", "minDurationSec"]);
@@ -457,12 +695,77 @@ export function battleDay(iso: string | null | undefined): string | null {
   return Number.isNaN(t) ? null : new Date(t - BATTLE_DAY_SHIFT_HOURS * 3_600_000).toISOString().slice(0, 10);
 }
 
+const HOUR_MS = 3_600_000;
+const WEEK_MS = 7 * 24 * HOUR_MS;
+
+/**
+ * A semana do clã vai da sexta às 23:03 até a sexta seguinte às 23:00 (horário de Brasília, UTC-3); entre 23:00 e 23:03 de sexta não há
+ * semana. Ela é identificada pela data da sexta em que começa (AAAA-MM-DD). `to` é exclusivo. Data que não é sexta-feira não é semana.
+ */
+export function weekRange(week: string): { from: string; to: string } | null {
+  if (!isValidDay(week) || new Date(`${week}T00:00:00Z`).getUTCDay() !== 5) return null;
+  return {
+    from: new Date(Date.parse(`${week}T23:03:00-03:00`)).toISOString(),
+    to: new Date(Date.parse(`${week}T23:00:00-03:00`) + WEEK_MS).toISOString(),
+  };
+}
+
+/** A semana a que um instante pertence (a data da sexta em que ela começa), ou null se ele cai na janela de 23:00 a 23:03 de sexta. */
+export function weekOf(iso: string | null | undefined): string | null {
+  const t = iso ? Date.parse(iso) : NaN;
+  if (Number.isNaN(t)) return null;
+  const local = new Date(t - 3 * HOUR_MS); // o relógio de Brasília lido como UTC
+  const sinceFriday = (local.getUTCDay() - 5 + 7) % 7;
+  const friday = new Date(Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate() - sinceFriday));
+  for (const candidate of [friday, new Date(friday.getTime() - WEEK_MS)]) {
+    const week = candidate.toISOString().slice(0, 10);
+    const range = weekRange(week)!;
+    if (t >= Date.parse(range.from) && t < Date.parse(range.to)) return week;
+  }
+  return null;
+}
+
 function isValidDay(d: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return false;
   const t = Date.parse(`${d}T00:00:00Z`);
   // data impossível (2026-13-45) dá NaN; 2026-02-30 "rola" para março e a volta não bate
   return !Number.isNaN(t) && new Date(t).toISOString().slice(0, 10) === d;
 }
+
+/** Um mês (AAAA-MM) com resumo diário guardado: o primeiro e o último dia com dados, e se é o mês em andamento. */
+export interface ArchiveMonth {
+  month: string;
+  days: number;
+  first: string;
+  last: string;
+  players: number;
+  current: boolean;
+}
+
+/** Uma semana (sexta 23:03 a sexta 23:00) com resumo diário guardado: o primeiro e o último dia com dados, e se é a semana em andamento. */
+export interface ArchiveWeek {
+  /** a data da sexta em que a semana começa */
+  week: string;
+  days: number;
+  first: string;
+  last: string;
+  players: number;
+  current: boolean;
+}
+
+/** O desempenho de um jogador num mês (ou semana) arquivado, do resumo diário: a linha do período, a média do clã no mesmo período e a última luta. */
+export interface ArchivePlayerProfile {
+  row: RankingRow;
+  baseline: Aggregate;
+  /** o tempo de referência do ajuste dos boons e do uptime (o mesmo do Ranking do período) */
+  referenceMs: number;
+  /** o instante da última luta dele no período (o resumo não guarda as lutas, só quando ele apareceu pela última vez) */
+  lastSeen: string | null;
+  /** o resumo do último dia de batalha em que ele jogou no período (o resumo diário não separa as lutas do dia) */
+  lastDay: (Aggregate & { day: string }) | null;
+}
+
+export const isMonth = (m: string): boolean => /^\d{4}-(0[1-9]|1[0-2])$/.test(m);
 
 /** Resumo de um dia de batalha. */
 export interface DaySummary {
@@ -500,6 +803,8 @@ export function parseFilters(q: Record<string, unknown>): Filters {
     } else if (k === "day") {
       const days = [...new Set(s.split(",").map((d) => d.trim()).filter(isValidDay))].slice(0, 62);
       if (days.length) f.day = days;
+    } else if (k === "week") {
+      if (weekRange(s)) f.week = s;
     } else if (k === "role") {
       if (s === "dps" || s === "support") f.role = s;
     } else if (k === "from" || k === "to") {
@@ -600,16 +905,67 @@ export const isShortParticipation = (activeMs: number): boolean => activeMs < SH
  */
 export const ROLE_MIN_ACTIVE_MS = 60_000;
 
-/** Valor por segundo de tempo ativo em luta (o "DPS"). */
+// ---------- Cards da Visão geral ----------
+
+/** Cura + barreira: métrica só dos cards (a soma é calculada na tela, sem coluna própria), por isso vale também para lutas antigas. */
+export const HEALING_BARRIER = "healingBarrier";
+export type CardMetric = StatKey | typeof HEALING_BARRIER;
+/** A métrica de cada card; há um card por grupo do Ranking. */
+export type Cards = Record<StatGroup, CardMetric>;
+
+/** O que cada card mostra para quem nunca escolheu: o padrão de cada grupo. */
+export const DEFAULT_CARDS: Cards = { offense: "damage", support: "healing", boons: "stabOut", uptime: "stabUp", defense: "dodges" };
+
+/** As métricas que o seletor de um card oferece: as do grupo (nos boons, as do alcance pedido) e, no Suporte, Cura + barreira no fim. */
+export function cardOptions(group: StatGroup): CardMetric[] {
+  const keys: CardMetric[] = group === "boons" ? [...statsOfGroup(group), ...statsOfGroup(group, "effective")] : statsOfGroup(group);
+  return group === "support" ? [...keys, HEALING_BARRIER] : keys;
+}
+
+const isCardMetric = (group: StatGroup, metric: string): metric is CardMetric =>
+  metric === HEALING_BARRIER ? group === "support" : (STAT_KEYS as readonly string[]).includes(metric) && STAT_META[metric as StatKey].group === group && (group !== "boons" || cardOptions(group).includes(metric as StatKey));
+
+/** Lê o `cards` do link (`grupo:métrica,grupo:métrica`): o que for inválido, de outro grupo ou repetido de forma estranha é descartado. */
+export function parseCards(raw: string | null | undefined): Partial<Cards> {
+  const cards: Partial<Cards> = {};
+  if (!raw || raw.length > 300) return cards;
+  for (const part of raw.split(",")) {
+    const [group, metric] = part.split(":");
+    const known = STAT_GROUPS.find((g) => g.id === group);
+    if (known && metric && isCardMetric(known.id, metric)) cards[known.id] = metric;
+  }
+  return cards;
+}
+
+export const resolveCards = (chosen: Partial<Cards>): Cards => ({ ...DEFAULT_CARDS, ...chosen });
+
+/** Só o que difere do padrão: o link fica curto e quem nunca escolheu segue o padrão. */
+export const serializeCards = (cards: Cards): string =>
+  STAT_GROUPS.filter((g) => cards[g.id] !== DEFAULT_CARDS[g.id])
+    .map((g) => `${g.id}:${cards[g.id]}`)
+    .join(",");
+
+/** Contagem (dano, cura, strips…) mostra por minuto de tempo ativo; boon e uptime já são valor por tempo. Cura + barreira é contagem. */
+export const isCardRate = (metric: CardMetric): boolean => metric === HEALING_BARRIER || !isTimeBased(metric);
+
+/** A unidade que o rodapé do card mostra: por minuto nas contagens, % do tempo no uptime em %, e média no tempo nos boons e nas médias (pilhas, distância). */
+export const cardUnit = (metric: CardMetric): "perMin" | "pctTime" | "avgTime" =>
+  isCardRate(metric) ? "perMin" : STAT_META[metric as StatKey].format === "pct" ? "pctTime" : "avgTime";
+
+/** Para métricas em que menos é melhor (mortes, dano recebido) o top vai do menor para o maior. */
+export const cardHigherIsBetter = (metric: CardMetric): boolean => metric === HEALING_BARRIER || STAT_META[metric].higherIsBetter;
+
 /**
- * Os `n` jogadores com mais `key` por minuto de tempo ativo, do maior para o menor. Ignora quem lutou menos de `minActiveMs`
- * (quem apareceu 10 s) e quem tem zero. O cartão do top 5 e o painel do top 10 usam esta mesma conta.
+ * Os `n` do topo de um card, com o valor mostrado: por minuto nas contagens; nos boons e no uptime, o valor ajustado pelo tempo jogado
+ * (o mesmo do Ranking, com `adjust`). Fica de fora quem lutou menos de `minActiveMs` e quem tem zero (sem dado, ou sem nenhuma morte
+ * quando menos é melhor): zero não é um resultado a premiar.
  */
-export function topByRate<T extends Stats & { activeMs: number }>(rows: T[], key: StatKey, n: number, minActiveMs: number): { row: T; perMin: number }[] {
+export function topByCard<T extends Stats & { activeMs: number }>(rows: T[], metric: CardMetric, n: number, minActiveMs: number, adjust?: TimeAdjust): { row: T; value: number }[] {
+  const higher = cardHigherIsBetter(metric);
   return rows
-    .filter((r) => r.activeMs >= minActiveMs && r[key] > 0)
-    .map((row) => ({ row, perMin: perMinute(row[key], row.activeMs) }))
-    .sort((a, b) => b.perMin - a.perMin)
+    .filter((r) => r.activeMs >= minActiveMs && (metric === HEALING_BARRIER ? r.healing + r.barrier : r[metric]) > 0)
+    .map((row) => ({ row, value: metric === HEALING_BARRIER ? perMinute(row.healing + row.barrier, row.activeMs) : statValue(metric, "perMin", row, adjust) }))
+    .sort((a, b) => (higher ? b.value - a.value : a.value - b.value))
     .slice(0, n);
 }
 

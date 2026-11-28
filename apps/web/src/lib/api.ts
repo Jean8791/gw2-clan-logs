@@ -1,8 +1,11 @@
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQueries, useQuery } from "@tanstack/react-query";
 import {
   filtersToQuery,
   PAGE_SIZE,
   type Aggregate,
+  type ArchiveMonth,
+  type ArchivePlayerProfile,
+  type ArchiveWeek,
   type DaySummary,
   type Fight,
   type FightDetail,
@@ -12,7 +15,12 @@ import {
   type PlayerOptions,
   type PlayerProfile,
   type PlayerSkill,
+  type PlayerSkillUsage,
+  type PlayerSupportSkill,
+  type SkillKind,
   type RankingRow,
+  type SupportKind,
+  type UsageKind,
   type UploadResult,
 } from "@gw2logs/shared";
 
@@ -86,6 +94,29 @@ export const useFight = (id: string) => useQuery({ queryKey: ["fight", id], quer
 export const useRanking = (f: Filters, enabled = true) =>
   useQuery({ queryKey: ["ranking", f], queryFn: () => get<{ rows: RankingRow[]; baseline: Aggregate; referenceMs: number }>(withFilters(`/api/ranking`, f)), enabled });
 
+/** Meses com resumo diário guardado (o Ranking deles vale mesmo depois de as lutas serem apagadas). */
+export const useArchiveMonths = (enabled: boolean) => useQuery({ queryKey: ["archive-months"], queryFn: () => get<ArchiveMonth[]>("/api/archive/months"), enabled });
+
+/** Semanas (sexta 23:03 a sexta 23:00) com resumo diário guardado. */
+export const useArchiveWeeks = (enabled: boolean) => useQuery({ queryKey: ["archive-weeks"], queryFn: () => get<ArchiveWeek[]>("/api/archive/weeks"), enabled });
+
+/** O Ranking de um mês, ou da semana `f.week` (que vale no lugar do mês); do resumo só valem a guilda e a função (período, dia e tamanho do squad não existem nele). */
+export const useArchiveRanking = (month: string | undefined, f: Filters, enabled: boolean) =>
+  useQuery({
+    queryKey: ["archive-ranking", f.week ? undefined : month, f.week, f.guild, f.role],
+    enabled: enabled && (!!month || !!f.week),
+    queryFn: () => get<{ rows: RankingRow[]; baseline: Aggregate; referenceMs: number }>(withFilters(`/api/archive/ranking`, { guild: f.guild, role: f.role, week: f.week }, month ? { month } : {})),
+  });
+
+/** O perfil de um jogador num mês ou semana arquivados (do resumo diário). */
+export const useArchivePlayer = (account: string, month: string | undefined, f: Filters) =>
+  useQuery({
+    queryKey: ["archive-player", account, month, f.week, f.guild, f.role],
+    enabled: !!month || !!f.week,
+    retry: false,
+    queryFn: () => get<ArchivePlayerProfile>(withFilters(`/api/archive/players/${encodeURIComponent(account)}`, { guild: f.guild, role: f.role, week: f.week }, month ? { month } : {})),
+  });
+
 export const usePlayer = (account: string, f: Filters) =>
   useQuery({ queryKey: ["player", account, f], queryFn: () => get<PlayerProfile>(withFilters(`/api/players/${encodeURIComponent(account)}`, f)), retry: false });
 
@@ -101,6 +132,56 @@ export const usePlayerOptions = (account: string, f: Filters) =>
 
 export const usePlayerSkills = (account: string, f: Filters) =>
   useQuery({ queryKey: ["player-skills", account, f], queryFn: () => get<PlayerSkill[]>(withFilters(`/api/players/${encodeURIComponent(account)}/skills`, f)) });
+
+/** Habilidades de um jogador em uma luta: dano, cura ou barreira (a cura e a barreira só de quem grava com o Healing Stats). */
+export const useFightPlayerSkills = <T extends PlayerSkill | PlayerSupportSkill | PlayerSkillUsage>(fightId: string, account: string, kind: SkillKind) =>
+  useQuery({
+    queryKey: ["fight-player-skills", fightId, account, kind],
+    enabled: !!account,
+    queryFn: () => get<T[]>(`/api/fights/${encodeURIComponent(fightId)}/players/${encodeURIComponent(account)}/skills?kind=${kind}`),
+  });
+
+/** Usos de cada habilidade (cast) ou dano recebido por habilidade (taken) do jogador. */
+export const usePlayerSkillUsage = (account: string, f: Filters, kind: UsageKind, enabled = true) =>
+  useQuery({
+    queryKey: ["player-skill-usage", account, f, kind],
+    enabled,
+    queryFn: () => get<PlayerSkillUsage[]>(withFilters(`/api/players/${encodeURIComponent(account)}/skill-usage`, f, { kind })),
+  });
+
+/** Cura ou barreira do jogador por habilidade (só de quem grava com o Healing Stats). */
+export const usePlayerSupportSkills = (account: string, f: Filters, kind: SupportKind, enabled = true) =>
+  useQuery({
+    queryKey: ["player-support-skills", account, f, kind],
+    enabled,
+    queryFn: () => get<PlayerSupportSkill[]>(withFilters(`/api/players/${encodeURIComponent(account)}/support-skills`, f, { kind })),
+  });
+
+/** Uma habilidade de um jogador na comparação: o total e a parte (%) que ela é do total dele, para dano, cura ou barreira. */
+export interface SkillShare {
+  /** identifica a habilidade (a direta e o efeito de mesmo id são linhas diferentes) */
+  key: string;
+  skillId: number;
+  name: string | null;
+  indirect: boolean;
+  total: number;
+  pct: number;
+}
+
+/** As habilidades de vários jogadores, na mesma forma para dano, cura e barreira (a ordem é a dos jogadores). */
+export const usePlayersSkills = (accounts: string[], f: Filters, kind: "damage" | SupportKind) =>
+  useQueries({
+    queries: accounts.map((account) => ({
+      queryKey: ["player-skill-shares", account, f, kind],
+      queryFn: async (): Promise<SkillShare[]> => {
+        const base = `/api/players/${encodeURIComponent(account)}`;
+        if (kind === "damage") {
+          return (await get<PlayerSkill[]>(withFilters(`${base}/skills`, f))).map((s) => ({ key: `s${s.skillId}`, skillId: s.skillId, name: s.name, indirect: false, total: s.damage, pct: s.pct }));
+        }
+        return (await get<PlayerSupportSkill[]>(withFilters(`${base}/support-skills`, f, { kind }))).map((s) => ({ key: `${s.indirect ? "b" : "s"}${s.skillId}`, skillId: s.skillId, name: s.name, indirect: s.indirect, total: s.amount, pct: s.pct }));
+      },
+    })),
+  });
 
 export const useCompare = (accounts: string[], f: Filters) =>
   useQuery({

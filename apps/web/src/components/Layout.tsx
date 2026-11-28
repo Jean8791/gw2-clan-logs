@@ -1,4 +1,4 @@
-import { BarChart3, CalendarDays, ChevronUp, GitCompareArrows, Home, Link2, LogIn, LogOut, Shield, Swords, Trash2, Upload, UserRound } from "lucide-react";
+import { BarChart3, CalendarDays, CalendarRange, ChevronUp, GitCompareArrows, Home, Link2, LogIn, LogOut, Shield, Swords, Trash2, Upload, UserRound, type LucideIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ROUTES } from "@gw2logs/shared";
@@ -9,16 +9,36 @@ import { setLang, useLang, useT } from "../lib/i18n";
 import { LoginNotice } from "./LoginNotice";
 import { Button, Input, Segmented, cx } from "./ui";
 
-const NAV = [
-  { to: ROUTES.overview, label: "nav.overview", icon: Home, end: true },
-  { to: ROUTES.days, label: "nav.days", icon: CalendarDays },
-  { to: ROUTES.fights, label: "nav.fights", icon: Swords },
-  { to: ROUTES.ranking, label: "nav.ranking", icon: BarChart3 },
-  { to: ROUTES.compare, label: "nav.compare", icon: GitCompareArrows },
-  { to: ROUTES.guilds, label: "nav.guilds", icon: Shield },
+/** O menu em grupos: o panorama do clã, as lutas, os jogadores e, para quem está logado, a conta. Cada grupo tem um título na barra lateral. */
+type NavItem = { to: string; label: string; icon: LucideIcon; end?: boolean };
+const GROUPS: { title: string; items: NavItem[] }[] = [
+  {
+    title: "nav.group.overview",
+    items: [
+      { to: ROUTES.overview, label: "nav.overview", icon: Home, end: true },
+      { to: ROUTES.months, label: "nav.months", icon: CalendarRange },
+    ],
+  },
+  {
+    title: "nav.group.fights",
+    items: [
+      { to: ROUTES.days, label: "nav.days", icon: CalendarDays },
+      { to: ROUTES.fights, label: "nav.fights", icon: Swords },
+    ],
+  },
+  {
+    title: "nav.group.players",
+    items: [
+      { to: ROUTES.ranking, label: "nav.ranking", icon: BarChart3 },
+      { to: ROUTES.compare, label: "nav.compare", icon: GitCompareArrows },
+      { to: ROUTES.guilds, label: "nav.guilds", icon: Shield },
+    ],
+  },
 ];
 const ME = { to: ROUTES.me, label: "nav.myProfile", icon: UserRound, end: false };
 const IMPORT = { to: ROUTES.import, label: "nav.import", icon: Upload, end: false };
+/** Quem está logado ganha o grupo da conta: o Meu perfil e o Importar logs. */
+const ACCOUNT_GROUP: { title: string; items: NavItem[] } = { title: "nav.group.account", items: [ME, IMPORT] };
 
 /** Botão PT | EN. A escolha fica salva no navegador, e a tela é refeita no idioma novo. */
 function LangToggle() {
@@ -208,7 +228,8 @@ export function Layout() {
   // quem está logado vê o Meu Perfil na lista, o Importar logs e o menu da conta. Quem não está vê o menu Meu perfil / Entrar, embaixo
   // (no celular, no fim da lista). O Meu Perfil é do navegador de quem usa, não depende de login.
   const logged = !!viewer.data;
-  const nav = logged ? [...NAV, ME, IMPORT] : NAV;
+  const groups = logged ? [...GROUPS, ACCOUNT_GROUP] : GROUPS;
+  const t = useT();
   const lang = useLang();
   const link = (active: boolean) =>
     cx(
@@ -223,11 +244,16 @@ export function Layout() {
         <div className="px-2">
           <Brand />
         </div>
-        <nav className="mt-8 flex flex-col gap-1">
-          {nav.map(({ to, label, icon: Icon, end }) => (
-            <NavLink key={to} to={to} end={end} className={({ isActive }) => link(isActive)}>
-              <Icon className="size-4" /> <NavLabel label={label} />
-            </NavLink>
+        <nav className="mt-7 flex flex-col gap-5 overflow-y-auto">
+          {groups.map((g) => (
+            <div key={g.title} className="flex flex-col gap-1">
+              <div className="px-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-faint">{t(g.title)}</div>
+              {g.items.map(({ to, label, icon: Icon, end }) => (
+                <NavLink key={to} to={to} end={end} className={({ isActive }) => link(isActive)}>
+                  <Icon className="size-4" /> <NavLabel label={label} />
+                </NavLink>
+              ))}
+            </div>
           ))}
         </nav>
         <div className="mt-auto">
@@ -249,11 +275,16 @@ export function Layout() {
             <LangToggle />
           </div>
         </div>
-        <nav className="flex gap-1 overflow-x-auto px-3 pb-2">
-          {nav.map(({ to, label, icon: Icon, end }) => (
-            <NavLink key={to} to={to} end={end} className={({ isActive }) => cx(link(isActive), "shrink-0 px-2.5 py-1.5 text-xs")}>
-              <Icon className="size-3.5" /> <NavLabel label={label} />
-            </NavLink>
+        <nav className="flex items-center gap-1 overflow-x-auto px-3 pb-2">
+          {groups.map((g, i) => (
+            <div key={g.title} className="flex shrink-0 items-center gap-1">
+              {i > 0 && <span aria-hidden className="mx-1 h-4 w-px bg-line" />}
+              {g.items.map(({ to, label, icon: Icon, end }) => (
+                <NavLink key={to} to={to} end={end} className={({ isActive }) => cx(link(isActive), "shrink-0 px-2.5 py-1.5 text-xs")}>
+                  <Icon className="size-3.5" /> <NavLabel label={label} />
+                </NavLink>
+              ))}
+            </div>
           ))}
           {!logged && !viewer.isLoading && <ProfileMenu className={cx(link(false), "shrink-0 px-2.5 py-1.5 text-xs")} />}
         </nav>

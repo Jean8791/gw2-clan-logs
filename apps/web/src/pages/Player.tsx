@@ -27,7 +27,8 @@ import {
   type Aggregate,
   type BoonScope,
   type PlayerHistoryRow,
-  type PlayerSkill,
+  type SkillKind,
+  SKILL_KINDS,
   type StatGroup,
   type StatKey,
 } from "@gw2logs/shared";
@@ -37,9 +38,9 @@ import { GuildTag, Profession } from "../components/badges";
 import { AXIS, GRID, TOOLTIP } from "../components/charts";
 import { PlayerPicker } from "../components/PlayerPicker";
 import { pickerView, statColumns } from "../components/statColumns";
-import { SkillIcon } from "../components/MediaIcon";
-import { Badge, Button, Card, Delta, Empty, ErrorBox, Kpi, Loading, PageHeader, Select, cx } from "../components/ui";
-import { usePlayer, usePlayerOptions, usePlayerSkills, useRanking } from "../lib/api";
+import { SkillsBody } from "../components/SkillTables";
+import { Badge, Button, Card, Delta, Empty, ErrorBox, Kpi, Loading, PageHeader, Segmented, Select, cx } from "../components/ui";
+import { usePlayer, usePlayerOptions, usePlayerSkillUsage, usePlayerSkills, usePlayerSupportSkills, useRanking } from "../lib/api";
 import { setMe, useFilters, useMe } from "../lib/hooks";
 import { getLang, t as tr } from "../lib/i18n"; // "t" já é o total do jogador nesta página
 import { ScopeToggle } from "../components/statColumns";
@@ -49,7 +50,15 @@ export function PlayerPage() {
   const { account = "" } = useParams();
   const [filters, setFilters] = useFilters({ mode: "wvw" });
   const { data, error, isLoading } = usePlayer(account, filters);
-  const skills = usePlayerSkills(account, filters).data ?? [];
+  // a tabela de habilidades mostra dano, cura ou barreira; cura e barreira só buscam quando escolhidas
+  const [skillKind, setSkillKind] = useState<SkillKind>("damage");
+  const isSupport = skillKind === "heal" || skillKind === "barrier";
+  const isUsage = skillKind === "cast" || skillKind === "taken";
+  const skillsQuery = usePlayerSkills(account, filters);
+  const skills = skillsQuery.data ?? [];
+  const support = usePlayerSupportSkills(account, filters, isSupport ? skillKind : "heal", isSupport);
+  const usage = usePlayerSkillUsage(account, filters, isUsage ? skillKind : "cast", isUsage);
+  const shown = isSupport ? support : isUsage ? usage : skillsQuery;
   // a média de comparação segue os mesmos filtros da página (período, função, classe, tamanho, mapa); sem filtro de função, é a do squad todo
   const ranking = useRanking(filters).data;
   const avg = ranking?.baseline;
@@ -96,37 +105,6 @@ export function PlayerPage() {
   if (!data) return null;
   const t = data.totals;
   const isMe = me === account;
-
-  const skillCols: Column<PlayerSkill>[] = [
-    {
-      id: "skill",
-      header: tr("skills.col.skill"),
-      sort: (k) => k.name ?? "",
-      cell: (k) => (
-        <span className="inline-flex items-center gap-2">
-          <SkillIcon id={k.skillId} />
-          {k.name ?? `#${k.skillId}`}
-        </span>
-      ),
-    },
-    { id: "damage", header: tr("skills.col.damage"), align: "right", sort: (k) => k.damage, cell: (k) => compact(k.damage) },
-    {
-      id: "pct",
-      header: tr("skills.col.pct"),
-      align: "right",
-      sort: (k) => k.pct,
-      cell: (k) => (
-        <span className="inline-flex items-center justify-end gap-2">
-          <span className="h-1.5 w-16 rounded-full bg-surface-3">
-            <span className="block h-1.5 rounded-full bg-gold/70" style={{ width: `${Math.min(100, k.pct)}%` }} />
-          </span>
-          <span className="w-12 text-right">{k.pct.toFixed(1).replace(".", ",")}%</span>
-        </span>
-      ),
-    },
-    { id: "hits", header: tr("skills.col.hits"), align: "right", sort: (k) => k.connectedHits, cell: (k) => int(k.connectedHits), title: tr("skills.col.hitsTitle") },
-    { id: "avg", header: tr("skills.col.avg"), align: "right", sort: (k) => k.avgHit, cell: (k) => compact(k.avgHit) },
-  ];
 
   // Linha "Total": cada coluna mostra o mesmo valor do Ranking. Soma das lutas filtradas; em boons e uptime, a média ponderada pelo tempo
   // ajustada pelo tempo jogado (a conta vai na dica).
@@ -329,12 +307,20 @@ export function PlayerPage() {
             <p className="border-t border-line px-5 py-2.5 text-xs text-faint">{tr("player.historyNote")}</p>
           </Card>
 
-          {skills.length > 0 && (
-            <Card className="mt-6" title={tr("player.skills")}>
-              <DataTable rows={skills.slice(0, 25)} columns={skillCols} rowKey={(k) => String(k.skillId)} dense />
-              <p className="border-t border-line px-5 py-2.5 text-xs text-faint">
-                {tr("player.skillsNote")}
-              </p>
+          {(skills.length > 0 || skillKind !== "damage") && (
+            <Card
+              className="mt-6"
+              title={tr("player.skills")}
+              action={
+                <Segmented
+                  size="sm"
+                  value={skillKind}
+                  onChange={setSkillKind}
+                  options={SKILL_KINDS.map((k) => ({ value: k, label: tr(`skills.kind.${k}`) }))}
+                />
+              }
+            >
+              <SkillsBody kind={skillKind} data={shown.data} isLoading={shown.isLoading} error={shown.error} scope="filters" />
             </Card>
           )}
         </>
