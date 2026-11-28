@@ -1,12 +1,9 @@
 import { createHash } from "node:crypto";
-import { BATTLE_DAY_SHIFT_HOURS, retentionCutoff, STAT_KEYS, STAT_META } from "@gw2logs/shared";
+import { ARCHIVE_MONTHS, BATTLE_DAY_SHIFT_HOURS, retentionCutoff, STAT_KEYS, STAT_META } from "@gw2logs/shared";
 import { STAT_COL, type DB } from "./db.js";
 import { BATTLE_DAY, fightConditions } from "./queries.js";
 
 const HOUR_MS = 3_600_000;
-
-/** Quantos meses o resumo diário fica guardado (o mês atual mais os anteriores): é a promessa feita ao clã. */
-export const ARCHIVE_MONTHS = 12;
 
 /** Primeiro dia do resumo que ainda vale: o dia 1 do mês de ARCHIVE_MONTHS meses atrás. */
 export function archiveStart(now: Date): string {

@@ -8,7 +8,7 @@ import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest, 
 import multipart from "@fastify/multipart";
 import rateLimit from "@fastify/rate-limit";
 import fastifyStatic from "@fastify/static";
-import { MAX_JSON_MB, MAX_UPLOAD_MB, parseFilters, referenceTimeMs, type Filters, type UploadResult } from "@gw2logs/shared";
+import { isMonth, MAX_JSON_MB, MAX_UPLOAD_MB, parseFilters, referenceTimeMs, type Filters, type UploadResult } from "@gw2logs/shared";
 import { isAdmin, type User } from "./auth.js";
 import { apiUser, registerAuthRoutes, sessionUser } from "./auth-routes.js";
 import { paths, type Config } from "./config.js";
@@ -306,6 +306,15 @@ export async function buildApp(cfg: Config, opts: { logger?: FastifyServerOption
     const rows = q.ranking(db, fl);
     // referenceMs: o tempo de referência do ajuste dos boons e do uptime (metade do tempo mediano de jogo no filtro)
     return { rows, baseline: q.baseline(db, fl), referenceMs: referenceTimeMs(rows.map((r) => r.activeMs)) };
+  });
+
+  // o Ranking de um mês, somado do resumo diário (vale mesmo depois de as lutas serem apagadas); só modo, guilda, função e classe filtram
+  server.get("/api/archive/months", async () => q.archiveMonths(db));
+  server.get("/api/archive/ranking", async (req, reply) => {
+    const month = String((req.query as Record<string, unknown>).month ?? "");
+    if (!isMonth(month)) return reply.code(400).send({ error: "Use month=AAAA-MM.", code: "badMonth" });
+    const { rows, baseline } = q.archiveRanking(db, month, parseFilters(req.query as Record<string, string>));
+    return { rows, baseline, referenceMs: referenceTimeMs(rows.map((r) => r.activeMs)) };
   });
 
   server.get<{ Params: { account: string } }>("/api/players/:account", async (req, reply) => {

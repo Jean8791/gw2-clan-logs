@@ -1,4 +1,5 @@
 import { Info } from "lucide-react";
+import { ARCHIVE_MONTHS } from "@gw2logs/shared";
 import { useConfig } from "../lib/api";
 import { t } from "../lib/i18n";
 
@@ -12,6 +13,7 @@ export function RetentionNotice() {
       <div className="space-y-1">
         <div className="font-medium">{t("retention.title")}</div>
         <p>{cfg.retentionDays > 0 ? t("retention.days", { n: cfg.retentionDays }) : t("retention.noDays")}</p>
+        <p>{t("retention.archive", { n: ARCHIVE_MONTHS })}</p>
         <p>{t("retention.keep")}</p>
       </div>
     </div>
