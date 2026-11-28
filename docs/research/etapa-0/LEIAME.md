@@ -9,3 +9,5 @@ Python 3, sem dependências. Geram os números de `../etapa-0-validacao-boons.md
 5. `python3 etapa0_abu.py` (BVU × ABU; usa o arquivo gerado no passo 2).
 
 Os logs e os JSON trazem nomes de jogadores: não os coloque no repositório.
+
+6. `EI_OUT=... python3 etapa5.py` (viabilidade da camada tática: baixa os fatos das habilidades na API pública do GW2, liga habilidade a boon e compara a concentração dos usos de Stability com o aproveitamento; ver `../etapas-3-a-5-boons.md`).
