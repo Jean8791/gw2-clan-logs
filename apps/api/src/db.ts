@@ -84,6 +84,8 @@ function migrate(db: DB) {
       role          TEXT NOT NULL DEFAULT 'dps',
       active_ms     INTEGER NOT NULL DEFAULT 0,
       dist_to_com   REAL,
+      dist_cover_ms REAL NOT NULL DEFAULT 0,   -- tempo (ms) que o dado da tag cobre: 0 nos logs lidos sem replay
+      near_cover_ms REAL NOT NULL DEFAULT 0,   -- idem, para o tempo perto da tag (precisa das posições)
       ${statCols},
       PRIMARY KEY (fight_id, account)
     );
@@ -130,6 +132,9 @@ function migrate(db: DB) {
   for (const k of STAT_KEYS) {
     if (!have.has(STAT_COL[k])) db.exec(`ALTER TABLE player_stats ADD COLUMN ${STAT_COL[k]} REAL NOT NULL DEFAULT 0`);
   }
+  for (const col of ["dist_cover_ms", "near_cover_ms"]) {
+    if (!have.has(col)) db.exec(`ALTER TABLE player_stats ADD COLUMN ${col} REAL NOT NULL DEFAULT 0`);
+  }
   const haveFights = new Set((db.pragma("table_info(fights)") as { name: string }[]).map((c) => c.name));
   for (const col of ["enemy_downs", "enemy_deaths"]) {
     if (!haveFights.has(col)) db.exec(`ALTER TABLE fights ADD COLUMN ${col} INTEGER`);
@@ -146,6 +151,7 @@ function migrate(db: DB) {
   dropGlobalShaUnique(db);
   db.exec(`
     CREATE INDEX IF NOT EXISTS ix_fights_time ON fights(time_start);
+    CREATE INDEX IF NOT EXISTS ix_fights_map_time ON fights(map_id, time_start);
     CREATE INDEX IF NOT EXISTS ix_fights_owner ON fights(owner_id);
     CREATE UNIQUE INDEX IF NOT EXISTS ux_fights_owner_sha ON fights(owner_id, sha256);
   `);

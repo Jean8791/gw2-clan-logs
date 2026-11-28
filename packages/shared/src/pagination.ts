@@ -4,7 +4,7 @@
 export const PAGE_SIZE = 20;
 
 /** Colunas pelas quais a lista de lutas pode ser ordenada no servidor (são os ids das colunas da tela). */
-export const FIGHT_SORT_KEYS = ["time", "rec", "name", "dur", "size", "kd", "dmg", "up"] as const;
+export const FIGHT_SORT_KEYS = ["time", "name", "dur", "size", "kd", "dmg"] as const;
 export type FightSortKey = (typeof FIGHT_SORT_KEYS)[number];
 
 /** Quantas páginas tem um total de registros (sempre pelo menos 1). */

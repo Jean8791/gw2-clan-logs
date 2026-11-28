@@ -80,7 +80,7 @@ describe("cabeçalhos de segurança", () => {
     fs.mkdirSync(path.join(dir, "fights", "f1"), { recursive: true });
     fs.writeFileSync(path.join(dir, "fights", "f1", "report.html"), "<html><script>1</script></html>");
 
-    const res = await app.server.inject(`/api/u/${ana.publicId}/fights/f1/report`);
+    const res = await app.server.inject(`/api/fights/f1/report`);
 
     expect(res.statusCode).toBe(200);
     // origem opaca: o relatório roda scripts, mas não alcança o cookie da sessão nem a API do site
@@ -94,7 +94,7 @@ describe("cabeçalhos de segurança", () => {
     fs.mkdirSync(path.join(dir, "fights", "f2"), { recursive: true });
     fs.writeFileSync(path.join(dir, "fights", "f2", "report.html"), '<!DOCTYPE html><html><head><meta charset="utf-8"><script>window.ORIGINAL = 1;</script></head><body></body></html>');
 
-    const corpo = (await app.server.inject(`/api/u/${ana.publicId}/fights/f2/report`)).body;
+    const corpo = (await app.server.inject(`/api/fights/f2/report`)).body;
 
     const shim = corpo.indexOf("localStorage");
     expect(shim).toBeGreaterThan(corpo.indexOf("<head>"));
@@ -106,7 +106,7 @@ describe("cabeçalhos de segurança", () => {
   it("a resposta de erro da rota do relatório (JSON) não leva o sandbox", async () => {
     const ana = criarUsuario(app, "1", "ana");
 
-    const res = await app.server.inject(`/api/u/${ana.publicId}/fights/nao-existe/report`);
+    const res = await app.server.inject(`/api/fights/nao-existe/report`);
 
     expect(res.statusCode).toBe(404);
     expect(cabecalho(res, "content-security-policy")).toBeUndefined();

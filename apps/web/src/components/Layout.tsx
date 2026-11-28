@@ -1,12 +1,13 @@
-import { BarChart3, CalendarDays, ChevronUp, GitCompareArrows, Home, Link2, LogOut, RefreshCw, Shield, Swords, Trash2, Upload, UserRound } from "lucide-react";
-import { useState } from "react";
-import { ROUTES, isSpaceOwner } from "@gw2logs/shared";
-import { NavLink, Outlet } from "react-router-dom";
-import { deleteAccount, logout, rotateShareLink, useMeta, useOwner, useViewer } from "../lib/api";
+import { BarChart3, CalendarDays, ChevronUp, GitCompareArrows, Home, Link2, LogIn, LogOut, Shield, Swords, Trash2, Upload, UserRound } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { ROUTES } from "@gw2logs/shared";
+import { NavLink, Outlet, useLocation } from "react-router-dom";
+import { deleteAccount, logout, useConfig, useMeta, useViewer } from "../lib/api";
 import { useMe } from "../lib/hooks";
-import { spaceBase, spaceId } from "../lib/space";
 import { setLang, useLang, useT } from "../lib/i18n";
-import { Button, Empty, Input, Segmented, cx } from "./ui";
+import { LoginNotice } from "./LoginNotice";
+import { Button, Input, Segmented, cx } from "./ui";
 
 const NAV = [
   { to: ROUTES.overview, label: "nav.overview", icon: Home, end: true },
@@ -37,28 +38,17 @@ function LangToggle() {
   );
 }
 
-/** Só o dono do espaço, logado: o nome abre o menu com sair e apagar conta. */
+/** Quem está logado: o nome abre o menu com sair e apagar conta. */
 function AccountMenu({ name }: { name: string }) {
   const t = useT();
   const [open, setOpen] = useState(false);
-  // só uma confirmação aberta por vez: trocar o link de compartilhar ou apagar a conta
-  const [mode, setMode] = useState<"link" | "delete" | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [failed, setFailed] = useState(false);
   const [typed, setTyped] = useState("");
   const item = "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted transition hover:bg-surface-2 hover:text-text";
   const leave = (action: () => Promise<unknown>) => {
     setBusy(true);
     void action().then(() => window.location.assign("/"), () => setBusy(false));
-  };
-  // o link antigo deixa de funcionar na hora; quem trocou vai direto para o novo
-  const renewLink = () => {
-    setBusy(true);
-    setFailed(false);
-    void rotateShareLink().then(
-      (publicId) => window.location.assign(`/u/${publicId}`),
-      () => (setBusy(false), setFailed(true)),
-    );
   };
   return (
     <div className="flex flex-col gap-1">
@@ -67,25 +57,7 @@ function AccountMenu({ name }: { name: string }) {
           <button className={item} onClick={() => leave(logout)} disabled={busy}>
             <LogOut className="size-4" /> {t("space.signOut")}
           </button>
-          {mode === "link" ? (
-            <div className="space-y-2 p-2 text-xs text-muted">
-              <p>{t("account.newLinkWarn")}</p>
-              {failed && <p className="text-bad">{t("account.newLinkError")}</p>}
-              <div className="flex gap-2">
-                <Button size="sm" onClick={renewLink} disabled={busy}>
-                  {t("account.newLinkConfirm")}
-                </Button>
-                <Button size="sm" variant="ghost" onClick={() => (setMode(null), setFailed(false))} disabled={busy}>
-                  {t("account.cancel")}
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <button className={item} onClick={() => (setMode("link"), setTyped(""))}>
-              <RefreshCw className="size-4" /> {t("account.newLink")}
-            </button>
-          )}
-          {mode === "delete" ? (
+          {deleting ? (
             <div className="space-y-2 p-2 text-xs text-bad">
               <p>{t("account.deleteWarn")}</p>
               <Input label={t("account.deleteType", { name })} value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" />
@@ -93,13 +65,13 @@ function AccountMenu({ name }: { name: string }) {
                 <Button size="sm" onClick={() => leave(() => deleteAccount(typed))} disabled={busy || typed !== name}>
                   {t("account.deleteConfirm")}
                 </Button>
-                <Button size="sm" variant="ghost" onClick={() => (setMode(null), setTyped(""))} disabled={busy}>
+                <Button size="sm" variant="ghost" onClick={() => (setDeleting(false), setTyped(""))} disabled={busy}>
                   {t("account.cancel")}
                 </Button>
               </div>
             </div>
           ) : (
-            <button className={cx(item, "hover:text-bad")} onClick={() => (setMode("delete"), setFailed(false))}>
+            <button className={cx(item, "hover:text-bad")} onClick={() => setDeleting(true)}>
               <Trash2 className="size-4" /> {t("account.delete")}
             </button>
           )}
@@ -107,7 +79,7 @@ function AccountMenu({ name }: { name: string }) {
       )}
       <button
         className={cx(item, "justify-between font-medium text-text")}
-        onClick={() => (setOpen(!open), setMode(null), setFailed(false), setTyped(""))}
+        onClick={() => (setOpen(!open), setDeleting(false), setTyped(""))}
         aria-expanded={open}
       >
         <span className="flex min-w-0 items-center gap-2">
@@ -127,7 +99,7 @@ function NavLabel({ label }: { label: string }) {
   return label === ME.label && me ? <MyName account={me} /> : <>{t(label)}</>;
 }
 
-/** Nome do jogador escolhido (o da luta mais recente dele neste espaço). Enquanto a lista carrega, ou se ele não está aqui, fica "Meu perfil". */
+/** Nome do jogador escolhido (o da luta mais recente dele). Enquanto a lista carrega, ou se ele não está aqui, fica "Meu perfil". */
 function MyName({ account }: { account: string }) {
   const t = useT();
   const { data } = useMeta();
@@ -152,12 +124,12 @@ function Brand() {
   );
 }
 
-/** Copia o endereço deste espaço, para compartilhar. */
+/** Copia o endereço da página aberta (com os filtros), para compartilhar. */
 function CopyLink() {
   const t = useT();
   const [copied, setCopied] = useState(false);
   const copy = () => {
-    void navigator.clipboard?.writeText(`${window.location.origin}${spaceBase}`).then(() => {
+    void navigator.clipboard?.writeText(window.location.href).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     });
@@ -169,16 +141,75 @@ function CopyLink() {
   );
 }
 
-export function Layout() {
-  const owner = useOwner();
-  const viewer = useViewer();
-  // o dono, logado, vê o Meu Perfil na lista, o Importar logs e o menu da conta. Quem abre o link vê só o Meu Perfil, embaixo
-  // (no celular não há "embaixo": lá ele entra na lista). O Meu Perfil é do navegador de quem usa, não depende de login.
-  const isOwner = isSpaceOwner(viewer.data?.publicId, spaceId);
-  const nav = isOwner ? [...NAV, ME, IMPORT] : NAV;
-  const mobileNav = isOwner ? nav : [...NAV, ME];
-  const lang = useLang();
+/**
+ * "Meu perfil" para quem não está logado: em vez de abrir a tela, oferece duas opções. Meu perfil leva à escolha do jogador (que fica
+ * guardada no navegador); Entrar leva ao login do Discord e, depois dele, volta para esta mesma tela. Só entra quem tem autorização.
+ * O painel sai num portal: o cabeçalho e a barra lateral têm filtro de fundo e rolagem, que prenderiam um painel posicionado dentro deles.
+ */
+function ProfileMenu({ className }: { className: string }) {
   const t = useT();
+  const { data: cfg } = useConfig();
+  const { pathname, search } = useLocation();
+  const [pos, setPos] = useState<{ left: number; top?: number; bottom?: number } | null>(null);
+  const button = useRef<HTMLButtonElement>(null);
+  const panel = useRef<HTMLDivElement>(null);
+  const close = () => setPos(null);
+  const toggle = () => {
+    if (pos) return close();
+    const r = button.current!.getBoundingClientRect();
+    const left = Math.max(8, Math.min(r.left, window.innerWidth - 232));
+    // embaixo da tela (a barra lateral) o painel abre para cima; no topo (celular), para baixo
+    setPos(r.top > window.innerHeight / 2 ? { left, bottom: window.innerHeight - r.top + 4 } : { left, top: r.bottom + 4 });
+  };
+
+  useEffect(() => {
+    if (!pos) return;
+    const outside = (e: MouseEvent) => !panel.current?.contains(e.target as Node) && !button.current?.contains(e.target as Node) && close();
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && close();
+    document.addEventListener("mousedown", outside);
+    document.addEventListener("keydown", esc);
+    window.addEventListener("resize", close);
+    return () => {
+      document.removeEventListener("mousedown", outside);
+      document.removeEventListener("keydown", esc);
+      window.removeEventListener("resize", close);
+    };
+  }, [pos]);
+  // trocar de tela fecha o painel
+  useEffect(close, [pathname]);
+
+  const item = "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted transition hover:bg-surface-2 hover:text-text";
+  const signIn = `/api/auth/login?next=${encodeURIComponent(pathname + search)}`;
+  return (
+    <>
+      <button ref={button} type="button" className={className} onClick={toggle} aria-haspopup="menu" aria-expanded={pos !== null}>
+        <ME.icon className="size-4" /> <NavLabel label={ME.label} />
+      </button>
+      {pos &&
+        createPortal(
+          <div ref={panel} role="menu" style={pos} className="fixed z-50 w-56 rounded-lg border border-line bg-surface-2 p-1 shadow-lg">
+            <NavLink to={ME.to} role="menuitem" className={item} onClick={close}>
+              <ME.icon className="size-4" /> {t("nav.myProfile")}
+            </NavLink>
+            {cfg?.loginAvailable !== false && (
+              <a href={signIn} role="menuitem" className={item}>
+                <LogIn className="size-4" /> {t("space.signIn")}
+              </a>
+            )}
+          </div>,
+          document.body,
+        )}
+    </>
+  );
+}
+
+export function Layout() {
+  const viewer = useViewer();
+  // quem está logado vê o Meu Perfil na lista, o Importar logs e o menu da conta. Quem não está vê o menu Meu perfil / Entrar, embaixo
+  // (no celular, no fim da lista). O Meu Perfil é do navegador de quem usa, não depende de login.
+  const logged = !!viewer.data;
+  const nav = logged ? [...NAV, ME, IMPORT] : NAV;
+  const lang = useLang();
   const link = (active: boolean) =>
     cx(
       "flex min-w-0 items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition",
@@ -200,15 +231,11 @@ export function Layout() {
           ))}
         </nav>
         <div className="mt-auto">
-          {isOwner && viewer.data ? (
+          {viewer.data ? (
             <AccountMenu name={viewer.data.name} />
           ) : (
-            // enquanto o login ainda carrega, nada aparece embaixo (evita piscar o Meu Perfil para o dono)
-            !viewer.isLoading && (
-              <NavLink to={ME.to} className={({ isActive }) => link(isActive)}>
-                <ME.icon className="size-4" /> <NavLabel label={ME.label} />
-              </NavLink>
-            )
+            // enquanto o login ainda carrega, nada aparece embaixo (evita piscar o Meu Perfil para quem está logado)
+            !viewer.isLoading && <ProfileMenu className={cx(link(false), "w-full")} />
           )}
         </div>
       </aside>
@@ -223,11 +250,12 @@ export function Layout() {
           </div>
         </div>
         <nav className="flex gap-1 overflow-x-auto px-3 pb-2">
-          {mobileNav.map(({ to, label, icon: Icon, end }) => (
+          {nav.map(({ to, label, icon: Icon, end }) => (
             <NavLink key={to} to={to} end={end} className={({ isActive }) => cx(link(isActive), "shrink-0 px-2.5 py-1.5 text-xs")}>
               <Icon className="size-3.5" /> <NavLabel label={label} />
             </NavLink>
           ))}
+          {!logged && !viewer.isLoading && <ProfileMenu className={cx(link(false), "shrink-0 px-2.5 py-1.5 text-xs")} />}
         </nav>
       </header>
 
@@ -238,11 +266,8 @@ export function Layout() {
           <LangToggle />
         </div>
         {/* key: ao trocar o idioma a tela é refeita, e os textos e números saem no idioma novo */}
-        {owner.isError ? (
-          <Empty title={t("space.notFound")} />
-        ) : (
-          <Outlet key={lang} />
-        )}
+        <LoginNotice />
+        <Outlet key={lang} />
       </main>
     </div>
   );

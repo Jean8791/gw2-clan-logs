@@ -88,7 +88,8 @@ afterEach(() => {
 
 describe("K/D usa os inimigos mortos no total, de quem for o crédito", () => {
   it("o dia e a visão geral somam enemy_deaths; sem ele, caem nos kills do squad", () => {
-    fight(T.dia13_1000, { "A.1111": 1 }, { kills: 1, enemyDeaths: 10 });
+    // 10 minutos depois da outra luta do dia: no mesmo horário, com o mesmo jogador, seria a mesma luta gravada duas vezes
+    fight(new Date(Date.parse(T.dia13_1000) + 600_000).toISOString(), { "A.1111": 1 }, { kills: 1, enemyDeaths: 10 });
 
     expect(q.battleDays(db, {})[0]).toMatchObject({ day: "2026-11-13", kills: 8 + 10 });
     expect(q.overview(db, {}).kills).toBe(1 + 2 + 4 + 8 + 10);
@@ -140,7 +141,7 @@ describe("GET /api/days", () => {
     const app = await buildApp(loadConfig({ DATA_DIR: dir, GW2_API: "off", WEB_DIR: path.join(dir, "sem-site") }));
 
     const ana = criarUsuario(app, "1"); // o primeiro usuário recebe as lutas que já existiam sem dono
-    const res = await app.server.inject({ url: `/api/u/${ana.publicId}/days?mode=wvw` });
+    const res = await app.server.inject({ url: `/api/days?mode=wvw` });
 
     expect(res.statusCode).toBe(200);
     expect(res.json().map((d: any) => d.day)).toEqual(["2026-11-13", "2026-11-12"]);

@@ -2,15 +2,18 @@
 import crypto from "node:crypto";
 import { ROUTES } from "@gw2logs/shared";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import { paths, type Config } from "./config.js";
-import { checkSession, cookieHeader, createSession, deleteSession, isAdmin, readCookie, revokeAccessByDiscordId, rotatePublicId, sessionExpiry, upsertDiscordUser, userFromToken, type User } from "./auth.js";
+import type { Config } from "./config.js";
+import { checkSession, cookieHeader, createSession, deleteSession, isAdmin, readCookie, revokeAccessByDiscordId, sessionExpiry, upsertDiscordUser, userFromToken, type User } from "./auth.js";
 import type { DB } from "./db.js";
 import { safeEqual } from "./guards.js";
-import { removeFights } from "./retention.js";
 
 const DISCORD = "https://discord.com";
 const WEB_COOKIE = "session";
 const STATE_COOKIE = "oauth_state";
+const NEXT_COOKIE = "login_next";
+
+/** Para onde voltar depois do login: só um caminho do próprio site (sem `//`, `/\\`, endereço completo, espaço ou quebra de linha). */
+const safeNext = (v: unknown): string | null => (typeof v === "string" && v.length <= 300 && /^\/(?![/\\])[\x21-\x7e]*$/.test(v) ? v : null);
 const STATE_MINUTES = 10;
 const WEB_COOKIE_SECONDS = 30 * 86_400;
 
@@ -28,6 +31,8 @@ export function registerAuthRoutes(server: FastifyInstance, db: DB, cfg: Config,
   // o escopo guilds só é pedido quando há servidores a conferir
   const scope = onlyClan ? "identify guilds" : "identify";
   const clear = (name: string, path = "/") => cookieHeader(name, "", { secure, maxAgeSec: 0, path });
+  /** Fim de uma tentativa de login, com ou sem sucesso: apaga o state e o destino. */
+  const clearLogin = () => [clear(STATE_COOKIE, "/api/auth"), clear(NEXT_COOKIE, "/api/auth")];
 
   /** Está em algum servidor do clã? (o Discord só é consultado no login) */
   const inClanServer = async (accessToken: string): Promise<boolean> => {
@@ -44,27 +49,31 @@ export function registerAuthRoutes(server: FastifyInstance, db: DB, cfg: Config,
   const deny = (req: FastifyRequest, reply: FastifyReply, me: { id: string; username: string; global_name?: string | null }, reason: "notInGuild" | "notAllowed") => {
     req.log.warn({ discordId: me.id, name: me.global_name || me.username, reason }, "login negado");
     revokeAccessByDiscordId(db, me.id);
-    return reply.header("set-cookie", clear(STATE_COOKIE, "/api/auth")).redirect(`/?erro=${reason}`);
+    return reply.header("set-cookie", clearLogin()).redirect(`/?erro=${reason}`);
   };
 
   /** Erro no retorno do Discord: volta para a página inicial com o aviso (quem está no navegador não vê JSON) e limpa o state para a próxima tentativa. */
-  const backToStart = (reply: FastifyReply, erro: "badState" | "loginFailed") => reply.header("set-cookie", clear(STATE_COOKIE, "/api/auth")).redirect(`/?erro=${erro}`);
+  const backToStart = (reply: FastifyReply, erro: "badState" | "loginFailed") => reply.header("set-cookie", clearLogin()).redirect(`/?erro=${erro}`);
 
   // o login e o retorno chamam o Discord: limite próprio e mais baixo por IP (uma pessoa normal não chega perto)
   const authLimit = cfg.rateLimit.authPerMin > 0 ? { config: { rateLimit: { max: cfg.rateLimit.authPerMin, timeWindow: "1 minute" } } } : {};
 
-  server.get("/api/auth/login", authLimit, async (_req, reply) => {
+  // ?next=/caminho: a tela de onde a pessoa saiu; o retorno do Discord volta para lá
+  server.get<{ Querystring: { next?: string } }>("/api/auth/login", authLimit, async (req, reply) => {
     if (!enabled) return reply.code(503).send({ error: "Login is not configured.", code: "loginOff" });
     const state = crypto.randomBytes(16).toString("base64url");
     const url = new URL("/oauth2/authorize", DISCORD);
     url.search = new URLSearchParams({ client_id: cfg.discord.clientId, redirect_uri: redirectUri, response_type: "code", scope, state }).toString();
-    return reply.header("set-cookie", cookieHeader(STATE_COOKIE, state, { secure, maxAgeSec: STATE_MINUTES * 60, path: "/api/auth" })).redirect(url.toString());
+    const next = safeNext(req.query.next);
+    const cookies = [cookieHeader(STATE_COOKIE, state, { secure, maxAgeSec: STATE_MINUTES * 60, path: "/api/auth" })];
+    if (next) cookies.push(cookieHeader(NEXT_COOKIE, next, { secure, maxAgeSec: STATE_MINUTES * 60, path: "/api/auth" }));
+    return reply.header("set-cookie", cookies).redirect(url.toString());
   });
 
   server.get<{ Querystring: { code?: string; state?: string; error?: string } }>("/api/auth/callback", authLimit, async (req, reply) => {
     const { code, state, error } = req.query;
     // quem cancela na tela do Discord volta sem código (error=access_denied): é só voltar para a entrada, sem sessão
-    if (error) return reply.header("set-cookie", clear(STATE_COOKIE, "/api/auth")).redirect("/");
+    if (error) return reply.header("set-cookie", clearLogin()).redirect("/");
     const expected = readCookie(req.headers.cookie, STATE_COOKIE);
     if (!enabled || !code || !state || !expected || !safeEqual(state, expected)) {
       return backToStart(reply, "badState");
@@ -88,11 +97,12 @@ export function registerAuthRoutes(server: FastifyInstance, db: DB, cfg: Config,
 
       const user = upsertDiscordUser(db, { id: me.id, username: me.global_name || me.username, avatar: me.avatar ?? null });
       const token = createSession(db, user.id, "web");
-      // quem ainda não tem luta nenhuma vai direto para a importação, que é o que ele precisa fazer
+      // volta para a tela de onde saiu; sem destino, quem ainda não tem luta nenhuma vai direto para a importação, que é o que ele precisa fazer
+      const next = safeNext(readCookie(req.headers.cookie, NEXT_COOKIE));
       const hasFights = db.prepare("SELECT 1 FROM fights WHERE owner_id = ? LIMIT 1").get(user.id) !== undefined;
       return reply
-        .header("set-cookie", [cookieHeader(WEB_COOKIE, token, { secure, maxAgeSec: WEB_COOKIE_SECONDS }), clear(STATE_COOKIE, "/api/auth")])
-        .redirect(`/u/${user.publicId}${hasFights ? "" : ROUTES.import}`);
+        .header("set-cookie", [cookieHeader(WEB_COOKIE, token, { secure, maxAgeSec: WEB_COOKIE_SECONDS }), ...clearLogin()])
+        .redirect(next ?? (hasFights ? ROUTES.overview : ROUTES.import));
     } catch (e) {
       req.log.error({ err: e instanceof Error ? e.message : String(e) }, "falha no login com o Discord");
       return backToStart(reply, "loginFailed");
@@ -101,7 +111,7 @@ export function registerAuthRoutes(server: FastifyInstance, db: DB, cfg: Config,
 
   server.get("/api/auth/me", async (req, reply) => {
     const { user, needsNewLogin } = checkSession(db, readCookie(req.headers.cookie, WEB_COOKIE), "web", cfg.discord);
-    if (user) return { publicId: user.publicId, name: user.name, avatar: user.avatar, isAdmin: isAdmin(user, cfg) };
+    if (user) return { name: user.name, avatar: user.avatar, isAdmin: isAdmin(user, cfg) };
     // a conferência dos servidores do Discord venceu: a tela inicial pede para entrar de novo
     if (needsNewLogin) return reply.code(401).send({ error: "Sign in again.", code: "loginExpired" });
     return reply.code(401).send({ error: "Not signed in.", code: "notSignedIn" });
@@ -112,24 +122,17 @@ export function registerAuthRoutes(server: FastifyInstance, db: DB, cfg: Config,
     return reply.header("set-cookie", clear(WEB_COOKIE)).send({ ok: true });
   });
 
-  // apagar a conta zera tudo do usuário: lutas (com os arquivos), sessões e o próprio cadastro. Só pela sessão do navegador.
+  // apagar a conta remove o cadastro e as sessões; as lutas ficam no conjunto único (sem dono e sem o nome de quem enviou).
+  // Só pela sessão do navegador.
   server.delete("/api/auth/account", async (req, reply) => {
     const user = sessionUser(db, cfg, req);
     if (!user) return reply.code(401).send({ error: "Not signed in.", code: "notSignedIn" });
-    // apaga tudo e não dá para desfazer: a pessoa digita o próprio nome (a tela pede), e um pedido sem isso não apaga nada
+    // não dá para desfazer: a pessoa digita o próprio nome (a tela pede), e um pedido sem isso não apaga nada
     const { confirm } = (req.body ?? {}) as { confirm?: unknown };
     if (confirm !== user.name) return reply.code(400).send({ error: "Type your name to confirm.", code: "confirmName" });
-    const ids = (db.prepare("SELECT id FROM fights WHERE owner_id = ?").all(user.id) as { id: string }[]).map((f) => f.id);
-    await removeFights(db, paths(cfg.dataDir), ids);
+    db.prepare("UPDATE fights SET owner_id = NULL, uploader = NULL WHERE owner_id = ?").run(user.id);
     db.prepare("DELETE FROM users WHERE id = ?").run(user.id);
     return reply.header("set-cookie", clear(WEB_COOKIE)).send({ ok: true });
-  });
-
-  // se o link de compartilhar vazar, o dono troca: o antigo passa a dar 404. Só pela sessão do navegador (o token do script não troca link)
-  server.post("/api/auth/share-link/rotate", async (req, reply) => {
-    const user = sessionUser(db, cfg, req);
-    if (!user) return reply.code(401).send({ error: "Not signed in.", code: "notSignedIn" });
-    return { publicId: rotatePublicId(db, user.id) };
   });
 
   // token pessoal para o script de envio; o anterior deixa de valer e o novo só aparece nesta resposta

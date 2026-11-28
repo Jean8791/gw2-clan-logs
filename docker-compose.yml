@@ -26,6 +26,8 @@ services:
       API_TOKEN_DAYS: ${API_TOKEN_DAYS:-}
       # opcional: minutos que o Elite Insights tem para ler um log antes de ser cortado (vazio = 5)
       EI_TIMEOUT_MIN: ${EI_TIMEOUT_MIN:-}
+      # opcional: true lê as posições dos jogadores no replay (% do tempo perto da tag); dobra a memória e o tempo do Elite Insights (vazio = não)
+      EI_POSITIONS: ${EI_POSITIONS:-}
       DOTNET_GCHeapHardLimitPercent: ${DOTNET_GCHeapHardLimitPercent:-}
       PUBLIC_URL: https://${DOMINIO:?defina DOMINIO no .env}
       RETENTION_DAYS: ${RETENTION_DAYS:-30}

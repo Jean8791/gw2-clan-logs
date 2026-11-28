@@ -26,7 +26,8 @@ const start = async (env: Record<string, string> = {}) => {
 };
 const logFile = (name: string, n: number) => {
   const f = path.join(home, name);
-  fs.writeFileSync(f, JSON.stringify({ ...wvwFixture(), fightName: `Luta ${n}` }));
+  // cada log numa data própria: logs no mesmo horário, mapa e grupo seriam a mesma luta gravada duas vezes
+  fs.writeFileSync(f, JSON.stringify({ ...wvwFixture(), fightName: `Luta ${n}`, timeStartStd: `2026-11-1${n} 23:33:54 -03:00` }));
   return f;
 };
 /** Roda o script e devolve saída e código de saída (não lança quando o código não é 0). */
@@ -56,7 +57,7 @@ describe("scripts/enviar-logs.sh", () => {
     await start();
     const a = logFile("a.json", 1);
     fs.mkdirSync(path.join(home, "pasta"));
-    fs.writeFileSync(path.join(home, "pasta", "b.json"), JSON.stringify({ ...wvwFixture(), fightName: "Luta 2" }));
+    fs.writeFileSync(path.join(home, "pasta", "b.json"), JSON.stringify({ ...wvwFixture(), fightName: "Luta 2", timeStartStd: "2026-11-19 23:33:54 -03:00" }));
     fs.writeFileSync(path.join(home, "pasta", "leia-me.txt"), "não é log");
 
     const r = await enviar([a, path.join(home, "pasta")]);
@@ -64,7 +65,7 @@ describe("scripts/enviar-logs.sh", () => {
 
     expect(r.code).toBe(0);
     expect(r.out).toMatch(/2 enviado/);
-    expect((await app.server.inject(`/api/u/${usuario.publicId}/fights`)).json()).toHaveLength(2);
+    expect((await app.server.inject(`/api/fights`)).json()).toHaveLength(2);
   });
 
   it("o que o servidor ainda guarda é ignorado e conta como já enviado", async () => {
@@ -91,7 +92,7 @@ describe("scripts/enviar-logs.sh", () => {
     await app.worker.idle();
 
     expect(again.out).toMatch(/1 enviado/);
-    expect((await app.server.inject(`/api/u/${usuario.publicId}/fights`)).json()).toHaveLength(1);
+    expect((await app.server.inject(`/api/fights`)).json()).toHaveLength(1);
   });
 
   it("chave errada: para com erro e não vaza a chave na saída", async () => {
@@ -101,7 +102,7 @@ describe("scripts/enviar-logs.sh", () => {
     expect(r.code).not.toBe(0);
     expect(r.out).toMatch(/token de envio incorreto/i);
     expect(r.out).not.toContain("chave-errada");
-    expect((await app.server.inject(`/api/u/${usuario.publicId}/fights`)).json()).toHaveLength(0);
+    expect((await app.server.inject(`/api/fights`)).json()).toHaveLength(0);
   });
 
   it("bloqueado por senhas erradas (429): para e avisa para tentar mais tarde", async () => {
@@ -167,7 +168,7 @@ describe("scripts/enviar-logs.sh: casos de borda", () => {
 
     expect(r.out).toMatch(/1 enviado/);
     // o curl codifica as aspas do nome (%22), como todo multipart; o importante é o arquivo entrar inteiro
-    expect((await app.server.inject(`/api/u/${usuario.publicId}/fights`)).json()[0].fileName).toMatch(/^log; .*estranho.*, 1\.json$/);
+    expect((await app.server.inject(`/api/fights`)).json()[0].fileName).toMatch(/^log; .*estranho.*, 1\.json$/);
   });
 
   it("fila cheia: espera e tenta de novo até caber", async () => {

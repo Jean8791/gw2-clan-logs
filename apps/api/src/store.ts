@@ -7,7 +7,7 @@ import type { ExtractedFight, ExtractedPlayer } from "./ingest.js";
  * substitui o nome de habilidade já salvo. Num .json enviado pelo usuário o nome só entra se ainda estiver vazio (a tabela é de todos).
  */
 export function saveFight(db: DB, id: string, f: ExtractedFight, mapName: string | null, hasReport: boolean, trusted: boolean) {
-  const cols = ["fight_id", "account", "name", "profession", "guild_id", "grp", "commander", "role", "active_ms", "dist_to_com", ...STAT_KEYS.map((k) => STAT_COL[k])];
+  const cols = ["fight_id", "account", "name", "profession", "guild_id", "grp", "commander", "role", "active_ms", "dist_to_com", "dist_cover_ms", "near_cover_ms", ...STAT_KEYS.map((k) => STAT_COL[k])];
   const insertPlayer = db.prepare(`INSERT OR REPLACE INTO player_stats (${cols.join(",")}) VALUES (${cols.map(() => "?").join(",")})`);
   const insertGuild = db.prepare("INSERT OR IGNORE INTO guilds (id) VALUES (?)");
 
@@ -42,7 +42,7 @@ export function saveFight(db: DB, id: string, f: ExtractedFight, mapName: string
     for (const p of f.players) {
       if (p.guildId) insertGuild.run(p.guildId);
       insertPlayer.run(
-        id, p.account, p.name, p.profession, p.guildId, p.group, p.commander ? 1 : 0, roleOf(p), Math.round(p.activeMs), p.distToCom,
+        id, p.account, p.name, p.profession, p.guildId, p.group, p.commander ? 1 : 0, roleOf(p), Math.round(p.activeMs), p.distToCom, p.distCoverMs, p.nearCoverMs,
         ...STAT_KEYS.map((k) => p[k]),
       );
       for (const sk of p.skills) {
@@ -84,30 +84,6 @@ export function saveFight(db: DB, id: string, f: ExtractedFight, mapName: string
       eiVersion: f.eiVersion,
       hasReport: hasReport ? 1 : 0,
     });
-  })();
-}
-
-/** Colunas de uma tabela, menos as que não devem ser copiadas. Pelo banco, para uma métrica nova entrar na cópia sozinha. */
-const columnsOf = (db: DB, table: string, skip: string[]) =>
-  (db.pragma(`table_info(${table})`) as { name: string }[]).map((c) => c.name).filter((n) => !skip.includes(n));
-
-/**
- * Cria a luta de outro dono a partir de uma luta já pronta (o mesmo arquivo), sem rodar o Elite Insights.
- * A cópia é independente: apagar uma luta não mexe na outra. Fica sem relatório HTML, que pertence à luta original.
- */
-export function copyFight(db: DB, fromId: string, newId: string, owner: { id: number; name: string }, fileName: string) {
-  const fightCols = columnsOf(db, "fights", ["id", "owner_id", "uploader", "file_name", "uploaded_at", "has_report", "process_ms"]).join(",");
-  const statCols = columnsOf(db, "player_stats", ["fight_id"]).join(",");
-  db.transaction(() => {
-    db.prepare(
-      `INSERT INTO fights (id, owner_id, uploader, file_name, uploaded_at, has_report, ${fightCols})
-       SELECT ?, ?, ?, ?, ?, 0, ${fightCols} FROM fights WHERE id = ?`,
-    ).run(newId, owner.id, owner.name, fileName, new Date().toISOString(), fromId);
-    db.prepare(`INSERT INTO player_stats (fight_id, ${statCols}) SELECT ?, ${statCols} FROM player_stats WHERE fight_id = ?`).run(newId, fromId);
-    db.prepare(
-      `INSERT INTO player_skills (fight_id, account, skill_id, damage, hits, connected_hits)
-       SELECT ?, account, skill_id, damage, hits, connected_hits FROM player_skills WHERE fight_id = ?`,
-    ).run(newId, fromId);
   })();
 }
 

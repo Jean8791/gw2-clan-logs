@@ -19,6 +19,9 @@ import {
   statsOfGroup,
   statText,
   suggestMetric,
+  hasStatData,
+  isTagStat,
+  tagTotal,
   uptimeValue,
   weightedByActive,
   type Aggregate,
@@ -76,7 +79,7 @@ export function PlayerPage() {
 
   const series = useMemo(
     () =>
-      (data?.history ?? []).map((h, i) => ({
+      (data?.history ?? []).filter((h) => hasStatData(metric, h)).map((h, i) => ({
         i: i + 1,
         label: dateTime(h.timeStart),
         activeMs: h.activeMs,
@@ -128,10 +131,13 @@ export function PlayerPage() {
   // Linha "Total": cada coluna mostra o mesmo valor do Ranking. Soma das lutas filtradas; em boons e uptime, a média ponderada pelo tempo
   // ajustada pelo tempo jogado (a conta vai na dica).
   const sumOf = (rows: PlayerHistoryRow[], k: StatKey) => rows.reduce((a, r) => a + r[k], 0);
-  const totalOf = (k: StatKey) => (rows: PlayerHistoryRow[]) => {
+  const totalOf = (k: StatKey) => (all: PlayerHistoryRow[]) => {
+    // as métricas da tag só somam as lutas que têm o dado (as lutas de logs sem replay ficam de fora, também do tempo)
+    const rows = all.filter((r) => hasStatData(k, r));
+    if (!rows.length) return "—";
     const active = rows.reduce((a, r) => a + r.activeMs, 0);
     if (!isUptimeStat(k) && STAT_META[k].format !== "volume") return int(sumOf(rows, k));
-    const own = isUptimeStat(k) ? uptimeValue(k, sumOf(rows, k), active) : weightedByActive(rows, (r) => r[k]);
+    const own = isTagStat(k) ? uptimeValue(k, tagTotal(k, rows), active) : isUptimeStat(k) ? uptimeValue(k, sumOf(rows, k), active) : weightedByActive(rows, (r) => r[k]);
     if (!avg || ranking?.referenceMs === undefined) return stat(k, own);
     const general = isUptimeStat(k) ? uptimeValue(k, avg[k], avg.activeMs) : avg[k];
     const adjusted = adjustedByTime(own, active, general, ranking.referenceMs);

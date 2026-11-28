@@ -90,6 +90,9 @@ export const STAT_KEYS = [
   "vigorUp",
   "regenUp",
   "mightStacks",
+  // posição em relação à tag (o comandante), só nos logs com o replay do Elite Insights: tempo perto (ms) e distância × tempo (ms)
+  "tagNear",
+  "tagDist",
 ] as const;
 
 export type StatKey = (typeof STAT_KEYS)[number];
@@ -162,6 +165,8 @@ const BASE_META: Record<Exclude<StatKey, ScopedKey>, StatMeta> = {
   vigorUp: { label: "% Vigor", short: "Vigor", group: "uptime", buffId: 726, higherIsBetter: true, format: "pct" },
   regenUp: { label: "% Regeneração", short: "Regen.", group: "uptime", buffId: 718, higherIsBetter: true, format: "pct" },
   mightStacks: { label: "Pilhas de Poder", short: "Poder (pilhas)", group: "uptime", buffId: 740, higherIsBetter: true, format: "avg", hint: "Média de pilhas de Poder sobre o tempo ativo" },
+  tagNear: { label: "% Perto da tag", short: "Perto da tag", group: "uptime", higherIsBetter: true, format: "pct", hint: "Porcentagem do tempo vivo a até 1200 unidades do comandante. Precisa das posições do replay: só aparece em logs enviados depois que o servidor passou a lê-las" },
+  tagDist: { label: "Distância da tag", short: "Dist. tag", group: "uptime", higherIsBetter: false, format: "avg", hint: "Distância média até o comandante, em unidades do jogo. Só aparece em logs enviados depois que o servidor passou a ler o replay" },
   damageTaken: { label: "Dano recebido", short: "Recebido", group: "defense", higherIsBetter: false, format: "int" },
   barrierAbsorbed: { label: "Dano absorvido por barreira", short: "Absorvido", group: "defense", higherIsBetter: true, format: "int" },
   deaths: { label: "Mortes", short: "Mortes", group: "defense", higherIsBetter: false, format: "int" },
@@ -193,9 +198,39 @@ export const STAT_GROUPS: { id: StatGroup; label: string }[] = [
   { id: "offense", label: "Dano" },
   { id: "support", label: "Suporte" },
   { id: "boons", label: "Boons" },
-  { id: "uptime", label: "Uptime" },
+  { id: "uptime", label: "Uptime e tag" },
   { id: "defense", label: "Defesa" },
 ];
+
+/**
+ * Métricas da posição em relação à tag, e a coluna com o tempo (ms) que cada uma cobre: o dado só existe nos logs lidos com o replay
+ * ligado, então o tempo das lutas sem ele não pode entrar na conta (as lutas antigas puxariam a porcentagem para baixo).
+ */
+export const TAG_COVER = { tagNear: "nearCoverMs", tagDist: "distCoverMs" } as const;
+export type TagCover = { [C in (typeof TAG_COVER)[keyof typeof TAG_COVER]]: number };
+export const isTagStat = (k: StatKey): k is keyof typeof TAG_COVER => k in TAG_COVER;
+/** A linha tem o dado da métrica? Só as da tag podem faltar (log lido sem replay); sem dado a tela mostra traço, e não 0. */
+export const hasStatData = (k: StatKey, r: Partial<TagCover>): boolean => !isTagStat(k) || (r[TAG_COVER[k]] ?? 0) > 0;
+
+/** O melhor valor da métrica entre as linhas que têm o dado (o menor, se menos é melhor); 0 sem nenhuma. Quem não tem dado não disputa. */
+export function bestValue<T extends Partial<TagCover>>(k: StatKey, rows: T[], value: (r: T) => number): number {
+  const values = rows.filter((r) => hasStatData(k, r)).map(value);
+  if (!values.length) return 0;
+  return STAT_META[k].higherIsBetter ? Math.max(...values) : Math.min(...values);
+}
+
+/**
+ * O total de uma métrica da tag numa soma de lutas, igual ao do Ranking: Σ valor ÷ Σ tempo coberto. As linhas por luta vêm da API já
+ * reescaladas para o tempo ativo (valor × ativo ÷ coberto), então desfaz a escala de cada uma antes de somar. O resultado também vem
+ * reescalado para o tempo ativo das lutas com dado, para a conta da tela (valor ÷ tempo ativo) dar o certo. Lutas sem o dado ficam de fora.
+ */
+export function tagTotal(k: keyof typeof TAG_COVER, rows: (Pick<Stats, typeof k> & TagCover & { activeMs: number })[]): number {
+  const used = rows.filter((r) => r[TAG_COVER[k]] > 0 && r.activeMs > 0);
+  const cover = used.reduce((a, r) => a + r[TAG_COVER[k]], 0);
+  if (cover <= 0) return 0;
+  const raw = used.reduce((a, r) => a + (r[k] * r[TAG_COVER[k]]) / r.activeMs, 0);
+  return (raw * used.reduce((a, r) => a + r.activeMs, 0)) / cover;
+}
 
 /** Métricas de uptime (pct ou avg): o valor guardado é tempo com o boon, e o mostrado depende do tempo ativo. */
 export const isUptimeStat = (k: StatKey): boolean => STAT_META[k].format === "pct" || STAT_META[k].format === "avg";
@@ -230,7 +265,6 @@ export interface Fight {
   status: FightStatus;
   error: string | null;
   uploadedAt: string;
-  uploader: string | null;
   fileName: string | null;
   mode: Mode | null;
   fightName: string | null;
@@ -239,7 +273,6 @@ export interface Fight {
   timeStart: string | null;
   durationMs: number | null;
   success: boolean;
-  recordedBy: string | null;
   squadCount: number | null;
   allyCount: number | null;
   enemyCount: number | null;
@@ -271,6 +304,9 @@ export interface PlayerFight extends Stats {
   role: Role;
   activeMs: number;
   distToCom: number | null;
+  /** tempo coberto pelo dado da tag (0 = o log não tem) */
+  distCoverMs: number;
+  nearCoverMs: number;
 }
 
 export interface FightDetail {
@@ -280,7 +316,7 @@ export interface FightDetail {
 }
 
 /** Totais de um jogador (ou de um grupo) num conjunto de lutas. */
-export interface Aggregate extends Stats {
+export interface Aggregate extends Stats, TagCover {
   fights: number;
   activeMs: number;
 }
@@ -386,8 +422,8 @@ export interface Filters {
   profession?: string;
   /** dias de batalha (AAAA-MM-DD, ver battleDay): vale a união dos dias escolhidos */
   day?: string[];
-  /** id do dono das lutas. Só o servidor preenche (vem da URL /u/:id), nunca da query string. */
-  owner?: number;
+  /** id do usuário logado. Só o servidor preenche (nunca vem da query string): só ele vê as próprias lutas na fila ou com erro. */
+  viewer?: number;
 }
 
 export const FILTER_KEYS = [
@@ -438,6 +474,15 @@ export interface DaySummary {
   deaths: number;
   first: string;
   last: string;
+}
+
+/**
+ * Filtros com que a Visão Geral abre quando o endereço não traz nenhum: o último dia de batalha com lutas, para a pessoa não procurar
+ * a data. Sem nenhum dia (banco vazio) ou sem a lista, os últimos 30 dias, como era antes.
+ */
+export function overviewDefaults(days: { day: string }[] | undefined): Filters {
+  const last = days?.reduce<string | undefined>((max, d) => (max === undefined || d.day > max ? d.day : max), undefined);
+  return last ? { day: [last] } : { days: 30 };
 }
 
 /** Lê filtros de um objeto de query string, descartando valores inválidos. */

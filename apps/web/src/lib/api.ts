@@ -17,7 +17,6 @@ import {
 } from "@gw2logs/shared";
 
 import { ApiError, apiErrorFrom } from "./errors";
-import { spaceApi } from "./space";
 
 async function get<T>(url: string): Promise<T> {
   const res = await fetch(url);
@@ -50,19 +49,19 @@ export interface AppConfig {
 }
 
 export const useConfig = () => useQuery({ queryKey: ["config"], queryFn: () => get<AppConfig>("/api/config"), staleTime: Infinity });
-export const useMeta = () => useQuery({ queryKey: ["meta"], queryFn: () => get<Meta>(`${spaceApi}/meta`), staleTime: 60_000 });
-export const useGuilds = () => useQuery({ queryKey: ["guilds"], queryFn: () => get<GuildSummary[]>(`${spaceApi}/guilds`), staleTime: 60_000 });
+export const useMeta = () => useQuery({ queryKey: ["meta"], queryFn: () => get<Meta>(`/api/meta`), staleTime: 60_000 });
+export const useGuilds = () => useQuery({ queryKey: ["guilds"], queryFn: () => get<GuildSummary[]>(`/api/guilds`), staleTime: 60_000 });
 
-export const useOverview = (f: Filters) => useQuery({ queryKey: ["overview", f], queryFn: () => get<Overview>(withFilters(`${spaceApi}/overview`, f)) });
+export const useOverview = (f: Filters, enabled = true) => useQuery({ queryKey: ["overview", f], queryFn: () => get<Overview>(withFilters(`/api/overview`, f)), enabled });
 
 export const useDays = (f: Filters, enabled = true) =>
-  useQuery({ queryKey: ["days", f], queryFn: () => get<DaySummary[]>(withFilters(`${spaceApi}/days`, f)), enabled });
+  useQuery({ queryKey: ["days", f], queryFn: () => get<DaySummary[]>(withFilters(`/api/days`, f)), enabled });
 
 export const useFights = (f: Filters, limit = 100, enabled = true) =>
   useQuery({
     enabled,
     queryKey: ["fights", f, limit],
-    queryFn: () => get<Fight[]>(withFilters(`${spaceApi}/fights`, f, { limit })),
+    queryFn: () => get<Fight[]>(withFilters(`/api/fights`, f, { limit })),
     // enquanto houver luta na fila, atualiza sozinho
     refetchInterval: (q) => (q.state.data?.some((x) => x.status === "queued" || x.status === "parsing") ? 3000 : false),
   });
@@ -72,7 +71,7 @@ export const useFightsPage = (f: Filters, o: { page: number; sort: string; dir: 
   useQuery({
     queryKey: ["fights-page", f, o],
     queryFn: async (): Promise<{ rows: Fight[]; total: number }> => {
-      const res = await fetch(withFilters(`${spaceApi}/fights`, f, { limit: PAGE_SIZE, offset: (o.page - 1) * PAGE_SIZE, sort: o.sort, dir: o.dir }));
+      const res = await fetch(withFilters(`/api/fights`, f, { limit: PAGE_SIZE, offset: (o.page - 1) * PAGE_SIZE, sort: o.sort, dir: o.dir }));
       if (!res.ok) throw apiErrorFrom(res.status, await res.json().catch(() => null));
       return { rows: (await res.json()) as Fight[], total: Number(res.headers.get("x-total-count")) || 0 };
     },
@@ -82,32 +81,32 @@ export const useFightsPage = (f: Filters, o: { page: number; sort: string; dir: 
     refetchInterval: (q) => (q.state.data?.rows.some((x) => x.status === "queued" || x.status === "parsing") ? 3000 : false),
   });
 
-export const useFight = (id: string) => useQuery({ queryKey: ["fight", id], queryFn: () => get<FightDetail>(`${spaceApi}/fights/${encodeURIComponent(id)}`) });
+export const useFight = (id: string) => useQuery({ queryKey: ["fight", id], queryFn: () => get<FightDetail>(`/api/fights/${encodeURIComponent(id)}`) });
 
-export const useRanking = (f: Filters) =>
-  useQuery({ queryKey: ["ranking", f], queryFn: () => get<{ rows: RankingRow[]; baseline: Aggregate; referenceMs: number }>(withFilters(`${spaceApi}/ranking`, f)) });
+export const useRanking = (f: Filters, enabled = true) =>
+  useQuery({ queryKey: ["ranking", f], queryFn: () => get<{ rows: RankingRow[]; baseline: Aggregate; referenceMs: number }>(withFilters(`/api/ranking`, f)), enabled });
 
 export const usePlayer = (account: string, f: Filters) =>
-  useQuery({ queryKey: ["player", account, f], queryFn: () => get<PlayerProfile>(withFilters(`${spaceApi}/players/${encodeURIComponent(account)}`, f)), retry: false });
+  useQuery({ queryKey: ["player", account, f], queryFn: () => get<PlayerProfile>(withFilters(`/api/players/${encodeURIComponent(account)}`, f)), retry: false });
 
 /** Funções, classes e dias que o jogador jogou, para as listas dos filtros da página dele. */
 export const usePlayerOptions = (account: string, f: Filters) =>
   useQuery({
     queryKey: ["player-options", account, f],
-    queryFn: () => get<PlayerOptions>(withFilters(`${spaceApi}/players/${encodeURIComponent(account)}/options`, f)),
+    queryFn: () => get<PlayerOptions>(withFilters(`/api/players/${encodeURIComponent(account)}/options`, f)),
     retry: false,
     // ao trocar um filtro, as listas anteriores ficam na tela até as novas chegarem (sem piscar)
     placeholderData: keepPreviousData,
   });
 
 export const usePlayerSkills = (account: string, f: Filters) =>
-  useQuery({ queryKey: ["player-skills", account, f], queryFn: () => get<PlayerSkill[]>(withFilters(`${spaceApi}/players/${encodeURIComponent(account)}/skills`, f)) });
+  useQuery({ queryKey: ["player-skills", account, f], queryFn: () => get<PlayerSkill[]>(withFilters(`/api/players/${encodeURIComponent(account)}/skills`, f)) });
 
 export const useCompare = (accounts: string[], f: Filters) =>
   useQuery({
     queryKey: ["compare", accounts, f],
     enabled: accounts.length > 0,
-    queryFn: () => get<{ players: PlayerProfile[]; baseline: Aggregate }>(withFilters(`${spaceApi}/compare`, f, { accounts: accounts.join(",") })),
+    queryFn: () => get<{ players: PlayerProfile[]; baseline: Aggregate }>(withFilters(`/api/compare`, f, { accounts: accounts.join(",") })),
   });
 
 /** Marca ou desmarca uma guilda da aliança. Só vale para quem administra pelo login. */
@@ -120,17 +119,10 @@ export async function setGuildAlliance(id: string, inAlliance: boolean) {
   if (!res.ok) throw apiErrorFrom(res.status, await res.json().catch(() => null));
 }
 
-export interface SpaceUser {
-  publicId: string;
+/** Quem está logado: o nome e se pode administrar (marcar guildas da aliança). */
+export interface Viewer {
   name: string;
   avatar: string | null;
-}
-
-/** Dono do espaço que está aberto. */
-export const useOwner = () => useQuery({ queryKey: ["owner"], queryFn: () => get<SpaceUser>(spaceApi), retry: false, staleTime: Infinity });
-
-/** Quem está logado: além do espaço, diz se pode administrar (marcar guildas da aliança). */
-export interface Viewer extends SpaceUser {
   isAdmin: boolean;
 }
 
@@ -161,15 +153,7 @@ export const useLoginExpired = () => viewerQuery((v) => v.expired).data === true
 
 export const logout = () => fetch("/api/auth/logout", { method: "POST" });
 
-/** Troca o link de compartilhar do usuário logado: o antigo deixa de funcionar. Devolve o id do link novo. */
-export async function rotateShareLink(): Promise<string> {
-  const res = await fetch("/api/auth/share-link/rotate", { method: "POST" });
-  if (!res.ok) throw apiErrorFrom(res.status, await res.json().catch(() => null));
-  return ((await res.json()) as { publicId: string }).publicId;
-}
-
-/** Apaga a conta do usuário logado e todos os logs dele. */
-/** Apaga a conta e todos os logs. O servidor só apaga se `confirm` for o nome da própria conta. */
+/** Apaga a conta (os logs enviados continuam no site). O servidor só apaga se `confirm` for o nome da própria conta. */
 export async function deleteAccount(confirm: string): Promise<void> {
   const res = await fetch("/api/auth/account", { method: "DELETE", headers: { "content-type": "application/json" }, body: JSON.stringify({ confirm }) });
   if (!res.ok) throw apiErrorFrom(res.status, await res.json().catch(() => null));

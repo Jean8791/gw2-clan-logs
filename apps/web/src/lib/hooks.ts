@@ -2,15 +2,18 @@ import { useCallback, useMemo, useSyncExternalStore } from "react";
 import { useSearchParams } from "react-router-dom";
 import { FILTER_KEYS, parseFilters, type Filters } from "@gw2logs/shared";
 
-/** Filtros guardados na URL: dá para mandar o link de um ranking filtrado no Discord. */
+/**
+ * Filtros guardados na URL: dá para mandar o link de um ranking filtrado no Discord. Se o endereço não traz nenhum filtro, valem os
+ * `defaults` (que podem mudar depois, por exemplo quando a lista de dias chega); o que a pessoa escolheu sempre ganha.
+ */
 export function useFilters(defaults: Filters = {}) {
   const [params, setParams] = useSearchParams();
+  const defaultsKey = JSON.stringify(defaults);
   const filters = useMemo<Filters>(() => {
     const fromUrl = parseFilters(Object.fromEntries(params));
     const touched = FILTER_KEYS.some((k) => params.has(k)) || params.has("_");
-    return touched ? fromUrl : { ...defaults, ...fromUrl };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [params]);
+    return touched ? fromUrl : { ...(JSON.parse(defaultsKey) as Filters), ...fromUrl };
+  }, [params, defaultsKey]);
 
   const setFilters = useCallback(
     (next: Filters) => {

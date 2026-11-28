@@ -2,8 +2,10 @@
 import {
   BATTLE_DAY_SHIFT_HOURS,
   FIGHT_SORT_KEYS,
+  isTagStat,
   STAT_KEYS,
   STAT_META,
+  TAG_COVER,
   type DaySummary,
   type Aggregate,
   type Fight,
@@ -19,20 +21,73 @@ import {
   type ProfessionCount,
   type RankingRow,
 } from "@gw2logs/shared";
-import { STAT_COL, type DB } from "./db.js";
+import { snake, STAT_COL, type DB } from "./db.js";
 
 type Params = Record<string, string | number>;
 
 /** Dia de batalha de uma luta (ver battleDay em shared): data da luta menos 9 horas. */
 const BATTLE_DAY = `date(f.time_start, '-${BATTLE_DAY_SHIFT_HOURS} hours')`;
 
+// ---------- A mesma luta gravada por mais de uma pessoa ----------
+
+/** Quanto do log menor precisa estar dentro do outro para as duas serem a mesma luta. */
+const SAME_FIGHT_OVERLAP = 0.5;
+/** Quanto do tempo do log o comandante precisa estar presente para o log valer como "acompanhou a tag". */
+const COMMANDER_PRESENCE = 0.8;
+/** Só se comparam logs que começam, no máximo, tantas horas antes de outro: é o que deixa o índice (mapa, início) servir. Nenhum log chega perto disso (o maior do histórico tem 13 minutos). */
+const SAME_FIGHT_MAX_HOURS = 1;
+
+const startMs = (x: string) => `(CAST(strftime('%s', ${x}.time_start) AS INTEGER) * 1000)`;
+const endMs = (x: string) => `(${startMs(x)} + ${x}.duration_ms)`;
+/** Um instante de `x` no mesmo formato do banco (ISO com milissegundos e Z), para comparar o texto e usar o índice. */
+const startShifted = (x: string, shift: string) => `strftime('%Y-%m-%dT%H:%M:%fZ', ${x}.time_start, '${shift}')`;
+const endIso = (x: string) => `strftime('%Y-%m-%dT%H:%M:%fZ', ${x}.time_start, '+' || (${x}.duration_ms / 1000.0) || ' seconds')`;
+const commander = (x: string) => `(SELECT account FROM player_stats WHERE fight_id = ${x}.id AND commander = 1 LIMIT 1)`;
+const commanderMs = (x: string) => `(SELECT active_ms FROM player_stats WHERE fight_id = ${x}.id AND commander = 1 LIMIT 1)`;
+const playersOf = (x: string) => `(SELECT COUNT(*) FROM player_stats WHERE fight_id = ${x}.id)`;
+/** 1 se o log acompanhou a tag: o comandante está presente em 80% ou mais do tempo (ou não há tag marcada para conferir). */
+const followedTag = (x: string) => `(CASE WHEN ${commander(x)} IS NULL OR ${commanderMs(x)} >= ${COMMANDER_PRESENCE} * ${x}.duration_ms THEN 1 ELSE 0 END)`;
+
+/**
+ * `b` é a mesma luta que `a`: mesmo mapa (um mapa desconhecido nunca junta) e modo, começos próximos, tempos sobrepostos em mais da metade
+ * do log menor (lutas seguidas que só encostam ficam separadas) e o mesmo grupo: o mesmo comandante ou, se um dos dois não tem tag marcada,
+ * mais da metade dos jogadores do log menor em comum. Os termos mais baratos vêm primeiro.
+ */
+const sameFight = (a: string, b: string) => `${b}.status = 'done' AND ${b}.id <> ${a}.id AND ${b}.map_id = ${a}.map_id AND ${b}.mode IS ${a}.mode
+      AND ${b}.time_start > ${startShifted(a, `-${SAME_FIGHT_MAX_HOURS} hours`)} AND ${b}.time_start < ${endIso(a)}
+      AND ${b}.duration_ms IS NOT NULL
+      AND MIN(${endMs(a)}, ${endMs(b)}) - MAX(${startMs(a)}, ${startMs(b)}) > ${SAME_FIGHT_OVERLAP} * MIN(${a}.duration_ms, ${b}.duration_ms)
+      AND ((${commander(a)} IS NOT NULL AND ${commander(b)} IS NOT NULL AND ${commander(a)} = ${commander(b)})
+        OR ((${commander(a)} IS NULL OR ${commander(b)} IS NULL)
+          AND (SELECT COUNT(*) FROM player_stats x JOIN player_stats y ON y.account = x.account AND y.fight_id = ${b}.id WHERE x.fight_id = ${a}.id) > ${SAME_FIGHT_OVERLAP} * MIN(${playersOf(a)}, ${playersOf(b)})))`;
+
+/** O que decide entre dois logs da mesma luta: acompanhou a tag, mais dano do squad, mais duração, mais jogadores e, por fim, o id menor (sempre o mesmo). */
+const rank = (x: string) => `${followedTag(x)}, COALESCE(${x}.squad_damage, 0), COALESCE(${x}.duration_ms, 0), COALESCE(${x}.squad_count, 0)`;
+/** `b` ganha de `a`. O id entra com os lados trocados: na comparação de tuplas o menor id é o que ganha. */
+const beats = (b: string, a: string) => `(${rank(b)}, ${a}.id) > (${rank(a)}, ${b}.id)`;
+
+/**
+ * Fora as lutas escondidas por um log melhor da mesma luta. Só esconde quem também está visível: um log que perdeu para outro (`c`) não
+ * esconde mais ninguém, senão uma cadeia A~B~C faria sumir A por causa de B, que já sumiu por causa de C, sem A e C serem a mesma luta.
+ * Os logs escondidos continuam no banco (abrem pelo link) e voltam a aparecer sozinhos se o melhor for apagado. A subconsulta não depende
+ * da linha de fora, então o SQLite a calcula uma vez por consulta (e não uma vez por jogador, que deixava o ranking lento).
+ */
+const MOST_COMPLETE = `f.id NOT IN (
+  SELECT a.id FROM fights a
+  WHERE a.status = 'done' AND a.time_start IS NOT NULL AND a.duration_ms IS NOT NULL AND a.map_id IS NOT NULL
+    AND EXISTS (
+      SELECT 1 FROM fights b
+      WHERE ${sameFight("a", "b")} AND ${beats("b", "a")}
+        AND NOT EXISTS (SELECT 1 FROM fights c WHERE ${sameFight("b", "c")} AND ${beats("c", "b")})
+    )
+)`;
+
 // ---------- Filtros → SQL ----------
 
 /** Condições sobre a luta (tabela f). */
 export function fightConditions(fl: Filters, now = new Date()): { where: string[]; params: Params } {
-  const where = ["f.status = 'done'"];
+  const where = ["f.status = 'done'", MOST_COMPLETE];
   const params: Params = {};
-  if (fl.owner !== undefined) (where.push("f.owner_id = @owner"), (params.owner = fl.owner));
   if (fl.mode) (where.push("f.mode = @mode"), (params.mode = fl.mode));
   if (fl.days) (where.push("f.time_start >= @since"), (params.since = new Date(now.getTime() - fl.days * 86_400_000).toISOString()));
   // "De"/"Até" chegam como dia (AAAA-MM-DD: o dia inteiro, em UTC) ou como instante com hora (já em UTC)
@@ -69,17 +124,25 @@ function combined(fl: Filters) {
 
 // ---------- Mapeamento de linhas ----------
 
-const FIGHT_COLS = `f.id, f.status, f.error, f.uploaded_at AS uploadedAt, f.uploader, f.file_name AS fileName, f.mode,
+const FIGHT_COLS = `f.id, f.status, f.error, f.uploaded_at AS uploadedAt, f.file_name AS fileName, f.mode,
   f.fight_name AS fightName, f.map_id AS mapId, f.map_name AS mapName, f.time_start AS timeStart, f.duration_ms AS durationMs,
-  f.success, f.recorded_by AS recordedBy, f.squad_count AS squadCount, f.ally_count AS allyCount, f.enemy_count AS enemyCount,
+  f.success, f.squad_count AS squadCount, f.ally_count AS allyCount, f.enemy_count AS enemyCount,
   f.squad_damage AS squadDamage, f.squad_kills AS squadKills, f.squad_downs AS squadDowns, f.squad_deaths AS squadDeaths,
   f.enemy_downs AS enemyDowns, f.enemy_deaths AS enemyDeaths, f.has_report AS hasReport`;
 
 const toFight = (r: any): Fight => ({ ...r, success: !!r.success, hasReport: !!r.hasReport });
 
-const STAT_SELECT = STAT_KEYS.map((k) => `ps.${STAT_COL[k]} AS "${k}"`).join(", ");
+/**
+ * A tela divide as métricas de uptime pelo tempo ativo. As da tag só existem nos logs lidos com replay, e o tempo que o dado cobre
+ * (`*_cover_ms`) pode ser menor que o ativo (morto e desconectado ficam de fora): a API devolve o valor já reescalado para o tempo
+ * ativo (valor × ativo ÷ coberto), e a mesma conta da tela dá o certo (valor ÷ coberto). Sem cobertura, 0.
+ */
+const coverCol = (k: keyof typeof TAG_COVER) => snake(TAG_COVER[k]);
+const statSelect = (k: (typeof STAT_KEYS)[number]) =>
+  isTagStat(k) ? `CASE WHEN ps.${coverCol(k)} > 0 THEN ps.${STAT_COL[k]} * ps.active_ms / ps.${coverCol(k)} ELSE 0 END AS "${k}"` : `ps.${STAT_COL[k]} AS "${k}"`;
+const STAT_SELECT = STAT_KEYS.map(statSelect).join(", ");
 const PLAYER_COLS = `ps.fight_id AS fightId, ps.account, ps.name, ps.profession, ps.guild_id AS guildId, ps.grp AS "group",
-  ps.commander, ps.role, ps.active_ms AS activeMs, ps.dist_to_com AS distToCom, ${STAT_SELECT}`;
+  ps.commander, ps.role, ps.active_ms AS activeMs, ps.dist_to_com AS distToCom, ps.dist_cover_ms AS distCoverMs, ps.near_cover_ms AS nearCoverMs, ${STAT_SELECT}`;
 const toPlayer = <T extends PlayerFight>(r: any): T => ({ ...r, commander: !!r.commander });
 
 /**
@@ -88,12 +151,15 @@ const toPlayer = <T extends PlayerFight>(r: any): T => ({ ...r, commander: !!r.c
  * com o boon sobre tempo ativo. Sem tempo ativo, 0.
  */
 const aggColumn = (k: (typeof STAT_KEYS)[number]) =>
-  STAT_META[k].format === "volume"
-    ? `COALESCE(SUM(ps.${STAT_COL[k]} * ps.active_ms) * 1.0 / NULLIF(SUM(ps.active_ms), 0), 0) AS "${k}"`
-    : `SUM(ps.${STAT_COL[k]}) AS "${k}"`;
-const AGG_SELECT = `COUNT(*) AS fights, SUM(ps.active_ms) AS activeMs, ${STAT_KEYS.map(aggColumn).join(", ")}`;
+  isTagStat(k)
+    ? // soma sobre soma, só das lutas com o dado: Σ valor ÷ Σ coberto, reescalado para o tempo ativo (ver statSelect)
+      `COALESCE(SUM(ps.${STAT_COL[k]}) * 1.0 * SUM(ps.active_ms) / NULLIF(SUM(ps.${coverCol(k)}), 0), 0) AS "${k}"`
+    : STAT_META[k].format === "volume"
+      ? `COALESCE(SUM(ps.${STAT_COL[k]} * ps.active_ms) * 1.0 / NULLIF(SUM(ps.active_ms), 0), 0) AS "${k}"`
+      : `SUM(ps.${STAT_COL[k]}) AS "${k}"`;
+const AGG_SELECT = `COUNT(*) AS fights, SUM(ps.active_ms) AS activeMs, SUM(ps.dist_cover_ms) AS distCoverMs, SUM(ps.near_cover_ms) AS nearCoverMs, ${STAT_KEYS.map(aggColumn).join(", ")}`;
 const toAggregate = (r: any): Aggregate => {
-  const a: any = { fights: r?.fights ?? 0, activeMs: r?.activeMs ?? 0 };
+  const a: any = { fights: r?.fights ?? 0, activeMs: r?.activeMs ?? 0, distCoverMs: r?.distCoverMs ?? 0, nearCoverMs: r?.nearCoverMs ?? 0 };
   for (const k of STAT_KEYS) a[k] = r?.[k] ?? 0;
   return a;
 };
@@ -107,12 +173,10 @@ const toAggregate = (r: any): Aggregate => {
 const FIGHT_SORT_SQL: Record<FightSortKey, string> = {
   time: "COALESCE(f.time_start, f.uploaded_at)",
   name: "COALESCE(f.fight_name, f.file_name, '') COLLATE NOCASE",
-  rec: "COALESCE(f.recorded_by, '') COLLATE NOCASE",
   dur: "f.duration_ms",
   size: "f.squad_count",
   kd: "COALESCE(f.enemy_deaths, f.squad_kills, 0) - COALESCE(f.squad_deaths, 0)",
   dmg: "f.squad_damage",
-  up: "COALESCE(f.uploader, '') COLLATE NOCASE",
 };
 
 /** Condições das lutas prontas que valem para a lista e para a contagem: o filtro define o conjunto. */
@@ -138,8 +202,8 @@ export function listFights(db: DB, fl: Filters, limit = 50, offset = 0, order: {
   const expr = FIGHT_SORT_SQL[key];
   // lutas ainda na fila ou com erro aparecem sempre no topo da primeira página
   const pending =
-    offset === 0
-      ? (db.prepare(`SELECT ${FIGHT_COLS} FROM fights f WHERE f.status != 'done' AND f.owner_id = ? ORDER BY f.uploaded_at DESC LIMIT 50`).all(fl.owner) as any[])
+    offset === 0 && fl.viewer !== undefined
+      ? (db.prepare(`SELECT ${FIGHT_COLS} FROM fights f WHERE f.status != 'done' AND f.owner_id = ? ORDER BY f.uploaded_at DESC LIMIT 50`).all(fl.viewer) as any[])
       : [];
   // f.id desempata: sem isso, lutas com o mesmo valor poderiam repetir ou sumir entre uma página e outra
   const done = db
@@ -148,8 +212,8 @@ export function listFights(db: DB, fl: Filters, limit = 50, offset = 0, order: {
   return [...pending, ...done].map(toFight);
 }
 
-export function fightDetail(db: DB, id: string, owner: number): FightDetail | null {
-  const fight = db.prepare(`SELECT ${FIGHT_COLS} FROM fights f WHERE f.id = ? AND f.owner_id = ?`).get(id, owner);
+export function fightDetail(db: DB, id: string): FightDetail | null {
+  const fight = db.prepare(`SELECT ${FIGHT_COLS} FROM fights f WHERE f.id = ? AND f.status = 'done'`).get(id);
   if (!fight) return null;
   const players = (db.prepare(`SELECT ${PLAYER_COLS} FROM player_stats ps WHERE ps.fight_id = ? ORDER BY ps.damage DESC`).all(id) as any[]).map(toPlayer);
   const guilds = db
@@ -258,11 +322,9 @@ export function battleDays(db: DB, fl: Filters): DaySummary[] {
 /**
  * O que o jogador jogou, para as listas dos filtros da página dele. Função e classe ficam fora da conta (escolher uma não pode
  * esconder a outra); o dia entra nas listas de função e de classe, mas não na de dias, para dar para trocar de dia.
- * Tudo dentro do espaço do dono (Filters.owner): o mesmo jogador nos logs de outro usuário não entra.
  */
 export function playerOptions(db: DB, account: string, fl: Filters): PlayerOptions | null {
-  const inSpace = db.prepare("SELECT 1 FROM player_stats ps JOIN fights f ON f.id = ps.fight_id WHERE ps.account = ? AND f.owner_id = ? LIMIT 1").get(account, fl.owner);
-  if (!inSpace) return null;
+  if (!db.prepare("SELECT 1 FROM player_stats WHERE account = ? LIMIT 1").get(account)) return null;
   const base: Filters = { ...fl, role: undefined, profession: undefined };
   const day = combined(base);
   const anyDay = combined({ ...base, day: undefined });
@@ -287,10 +349,8 @@ export function playerProfile(db: DB, account: string, fl: Filters): PlayerProfi
       )
       .all(p) as any[]
   ).map((r) => toPlayer<any>(r));
-  // jogador que existe no espaço do dono mas some com os filtros ainda tem perfil (vazio)
-  const anyRow = db
-    .prepare("SELECT ps.name FROM player_stats ps JOIN fights f ON f.id = ps.fight_id WHERE ps.account = ? AND f.owner_id = ? LIMIT 1")
-    .get(account, fl.owner) as { name: string | null } | undefined;
+  // jogador que existe nos logs mas some com os filtros ainda tem perfil (vazio)
+  const anyRow = db.prepare("SELECT name FROM player_stats WHERE account = ? LIMIT 1").get(account) as { name: string | null } | undefined;
   if (!history.length && !anyRow) return null;
   const totals = toAggregate(db.prepare(`SELECT ${AGG_SELECT} FROM player_stats ps JOIN fights f ON f.id = ps.fight_id WHERE ps.account = @account AND ${where}`).get(p));
   const professions = db
@@ -340,19 +400,15 @@ export function overview(db: DB, fl: Filters): Overview {
   return { ...t, players, recent };
 }
 
-/** Opções dos filtros (mapas, classes, jogadores) que existem nas lutas do dono. */
-export function meta(db: DB, owner: number) {
+/** Opções dos filtros (mapas, classes, jogadores) que existem nas lutas. */
+export function meta(db: DB) {
   return {
-    maps: db.prepare("SELECT DISTINCT map_id AS id, map_name AS name FROM fights WHERE status='done' AND map_id IS NOT NULL AND owner_id = ? ORDER BY map_name").all(owner),
-    professions: (
-      db
-        .prepare("SELECT DISTINCT ps.profession FROM player_stats ps JOIN fights f ON f.id = ps.fight_id WHERE ps.profession IS NOT NULL AND f.owner_id = ? ORDER BY ps.profession")
-        .all(owner) as any[]
-    ).map((r) => r.profession),
+    maps: db.prepare("SELECT DISTINCT map_id AS id, map_name AS name FROM fights WHERE status='done' AND map_id IS NOT NULL ORDER BY map_name").all(),
+    professions: (db.prepare("SELECT DISTINCT profession FROM player_stats WHERE profession IS NOT NULL ORDER BY profession").all() as any[]).map((r) => r.profession),
     players: db
       .prepare(
-        "SELECT account, MAX(f.time_start) AS lastSeen, ps.name, ps.profession FROM player_stats ps JOIN fights f ON f.id = ps.fight_id WHERE f.owner_id = ? GROUP BY account ORDER BY account COLLATE NOCASE",
+        "SELECT account, MAX(f.time_start) AS lastSeen, ps.name, ps.profession FROM player_stats ps JOIN fights f ON f.id = ps.fight_id GROUP BY account ORDER BY account COLLATE NOCASE",
       )
-      .all(owner),
+      .all(),
   };
 }

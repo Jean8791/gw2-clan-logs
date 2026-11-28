@@ -49,7 +49,8 @@ export function securityHeaders(o: { https: boolean; html: boolean; report: bool
   return {
     "x-content-type-options": "nosniff",
     "x-frame-options": "DENY",
-    "referrer-policy": "no-referrer", // o endereço do espaço de um usuário tem um ID que não deve vazar
+    "referrer-policy": "no-referrer",
+    "x-robots-tag": "noindex, nofollow", // a leitura é aberta, mas os nomes dos jogadores não devem aparecer em buscas
     "permissions-policy": "camera=(), microphone=(), geolocation=()",
     ...(o.https ? { "strict-transport-security": HSTS } : {}),
     ...(o.html ? { "content-security-policy": o.report ? REPORT_CSP : CSP } : {}),

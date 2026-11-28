@@ -17,15 +17,19 @@ export interface EiOutput {
 export const fightError = (code: string, detail?: string) => new Error(detail ? `${code}|${detail}` : code);
 
 /**
- * Configuração do Elite Insights. Fica enxuta de propósito: replay de combate, linhas do tempo por segundo e modificadores
- * de dano não são usados e quase dobram a memória (um log de 14 MB cai de ~1,4 GB para ~0,5 GB). O DetailledWvW precisa ficar:
- * sem ele o EI não traz o dano, os kills nem os inimigos em WvW.
+ * Configuração do Elite Insights. Fica enxuta de propósito: linhas do tempo por segundo e modificadores de dano não são usados e
+ * quase dobram a memória (um log de 14 MB cai de ~1,4 GB para ~0,5 GB). O DetailledWvW precisa ficar: sem ele o EI não traz o dano,
+ * os kills nem os inimigos em WvW.
+ *
+ * O replay fica ligado porque sem ele a distância até a tag (distToCom) vem 0; medido, custa de 0 a 7% de memória. As posições de
+ * cada jogador (`positions`, base da porcentagem do tempo perto da tag) só saem com RawTimelineArrays, e isso é caro: nos logs de 24 e
+ * 41 MB o pico do EI foi de 0,8 e 1,3 GB para 1,7 e 3,2 GB, e o JSON de 30 e 39 MB para 112 e 201 MB. Por isso é opcional (`positions`).
  */
-export const eiConfLines = (outDir: string, o: { html: boolean }): string[] => [
+export const eiConfLines = (outDir: string, o: { html: boolean; positions?: boolean }): string[] => [
   "SaveAtOut=false", `OutLocation=${outDir}`,
   `SaveOutHTML=${o.html}`, "SaveOutJSON=true", "SaveOutCSV=false", "IndentJSON=false", "CompressRaw=false",
-  "ParsePhases=true", "ParseCombatReplay=false", "DetailledWvW=true", "ComputeDamageModifiers=false",
-  "RawTimelineArrays=false", "HtmlExternalScripts=false", "SkipFailedTries=false",
+  "ParsePhases=true", "ParseCombatReplay=true", "DetailledWvW=true", "ComputeDamageModifiers=false",
+  `RawTimelineArrays=${o.positions ?? false}`, "HtmlExternalScripts=false", "SkipFailedTries=false",
   "UploadToDPSReports=false", "UploadToWingman=false", "SaveOutTrace=false",
   "SingleThreaded=true", "AddPoVProf=false", "AddDuration=false",
 ];
@@ -51,14 +55,14 @@ export function eiFailure(stdout: string, code: number | null): Error {
   return code === 2 && !line ? fightError("eiMemory") : fightError("eiUnreadable");
 }
 
-export async function runEliteInsights(opts: { eiDir: string; dotnet: string; logFile: string; outDir: string; html?: boolean; timeoutMs?: number }): Promise<EiOutput> {
+export async function runEliteInsights(opts: { eiDir: string; dotnet: string; logFile: string; outDir: string; html?: boolean; positions?: boolean; timeoutMs?: number }): Promise<EiOutput> {
   const { eiDir, dotnet, logFile, outDir } = opts;
   if (!eiAvailable(eiDir)) {
     throw fightError("eiMissing", eiDir);
   }
   await fs.mkdir(outDir, { recursive: true });
   const conf = path.join(outDir, "ei.conf");
-  await fs.writeFile(conf, eiConfLines(outDir, { html: opts.html ?? false }).join("\n"));
+  await fs.writeFile(conf, eiConfLines(outDir, { html: opts.html ?? false, positions: opts.positions ?? false }).join("\n"));
 
   const { stdout, code } = await new Promise<{ stdout: string; code: number | null }>((resolve, reject) => {
     const p = spawn(dotnet, [path.join(eiDir, EI_DLL), "-c", conf, logFile], { cwd: eiDir, env: eiEnv(process.env) });

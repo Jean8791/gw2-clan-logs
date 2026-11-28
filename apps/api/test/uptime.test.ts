@@ -181,7 +181,7 @@ describe("migração: banco antigo ganha as colunas novas", () => {
     const old = new Database(file);
     old.exec(`
       CREATE TABLE fights (id TEXT PRIMARY KEY, sha256 TEXT NOT NULL UNIQUE, status TEXT NOT NULL, uploaded_at TEXT NOT NULL,
-        time_start TEXT, squad_kills INTEGER);
+        time_start TEXT, squad_kills INTEGER, map_id INTEGER);
       INSERT INTO fights (id, sha256, status, uploaded_at, squad_kills) VALUES ('f1', 'h1', 'done', '2026-11-13T00:00:00Z', 7);
     `);
     old.close();

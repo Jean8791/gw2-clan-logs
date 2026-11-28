@@ -160,13 +160,18 @@ describe("ranking: boon vira média ponderada pelo tempo ativo; o resto continua
     role: "support",
     activeMs: activeSeg * 1000,
     distToCom: null,
+    distCoverMs: 0,
+    nearCoverMs: 0,
     skills: [],
     ...o,
   });
+  let n = 0;
+  // cada luta começa 10 minutos depois da anterior: lutas no mesmo horário, mapa e jogadores seriam a mesma luta gravada duas vezes
   const luta = (id: string, players: ExtractedPlayer[]) => {
+    const timeStart = new Date(Date.UTC(2026, 10, 12, 20, 0, 0) + n++ * 600_000).toISOString();
     db.prepare("INSERT INTO fights (id, sha256, status, uploaded_at, owner_id) VALUES (?, ?, 'queued', ?, ?)").run(id, id, new Date().toISOString(), dono);
     const f: ExtractedFight = {
-      mode: "wvw", fightName: "WvW", mapId: null, timeStart: "2026-11-12T20:00:00.000Z", durationMs: 300_000, success: true, recordedBy: null,
+      mode: "wvw", fightName: "WvW", mapId: null, timeStart, durationMs: 300_000, success: true, recordedBy: null,
       squadCount: players.length, allyCount: 0, enemyCount: 0, squadDamage: 0, squadKills: 0, squadDowns: 0, squadDeaths: 0, enemyDowns: 0, enemyDeaths: 0,
       eiVersion: null, players,
     };
@@ -177,7 +182,7 @@ describe("ranking: boon vira média ponderada pelo tempo ativo; o resto continua
     luta("F1", [jogador("A.1", 60, { stabOut: 0.4, damage: 1000 })]);
     luta("F2", [jogador("A.1", 180, { stabOut: 0.1, damage: 1000 })]);
 
-    const a = q.ranking(db, { owner: dono }).find((r) => r.account === "A.1")!;
+    const a = q.ranking(db, {}).find((r) => r.account === "A.1")!;
 
     expect(a.stabOut).toBeCloseTo(0.175, 10);
     expect(a.damage).toBe(2000);
@@ -190,7 +195,7 @@ describe("ranking: boon vira média ponderada pelo tempo ativo; o resto continua
     luta("F2", [jogador("A.1", 180, { stabOut: 0.1 })]);
     luta("F3", [jogador("B.2", 120, { stabOut: 0.2 })]);
 
-    const geral = q.baseline(db, { owner: dono });
+    const geral = q.baseline(db, {});
 
     expect(geral.stabOut).toBeCloseTo((0.4 * 60 + 0.1 * 180 + 0.2 * 120) / 360, 10);
   });
@@ -199,12 +204,12 @@ describe("ranking: boon vira média ponderada pelo tempo ativo; o resto continua
     luta("F1", [jogador("A.1", 60, { stabUp: 30_000 })]);
     luta("F2", [jogador("A.1", 180, { stabUp: 90_000 })]);
 
-    expect(q.ranking(db, { owner: dono }).find((r) => r.account === "A.1")!.stabUp).toBe(120_000);
+    expect(q.ranking(db, {}).find((r) => r.account === "A.1")!.stabUp).toBe(120_000);
   });
 
   it("jogador sem tempo ativo registrado não quebra a média (valor 0)", () => {
     luta("F1", [jogador("Z.9", 0, { stabOut: 0.4 })]);
 
-    expect(q.ranking(db, { owner: dono }).find((r) => r.account === "Z.9")!.stabOut).toBe(0);
+    expect(q.ranking(db, {}).find((r) => r.account === "Z.9")!.stabOut).toBe(0);
   });
 });

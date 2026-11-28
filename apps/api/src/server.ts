@@ -9,7 +9,7 @@ import multipart from "@fastify/multipart";
 import rateLimit from "@fastify/rate-limit";
 import fastifyStatic from "@fastify/static";
 import { MAX_JSON_MB, MAX_UPLOAD_MB, parseFilters, referenceTimeMs, type Filters, type UploadResult } from "@gw2logs/shared";
-import { isAdmin, userByPublicId, type User } from "./auth.js";
+import { isAdmin, type User } from "./auth.js";
 import { apiUser, registerAuthRoutes, sessionUser } from "./auth-routes.js";
 import { paths, type Config } from "./config.js";
 import { openDb, type DB } from "./db.js";
@@ -20,7 +20,6 @@ import { MEDIA_KEY, MediaStore } from "./media.js";
 import * as q from "./queries.js";
 import { removeFights } from "./retention.js";
 import { isCrossSite, reportForSandbox, SAFE_METHODS, securityHeaders } from "./security.js";
-import { copyFight } from "./store.js";
 import { LogWorker } from "./worker.js";
 
 const MAX_UPLOAD = MAX_UPLOAD_MB * 1024 * 1024; // logs grandes de WvW passam fácil de 20 MB
@@ -37,13 +36,6 @@ export interface App {
   server: FastifyInstance;
   db: DB;
   worker: LogWorker;
-}
-
-declare module "fastify" {
-  interface FastifyRequest {
-    /** Dono do espaço /u/:uid (preenchido só nas rotas de leitura). */
-    owner: User;
-  }
 }
 
 /** `fetch` é trocável para os testes não falarem com o Discord de verdade. */
@@ -197,7 +189,8 @@ export async function buildApp(cfg: Config, opts: { logger?: FastifyServerOption
         continue;
       }
       const sha = hash.digest("hex");
-      let existing = db.prepare("SELECT id, status FROM fights WHERE sha256 = ? AND owner_id = ?").get(sha, user.id) as { id: string; status: any } | undefined;
+      // o mesmo arquivo já enviado por qualquer pessoa e pronto, ou por este usuário (na fila ou com erro), não vira outra luta
+      let existing = db.prepare("SELECT id, status FROM fights WHERE sha256 = ? AND (owner_id = ? OR status = 'done') ORDER BY status = 'done' DESC LIMIT 1").get(sha, user.id) as { id: string; status: any } | undefined;
       // um log que ficou com erro (por exemplo, interrompido quando o servidor caiu) pode ser reenviado: o registro com erro sai e o envio segue como novo
       if (existing?.status === "error") {
         await removeFights(db, p, [existing.id]);
@@ -208,23 +201,14 @@ export async function buildApp(cfg: Config, opts: { logger?: FastifyServerOption
         results.push({ file: part.filename, id: existing.id, status: existing.status, duplicate: true });
         continue;
       }
-      // o mesmo arquivo já processado para outro usuário: copia o resultado do banco em vez de rodar o Elite Insights de novo.
-      // Se a original ainda está na fila (ou deu erro), o envio segue o caminho normal: é raro e não vale um estado de espera.
-      const processed = db.prepare("SELECT id FROM fights WHERE sha256 = ? AND status = 'done' LIMIT 1").get(sha) as { id: string } | undefined;
       // os limites valem só para log novo: um duplicado é ignorado de qualquer jeito e não custa nada
-      const blocked = processed ? hourlyBlocker(user.id) : (queueBlocker(user.id) ?? hourlyBlocker(user.id) ?? (await diskBlocker()));
+      const blocked = queueBlocker(user.id) ?? hourlyBlocker(user.id) ?? (await diskBlocker());
       if (blocked) {
         await fs.rm(tmp, { force: true });
         results.push({ file: part.filename, error: LIMIT_MESSAGES[blocked], code: blocked });
         continue;
       }
       const id = newFightId(sha, user.id);
-      if (processed) {
-        await fs.rm(tmp, { force: true });
-        copyFight(db, processed.id, id, user, part.filename.slice(0, 200));
-        results.push({ file: part.filename, id, status: "done" });
-        continue;
-      }
       await fs.rename(tmp, path.join(p.uploads, id + ext));
       db.prepare("INSERT INTO fights (id, sha256, status, uploaded_at, uploader, owner_id, file_name) VALUES (?, ?, 'queued', ?, ?, ?, ?)").run(
         id, sha, new Date().toISOString(), user.name, user.id, part.filename.slice(0, 200),
@@ -246,6 +230,9 @@ export async function buildApp(cfg: Config, opts: { logger?: FastifyServerOption
       .prepare(`SELECT id, status, error FROM fights WHERE owner_id = ? AND id IN (${ids.map(() => "?").join(",")})`)
       .all(user.id, ...ids);
   });
+
+  // pede aos buscadores que não indexem nada (a leitura é aberta, mas os nomes dos jogadores não devem aparecer em buscas)
+  server.get("/robots.txt", async (_req, reply) => reply.type("text/plain; charset=utf-8").send("User-agent: *\nDisallow: /\n"));
 
   // para o alerta de "fora do ar": só diz se o banco responde e quantos logs esperam (nada de dado de jogador)
   server.get("/api/health", async (_req, reply) => {
@@ -285,92 +272,81 @@ export async function buildApp(cfg: Config, opts: { logger?: FastifyServerOption
     return q.setGuildAlliance(db, req.params.id, req.body.inAlliance) ? { ok: true } : reply.code(404).send({ error: "Guild not found.", code: "guildNotFound" });
   });
 
-  // ---------- Espaço de cada usuário (/api/u/:uid): leitura aberta a quem tem o link, sempre só das lutas do dono ----------
-  await server.register(
-    async (scope) => {
-      scope.decorateRequest("owner", undefined as unknown as User);
-      scope.addHook("onRequest", async (req, reply) => {
-        const owner = userByPublicId(db, (req.params as { uid: string }).uid);
-        if (!owner) return reply.code(404).send({ error: "User not found.", code: "userNotFound" });
-        req.owner = owner;
-      });
-      /** Filtros da query string mais o dono (que vem da URL, nunca da query). */
-      const filtersOf = (req: FastifyRequest, qs: Record<string, string> = req.query as Record<string, string>): Filters => ({ ...parseFilters(qs), owner: req.owner.id });
+  // ---------- Leitura aberta (/api): um conjunto único de lutas, sem login ----------
+  /** Filtros da query string. Só o usuário logado (nunca a query) ganha as próprias lutas na fila ou com erro no topo da lista. */
+  const filtersOf = (req: FastifyRequest): Filters => ({ ...parseFilters(req.query as Record<string, string>), viewer: sessionUser(db, cfg, req)?.id });
 
-      // quem é o dono deste espaço (nome e avatar); nunca o id do Discord
-      scope.get("/", async (req) => ({ publicId: req.owner.publicId, name: req.owner.name, avatar: req.owner.avatar }));
+  server.get("/api/fights", async (req, reply) => {
+    const qs = req.query as Record<string, string>;
+    const limit = Math.min(Math.max(Number(qs.limit) || 50, 1), 500);
+    const offset = Math.max(Number(qs.offset) || 0, 0);
+    const fl = filtersOf(req);
+    // o total (já com os filtros) vai num cabeçalho, para a resposta continuar sendo a lista de lutas
+    reply.header("x-total-count", q.countFights(db, fl));
+    return q.listFights(db, fl, limit, offset, { sort: qs.sort, dir: qs.dir });
+  });
 
-      scope.get("/fights", async (req, reply) => {
-        const qs = req.query as Record<string, string>;
-        const limit = Math.min(Math.max(Number(qs.limit) || 50, 1), 500);
-        const offset = Math.max(Number(qs.offset) || 0, 0);
-        const fl = filtersOf(req);
-        // o total (já com os filtros) vai num cabeçalho, para a resposta continuar sendo a lista de lutas
-        reply.header("x-total-count", q.countFights(db, fl));
-        return q.listFights(db, fl, limit, offset, { sort: qs.sort, dir: qs.dir });
-      });
+  server.get<{ Params: { id: string } }>("/api/fights/:id", async (req, reply) => {
+    const d = q.fightDetail(db, req.params.id);
+    return d ?? reply.code(404).send({ error: "Fight not found.", code: "fightNotFound" });
+  });
 
-      scope.get<{ Params: { id: string } }>("/fights/:id", async (req, reply) => {
-        const d = q.fightDetail(db, req.params.id, req.owner.id);
-        return d ?? reply.code(404).send({ error: "Fight not found.", code: "fightNotFound" });
-      });
+  // relatório HTML completo do Elite Insights (rotação, linha do tempo, replay)
+  server.get<{ Params: { id: string } }>("/api/fights/:id/report", async (req, reply) => {
+    const id = req.params.id;
+    if (!/^[\w-]+$/.test(id)) return reply.code(400).send();
+    const exists = db.prepare("SELECT 1 FROM fights WHERE id = ? AND status = 'done'").get(id);
+    const file = path.join(p.fightDir(id), "report.html");
+    if (!exists || !existsSync(file)) return reply.code(404).send({ error: "Report not available for this fight.", code: "noReport" });
+    return reply.type("text/html; charset=utf-8").send(reportForSandbox(await fs.readFile(file, "utf8")));
+  });
 
-      // relatório HTML completo do Elite Insights (rotação, linha do tempo, replay)
-      scope.get<{ Params: { id: string } }>("/fights/:id/report", async (req, reply) => {
-        const id = req.params.id;
-        if (!/^[\w-]+$/.test(id)) return reply.code(400).send();
-        const mine = db.prepare("SELECT 1 FROM fights WHERE id = ? AND owner_id = ?").get(id, req.owner.id);
-        const file = path.join(p.fightDir(id), "report.html");
-        if (!mine || !existsSync(file)) return reply.code(404).send({ error: "Report not available for this fight.", code: "noReport" });
-        return reply.type("text/html; charset=utf-8").send(reportForSandbox(await fs.readFile(file, "utf8")));
-      });
+  server.get("/api/ranking", async (req) => {
+    const fl = filtersOf(req);
+    const rows = q.ranking(db, fl);
+    // referenceMs: o tempo de referência do ajuste dos boons e do uptime (metade do tempo mediano de jogo no filtro)
+    return { rows, baseline: q.baseline(db, fl), referenceMs: referenceTimeMs(rows.map((r) => r.activeMs)) };
+  });
 
-      scope.get("/ranking", async (req) => {
-        const fl = filtersOf(req);
-        const rows = q.ranking(db, fl);
-        // referenceMs: o tempo de referência do ajuste dos boons e do uptime (metade do tempo mediano de jogo no filtro)
-        return { rows, baseline: q.baseline(db, fl), referenceMs: referenceTimeMs(rows.map((r) => r.activeMs)) };
-      });
+  server.get<{ Params: { account: string } }>("/api/players/:account", async (req, reply) => {
+    const prof = q.playerProfile(db, req.params.account, filtersOf(req));
+    return prof ?? reply.code(404).send({ error: "Player not found.", code: "playerNotFound" });
+  });
 
-      scope.get<{ Params: { account: string } }>("/players/:account", async (req, reply) => {
-        const prof = q.playerProfile(db, req.params.account, filtersOf(req));
-        return prof ?? reply.code(404).send({ error: "Player not found.", code: "playerNotFound" });
-      });
+  // funções, classes e dias que o jogador jogou, para as listas dos filtros da página dele
+  server.get<{ Params: { account: string } }>("/api/players/:account/options", async (req, reply) => {
+    const o = q.playerOptions(db, req.params.account, filtersOf(req));
+    return o ?? reply.code(404).send({ error: "Player not found.", code: "playerNotFound" });
+  });
 
-      // funções, classes e dias que o jogador jogou (nos logs deste espaço), para as listas dos filtros da página dele
-      scope.get<{ Params: { account: string } }>("/players/:account/options", async (req, reply) => {
-        const o = q.playerOptions(db, req.params.account, filtersOf(req));
-        return o ?? reply.code(404).send({ error: "Player not found.", code: "playerNotFound" });
-      });
+  server.get<{ Params: { account: string } }>("/api/players/:account/skills", async (req) => q.playerSkills(db, req.params.account, filtersOf(req)));
 
-      scope.get<{ Params: { account: string } }>("/players/:account/skills", async (req) => q.playerSkills(db, req.params.account, filtersOf(req)));
+  server.get("/api/compare", async (req, reply) => {
+    const qs = req.query as Record<string, string>;
+    const accounts = String(qs.accounts ?? "").split(",").map((s) => s.trim()).filter(Boolean).slice(0, 6);
+    if (!accounts.length) return reply.code(400).send({ error: "Pass the accounts in ?accounts=a,b", code: "needAccounts" });
+    const fl = filtersOf(req);
+    const players = accounts.map((a) => q.playerProfile(db, a, fl)).filter((x) => x !== null);
+    return { players, baseline: q.baseline(db, fl) };
+  });
 
-      scope.get("/compare", async (req, reply) => {
-        const qs = req.query as Record<string, string>;
-        const accounts = String(qs.accounts ?? "").split(",").map((s) => s.trim()).filter(Boolean).slice(0, 6);
-        if (!accounts.length) return reply.code(400).send({ error: "Pass the accounts in ?accounts=a,b", code: "needAccounts" });
-        const fl = filtersOf(req);
-        const players = accounts.map((a) => q.playerProfile(db, a, fl)).filter((x) => x !== null);
-        return { players, baseline: q.baseline(db, fl) };
-      });
-
-      scope.get("/guilds", async (req) => q.guildSummaries(db, filtersOf(req)));
-      scope.get("/days", async (req) => q.battleDays(db, filtersOf(req)));
-      scope.get("/overview", async (req) => q.overview(db, filtersOf(req)));
-      scope.get("/meta", async (req) => q.meta(db, req.owner.id));
-    },
-    { prefix: "/api/u/:uid" },
-  );
+  server.get("/api/guilds", async (req) => q.guildSummaries(db, filtersOf(req)));
+  server.get("/api/days", async (req) => q.battleDays(db, filtersOf(req)));
+  server.get("/api/overview", async (req) => q.overview(db, filtersOf(req)));
+  server.get("/api/meta", async () => q.meta(db));
 
   // ---------- Site (build do apps/web) ----------
   if (existsSync(cfg.webDir)) {
     await server.register(fastifyStatic, { root: cfg.webDir });
     // rotas do React (ex.: /ranking): devolve o index.html; arquivos e API inexistentes dão 404 de verdade
-    server.setNotFoundHandler((req, reply) =>
-      req.url.startsWith("/api/") || req.url.startsWith("/assets/") || req.method !== "GET"
-        ? reply.code(404).send({ error: "Not found.", code: "notFound" })
-        : reply.sendFile("index.html"),
-    );
+    server.setNotFoundHandler((req, reply) => {
+      if (req.url.startsWith("/api/") || req.url.startsWith("/assets/") || req.method !== "GET") return reply.code(404).send({ error: "Not found.", code: "notFound" });
+      // link antigo de espaço (/u/<id>/lutas?x=1): o espaço deixou de existir, o mesmo caminho abre na raiz
+      // as barras do começo caem: "//outro.site" ou "/\outro.site" seriam um endereço de fora do site
+      const old = /^\/u\/[\w-]+(?:([/?].*))?$/.exec(req.url);
+      if (old) return reply.redirect("/" + (old[1] ?? "").replace(/^[/\\]+/, ""));
+      return reply.sendFile("index.html");
+    });
   }
 
   server.addHook("onClose", async () => db.close());
