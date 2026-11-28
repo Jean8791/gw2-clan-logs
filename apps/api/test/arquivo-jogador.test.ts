@@ -61,6 +61,22 @@ describe("archivePlayer: o jogador no mês arquivado", () => {
     expect(q.archivePlayer(app.db, "2026-12", "Ana.1", {})!.lastSeen).toBe("2026-12-01T20:00:00.000Z");
   });
 
+  it("traz o resumo do último dia de batalha em que ele jogou no período, para a linha 'Última luta'", () => {
+    const p = q.archivePlayer(app.db, "2026-11", "Ana.1", {})!;
+
+    expect(p.lastDay).toMatchObject({ day: "2026-11-04", fights: 1, damage: 3000, activeMs: 180_000 });
+    expect(q.archivePlayer(app.db, "2026-12", "Ana.1", {})!.lastDay).toMatchObject({ day: "2026-12-01", damage: 7 });
+  });
+
+  it("quem jogou mais de uma luta no último dia soma o dia, e o último dia vale também na semana", () => {
+    luta("e", "2026-11-04T23:00:00.000Z", "Ana.1", { damage: 10 }); // mesmo dia de batalha (04/11), mais tarde
+
+    snapshotDays(app.db, now);
+
+    expect(q.archivePlayer(app.db, "2026-11", "Ana.1", {})!.lastDay).toMatchObject({ day: "2026-11-04", fights: 2, damage: 3010 });
+    expect(q.archivePlayer(app.db, "2026-11", "Ana.1", { week: "2026-10-30" })!.lastDay).toMatchObject({ day: "2026-11-04", damage: 3010 });
+  });
+
   it("quem não jogou no período não tem perfil", () => {
     expect(q.archivePlayer(app.db, "2026-11", "Ninguem.9", {})).toBeNull();
     expect(q.archivePlayer(app.db, "2026-10", "Ana.1", {})).toBeNull();

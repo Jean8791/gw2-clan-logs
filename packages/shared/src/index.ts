@@ -629,6 +629,8 @@ export interface ArchivePlayerProfile {
   referenceMs: number;
   /** o instante da última luta dele no período (o resumo não guarda as lutas, só quando ele apareceu pela última vez) */
   lastSeen: string | null;
+  /** o resumo do último dia de batalha em que ele jogou no período (o resumo diário não separa as lutas do dia) */
+  lastDay: (Aggregate & { day: string }) | null;
 }
 
 export const isMonth = (m: string): boolean => /^\d{4}-(0[1-9]|1[0-2])$/.test(m);

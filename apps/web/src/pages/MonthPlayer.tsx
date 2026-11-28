@@ -59,7 +59,12 @@ export function MonthPlayerPage() {
   const keys = statsOfGroup(group, scope);
   const adjust: TimeAdjust = { baseline, refMs: data.referenceMs };
   // "total" do clã inteiro não é comparável com o de um jogador: a linha do clã só aparece nos modos por minuto e por segundo
-  const summary = [{ ...row, label: t("monthPlayer.player") }, ...(mode === "total" ? [] : [{ ...baseline, label: t("monthPlayer.clan") }])];
+  const [, month2, day2] = data.lastDay?.day.split("-") ?? [];
+  const summary = [
+    { ...row, label: t("monthPlayer.player") },
+    ...(data.lastDay ? [{ ...data.lastDay, label: `${t("monthPlayer.lastFight")} ${day2}/${month2}` }] : []),
+    ...(mode === "total" ? [] : [{ ...baseline, label: t("monthPlayer.clan") }]),
+  ];
   const labelCol = (id: string, header: string): Column<(typeof summary)[number]> => ({ id, header, sticky: true, cell: (r) => <span className="font-medium">{r.label}</span> });
   return (
     <>
