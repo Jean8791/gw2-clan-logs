@@ -1,5 +1,5 @@
 // Idiomas do site: português (padrão) e inglês. Sem biblioteca: um dicionário por idioma e a função translate.
-import { BOON_BASES, GROUP_UP_BASES, type EffKey, type GroupUpKey, type ScopedKey } from "./boons.js";
+import { BOON_BASES, GROUP_UP_BASES, STACKING_BOONS, type BoonBase, type EffKey, type GroupUpKey, type ScopedKey } from "./boons.js";
 import type { StatKey } from "./index.js";
 import { STAT_META } from "./index.js";
 
@@ -379,9 +379,9 @@ export const DICT: Record<Lang, Dict> = {
     "scope.squad": "Squad",
     "scope.group": "Grupo",
     "scope.self": "Próprio",
-    "scope.useful": "Squad útil",
-    "boon.efficiency": "Eficiência",
-    "boon.efficiencyHint": "Parte do volume gerado que foi útil (sem o que passou do limite de pilhas): geração útil ÷ volume. Quem joga as habilidades todas de uma vez tem volume alto e eficiência baixa. Traço = sem dado (logs enviados antes do site guardar a geração útil)",
+    "scope.effective": "Squad efetiva",
+    "boon.utilization": "Aproveitamento",
+    "boon.utilizationHint": "Geração efetiva ÷ volume gerado, os dois do Elite Insights. A parte que falta é a perda registrada: pilhas removidas ou substituídas (strip inimigo, substituição, boon consumido por design, como a Aegis ao bloquear). Não mede a qualidade do jogador. Traço = sem dado (logs enviados antes de o site guardar a geração efetiva)",
     "api.tooManyAttempts": "Muitas senhas erradas. Tente de novo mais tarde.",
     "nav.import": "Importar logs",
     "page.import.title": "Importar logs",
@@ -836,9 +836,9 @@ export const DICT: Record<Lang, Dict> = {
     "scope.squad": "Squad",
     "scope.group": "Group",
     "scope.self": "Self",
-    "scope.useful": "Squad useful",
-    "boon.efficiency": "Efficiency",
-    "boon.efficiencyHint": "Share of the generated volume that was useful (without what went past the stack limit): useful generation ÷ volume. Whoever casts all skills at once gets a high volume and a low efficiency. Dash = no data (logs uploaded before the site stored useful generation)",
+    "scope.effective": "Squad effective",
+    "boon.utilization": "Utilization",
+    "boon.utilizationHint": "Effective generation ÷ generated volume, both from Elite Insights. What is missing is the recorded waste: stacks that were removed or replaced (enemy strips, replacement, boons consumed by design, such as Aegis when it blocks). It does not measure player quality. Dash = no data (logs uploaded before the site stored effective generation)",
     "api.tooManyAttempts": "Too many wrong passwords. Try again later.",
     "nav.import": "Import logs",
     "page.import.title": "Import logs",
@@ -999,16 +999,27 @@ const SCOPE_HINT_EN = { Group: "Volume generated for your group (includes you)",
 const scopedEn = (): Record<ScopedKey, StatEn> =>
   Object.fromEntries(
     (["Group", "Self"] as const).flatMap((suffix) =>
-      BOON_BASES.map((b) => [`${b}${suffix}`, { ...BASE_EN[`${b}Out`], hint: SCOPE_HINT_EN[suffix] }]),
+      BOON_BASES.map((b) => [`${b}${suffix}`, { ...BASE_EN[`${b}Out`], hint: `${SCOPE_HINT_EN[suffix]}. ${unitHintEn(b)}` }]),
     ),
   ) as Record<ScopedKey, StatEn>;
 
-const EFF_HINT_EN =
-  "Volume generated for the squad without what went past the stack limit (overstack): what actually counted. Whoever casts all skills at once gets a high volume and a low useful generation. Only logs uploaded after the site started storing it have it";
+const unitHintEn = (base: BoonBase): string =>
+  STACKING_BOONS.includes(base) ? "Unit: average stacks" : "Unit: % of time, normalized by Elite Insights (can go over 100%)";
 
-/** Cada boon "Out" (squad) ganha a geração útil, com o mesmo nome e a dica do que ela mede. */
+const OUT_HINT_EN = "Boon volume the player generated for the squad: the duration of the applications and extensions recorded by Elite Insights, already normalized";
+
+/** Cada boon "Out" (squad) ganha a unidade na dica. */
+const outEn = (): Record<`${BoonBase}Out`, StatEn> =>
+  Object.fromEntries(BOON_BASES.map((b) => [`${b}Out`, { ...BASE_EN[`${b}Out`], hint: `${OUT_HINT_EN}. ${unitHintEn(b)}` }])) as Record<`${BoonBase}Out`, StatEn>;
+
+const EFF_HINT_EN =
+  "Effective generation (the Elite Insights `generation` field): the boon duration that stayed active and is credited to the player for the squad. The generated volume also includes the recorded waste (`wasted`), which comes from removed or replaced stacks (enemy strips, replacement and boons consumed by design, such as Aegis when it blocks). The difference between the two does not measure player error. Only logs uploaded after the site started storing it have it";
+
+/** Cada boon "Out" (squad) ganha a geração efetiva, com o mesmo nome e a dica do que ela mede. */
 const effEn = (): Record<EffKey, StatEn> =>
-  Object.fromEntries(BOON_BASES.map((b) => [`${b}Eff`, { label: `Useful ${BASE_EN[`${b}Out`].label}`, short: `${BASE_EN[`${b}Out`].short} useful`, hint: EFF_HINT_EN }])) as Record<EffKey, StatEn>;
+  Object.fromEntries(
+    BOON_BASES.map((b) => [`${b}Eff`, { label: `${BASE_EN[`${b}Out`].label} (effective generation)`, short: `${BASE_EN[`${b}Out`].short} eff.`, hint: `${EFF_HINT_EN}. ${unitHintEn(b)}` }]),
+  ) as Record<EffKey, StatEn>;
 
 const GROUP_UP_HINT_EN =
   "Average uptime of the player's group (whoever is in the same squad group, the player included), over the player's active time. It measures the group's result, not only what the player does: two supports in the same group get the same value";
@@ -1017,7 +1028,7 @@ const GROUP_UP_HINT_EN =
 const groupUpEn = (): Record<GroupUpKey, StatEn> =>
   Object.fromEntries(GROUP_UP_BASES.map((b) => [`${b}GroupUp`, { label: `${BASE_EN[`${b}Up`].label} in group`, short: `${BASE_EN[`${b}Up`].short} grp.`, hint: GROUP_UP_HINT_EN }])) as Record<GroupUpKey, StatEn>;
 
-export const STAT_EN: Record<StatKey, StatEn> = { ...BASE_EN, ...scopedEn(), ...effEn(), ...groupUpEn() };
+export const STAT_EN: Record<StatKey, StatEn> = { ...BASE_EN, ...outEn(), ...scopedEn(), ...effEn(), ...groupUpEn() };
 
 /** Nome, abreviação e dica de uma métrica no idioma (português = o que está em STAT_META). */
 export function statText(key: StatKey, lang: Lang): { label: string; short: string; hint?: string } {

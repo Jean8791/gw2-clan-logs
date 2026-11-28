@@ -68,7 +68,7 @@ describe("métricas por alcance", () => {
     expect(statsOfGroup("boons")).toEqual(bases.map((b) => `${b}Out`));
     expect(statsOfGroup("boons", "group")).toEqual(bases.map((b) => `${b}Group`));
     expect(statsOfGroup("boons", "self")).toEqual(bases.map((b) => `${b}Self`));
-    expect(statsOfGroup("boons", "useful")).toEqual(bases.map((b) => `${b}Eff`));
+    expect(statsOfGroup("boons", "effective")).toEqual(bases.map((b) => `${b}Eff`));
   });
 
   it("outros grupos não mudam com o alcance", () => {

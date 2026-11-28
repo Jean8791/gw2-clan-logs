@@ -3,15 +3,15 @@ import os from "node:os";
 import path from "node:path";
 import Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { boonEfficiency, cardOptions, emptyStats, inScope, STAT_KEYS, STAT_META, statsOfGroup } from "@gw2logs/shared";
+import { boonVolumeUtilization, cardOptions, DICT, emptyStats, inScope, STAT_EN, STAT_KEYS, STAT_META, statsOfGroup } from "@gw2logs/shared";
 import { openDb, type DB } from "../src/db.js";
 import { extractFight } from "../src/ingest.js";
 import * as q from "../src/queries.js";
 import { saveFight } from "../src/store.js";
 import { wvwFixture } from "./fixture.js";
 
-// Geração útil: o volume de boon gerado menos o que passou do limite de pilhas (o EI chama de wasted). No JSON do EI, o volume
-// (`outgoing`) é a geração útil (`generation`) mais o desperdício (`wasted`); conferido em um log real de 33 jogadores.
+// Geração efetiva: o campo `generation` do Elite Insights. O volume (`outgoing`) é outra conta do EI e inclui também a perda registrada
+// (`wasted`): em 20 logs reais ele fica perto de `overstack + wasted` na mediana, mas não é uma identidade (docs/research/etapa-0).
 
 const buffs = (id: number, generation: number, wasted: number) => ({ id, buffData: [{ generation, overstack: generation, wasted }] });
 
@@ -23,15 +23,15 @@ function lutaComGeracao() {
 }
 const comandante = (json: any) => extractFight(json).players.find((p) => p.account === "Comandante.1111")!;
 
-describe("extractFight: geração útil de boon", () => {
-  it("a geração útil sai de squadBuffs (generation) e o volume gerado continua o de squadBuffVolumes", () => {
+describe("extractFight: geração efetiva de boon", () => {
+  it("a geração efetiva sai de squadBuffs (generation) e o volume gerado continua o de squadBuffVolumes", () => {
     const p = comandante(lutaComGeracao());
 
     expect(p.stabOut).toBe(3);
     expect(p.stabEff).toBe(2.4);
   });
 
-  it("sem squadBuffs no log, a geração útil fica em zero e o volume não muda", () => {
+  it("sem squadBuffs no log, a geração efetiva fica em zero e o volume não muda", () => {
     const p = comandante(wvwFixture());
 
     expect(p.stabOut).toBe(3);
@@ -39,28 +39,28 @@ describe("extractFight: geração útil de boon", () => {
   });
 });
 
-describe("métricas <boon>Eff: ficam na aba Boons, no alcance \"útil\"", () => {
-  it("existe uma por boon que tem volume, com o mesmo buff e o nome 'útil'", () => {
+describe("métricas <boon>Eff: ficam na aba Boons, no alcance \"effective\"", () => {
+  it("existe uma por boon que tem volume, com o mesmo buff e o nome 'geração efetiva'", () => {
     expect(STAT_KEYS).toContain("stabEff");
     expect(STAT_META.stabEff).toMatchObject({ group: "boons", format: "volume", higherIsBetter: true, buffId: STAT_META.stabOut.buffId });
-    expect(STAT_META.stabEff.label).toBe("Estabilidade útil");
-    expect(STAT_META.stabEff.scope).toBe("useful");
+    expect(STAT_META.stabEff.label).toBe("Estabilidade (geração efetiva)");
+    expect(STAT_META.stabEff.scope).toBe("effective");
   });
 
-  it("só aparecem no alcance útil: cada alcance continua com os mesmos 10 boons", () => {
-    expect(statsOfGroup("boons", "useful")).toHaveLength(10);
-    expect(statsOfGroup("boons", "useful")).toContain("stabEff");
+  it("só aparecem no alcance efetivo: cada alcance continua com os mesmos 10 boons", () => {
+    expect(statsOfGroup("boons", "effective")).toHaveLength(10);
+    expect(statsOfGroup("boons", "effective")).toContain("stabEff");
     for (const s of ["squad", "group", "self"] as const) expect(statsOfGroup("boons", s)).not.toContain("stabEff");
   });
 
   it("trocar de alcance leva de um para o outro, e o volume de squad continua com o seu buff", () => {
-    expect(inScope("stabOut", "useful")).toBe("stabEff");
+    expect(inScope("stabOut", "effective")).toBe("stabEff");
     expect(inScope("stabEff", "group")).toBe("stabGroup");
     expect(inScope("stabEff", "squad")).toBe("stabOut");
     expect(comandante(lutaComGeracao()).stabOut).toBe(3);
   });
 
-  it("o card de Boons oferece o volume da squad e a geração útil, sem grupo e próprio", () => {
+  it("o card de Boons oferece o volume da squad e a geração efetiva, sem grupo e próprio", () => {
     const opcoes = cardOptions("boons");
     expect(opcoes).toContain("stabOut");
     expect(opcoes).toContain("stabEff");
@@ -69,21 +69,21 @@ describe("métricas <boon>Eff: ficam na aba Boons, no alcance \"útil\"", () => 
   });
 });
 
-describe("boonEfficiency: a parte do volume gerado que foi útil", () => {
-  it("é a geração útil dividida pelo volume (de 0 a 1)", () => {
-    expect(boonEfficiency({ ...emptyStats(), stabOut: 3, stabEff: 2.4 }, "stab")).toBeCloseTo(0.8, 9);
+describe("boonVolumeUtilization: o aproveitamento do volume (geração efetiva ÷ volume)", () => {
+  it("é a geração efetiva dividida pelo volume (de 0 a 1)", () => {
+    expect(boonVolumeUtilization({ ...emptyStats(), stabOut: 3, stabEff: 2.4 }, "stab")).toBeCloseTo(0.8, 9);
   });
 
   it("sem volume gerado não há eficiência (zero, sem dividir por zero)", () => {
-    expect(boonEfficiency(emptyStats(), "stab")).toBe(0);
+    expect(boonVolumeUtilization(emptyStats(), "stab")).toBe(0);
   });
 
-  it("nunca passa de 1, mesmo quando o arredondamento do log faz a útil passar do volume", () => {
-    expect(boonEfficiency({ ...emptyStats(), quickOut: 1, quickEff: 1.01 }, "quick")).toBe(1);
+  it("nunca passa de 1, mesmo quando o arredondamento do log faz a efetiva passar do volume", () => {
+    expect(boonVolumeUtilization({ ...emptyStats(), quickOut: 1, quickEff: 1.01 }, "quick")).toBe(1);
   });
 });
 
-describe("saveFight e Ranking: a geração útil é guardada e agregada como o volume", () => {
+describe("saveFight e Ranking: a geração efetiva é guardada e agregada como o volume", () => {
   let dir: string;
   let db: DB;
   beforeEach(() => {
@@ -123,5 +123,24 @@ describe("saveFight e Ranking: a geração útil é guardada e agregada como o v
     const cols = (db.pragma("table_info(player_stats)") as { name: string }[]).map((c) => c.name);
     expect(cols).toContain("stab_eff");
     expect(cols).toContain("quick_eff");
+  });
+});
+
+describe("nomes e dicas: a perda registrada não é descrita como excesso nem como erro do jogador (Etapa 1 da auditoria)", () => {
+  it("a geração efetiva e o aproveitamento não falam em overstack, limite de pilhas ou 'jogar tudo de uma vez'", () => {
+    const textos = [STAT_META.stabEff.hint, STAT_META.stabEff.label, DICT.pt["boon.utilizationHint"], DICT.en["boon.utilizationHint"], STAT_EN.stabEff.hint]
+      .filter((t): t is string => !!t)
+      .join(" ");
+
+    expect(textos).not.toMatch(/overstack|limite de pilhas|stack limit|joga.*de uma vez|útil|useful/i);
+    expect(STAT_META.stabEff.hint).toMatch(/perda registrada/);
+  });
+
+  it("o boon de pilhas (Stability e Might) avisa a unidade em pilhas médias e os de duração, em % do tempo", () => {
+    expect(STAT_META.stabOut.stacks).toBe(true);
+    expect(STAT_META.mightEff.stacks).toBe(true);
+    expect(STAT_META.quickOut.stacks).toBeUndefined();
+    expect(STAT_META.stabOut.hint).toMatch(/pilhas médias/);
+    expect(STAT_META.quickOut.hint).toMatch(/% do tempo/);
   });
 });

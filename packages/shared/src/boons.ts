@@ -2,9 +2,15 @@
 export const BOON_BASES = ["stab", "quick", "alac", "prot", "might", "aegis", "resist", "resol", "fury", "superspeed"] as const;
 export type BoonBase = (typeof BOON_BASES)[number];
 export type ScopedKey = `${BoonBase}${"Group" | "Self"}`;
-/** O volume gerado que foi útil (sem o que passou do limite de pilhas): `<boon>Eff`, no alcance da squad. */
+/** A geração efetiva (`generation` do Elite Insights, sem a perda registrada) de cada boon: `<boon>Eff`, no alcance "effective". */
 export type EffKey = `${BoonBase}Eff`;
 
 /** Os boons com uptime guardado; cada um tem `<boon>Up` (do próprio jogador) e `<boon>GroupUp` (média do grupo dele). */
 export const GROUP_UP_BASES = ["stab", "quick", "alac", "prot", "might", "aegis", "resist", "resol", "fury", "swift", "vigor", "regen"] as const;
 export type GroupUpKey = `${(typeof GROUP_UP_BASES)[number]}GroupUp`;
+
+/**
+ * Os boons de intensidade (pilhas): o volume é em pilhas médias (menor que 1 em geral), e os outros são em % do tempo. Confere com o `stacking`
+ * do `buffMap` do Elite Insights nos 20 logs da Etapa 0 (docs/research); o log de cada luta traz essa informação, mas o site só a usa para o uptime.
+ */
+export const STACKING_BOONS: readonly BoonBase[] = ["stab", "might"];

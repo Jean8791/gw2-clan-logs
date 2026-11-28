@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { boonViewKeys, BOON_VIEW_BASES, filtersToQuery, PAGE_SIZE, ROUTES, statsOfGroup, statText, STAT_KEYS, type BoonBase, type BoonScope, type BoonViewBase, type RankingRow, type StatGroup, type StatKey } from "@gw2logs/shared";
 import { DataTable, type Column } from "../components/DataTable";
 import { FilterBar } from "../components/FilterBar";
-import { defaultSort, efficiencyColumn, GroupTabs, pickerView, ModeToggle, statColumnsFor, type ValueMode } from "../components/statColumns";
+import { defaultSort, utilizationColumn, GroupTabs, pickerView, ModeToggle, statColumnsFor, type ValueMode } from "../components/statColumns";
 import { GuildTag, NoAllianceNote, PlayerLink, Profession } from "../components/badges";
 import { Button, Card, Empty, ErrorBox, Loading, PageHeader, Select } from "../components/ui";
 import { useRanking } from "../lib/api";
@@ -91,7 +91,7 @@ export function RankingPage() {
       cell: (r) => <span className="text-muted">{Math.round((r.supportFights / r.fights) * 100)}%</span>,
     },
     ...statColumnsFor(keys, mode, rows, data ? { baseline: data.baseline, refMs: data.referenceMs } : undefined),
-    ...(effKey ? [efficiencyColumn<RankingRow>(effKey.slice(0, -3) as BoonBase)] : []),
+    ...(effKey ? [utilizationColumn<RankingRow>(effKey.slice(0, -3) as BoonBase)] : []),
   ];
 
   const copyLink = async () => {

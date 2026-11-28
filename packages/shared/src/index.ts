@@ -10,7 +10,7 @@ export * from "./pagination.js";
 export * from "./fit-height.js";
 export * from "./search.js";
 export * from "./retention.js";
-import { BOON_BASES, GROUP_UP_BASES, type BoonBase, type EffKey, type GroupUpKey, type ScopedKey } from "./boons.js";
+import { BOON_BASES, GROUP_UP_BASES, STACKING_BOONS, type BoonBase, type EffKey, type GroupUpKey, type ScopedKey } from "./boons.js";
 
 export type Mode = "wvw" | "pve";
 export type Role = "dps" | "support";
@@ -76,7 +76,7 @@ export const STAT_KEYS = [
   "resolSelf",
   "furySelf",
   "superspeedSelf",
-  // o volume de squad que foi útil: o gerado menos o que passou do limite de pilhas (overstack)
+  // a geração efetiva da squad (`generation` do Elite Insights): o volume gerado sem a perda registrada (`wasted`)
   "stabEff",
   "quickEff",
   "alacEff",
@@ -123,9 +123,9 @@ export type StatKey = (typeof STAT_KEYS)[number];
 export type Stats = Record<StatKey, number>;
 
 /** Para quem o boon é gerado: o squad todo (padrão, as métricas "Out"), só o grupo ou só o próprio jogador. */
-/** Para quem o boon foi gerado; "useful" é o volume da squad sem o que passou do limite de pilhas (overstack). */
-export type BoonScope = "squad" | "group" | "self" | "useful";
-export const BOON_SCOPES: BoonScope[] = ["squad", "useful", "group", "self"];
+/** Para quem o boon foi gerado; "effective" é a geração efetiva da squad (`generation` do Elite Insights), sem a perda registrada (`wasted`). */
+export type BoonScope = "squad" | "effective" | "group" | "self";
+export const BOON_SCOPES: BoonScope[] = ["squad", "effective", "group", "self"];
 
 export type StatGroup = "offense" | "support" | "boons" | "uptime" | "defense";
 
@@ -141,6 +141,8 @@ export interface StatMeta {
    */
   format: "int" | "volume" | "pct" | "avg";
   hint?: string;
+  /** boon de intensidade (pilhas): o volume é em pilhas médias, mostrado com mais casas decimais. */
+  stacks?: boolean;
   /** id do buff na API do GW2 (boons): liga a métrica ao ícone e ao buffMap do Elite Insights. */
   buffId?: number;
   /** Só nos boons: para quem o volume é gerado. Sem isso vale "squad". */
@@ -206,23 +208,40 @@ const SCOPE_HINT: Record<"group" | "self", string> = {
   self: "Volume gerado só para você",
 };
 
-/** Cada boon "Out" (squad) ganha as versões Group e Self, com o mesmo nome e buff e a dica do alcance. */
+/** A unidade do volume de um boon, já normalizada pelo Elite Insights: pilhas médias (intensidade) ou % do tempo (duração, pode passar de 100%). */
+const unitHint = (base: BoonBase): string =>
+  STACKING_BOONS.includes(base) ? "Unidade: pilhas médias" : "Unidade: % do tempo, normalizado pelo Elite Insights (pode passar de 100%)";
+
+/** O volume e a geração efetiva de um boon: marca os de pilhas e acrescenta a unidade à dica. */
+const withUnit = (m: StatMeta, base: BoonBase, hint: string): StatMeta => ({ ...m, hint: `${hint}. ${unitHint(base)}`, ...(STACKING_BOONS.includes(base) ? { stacks: true } : {}) });
+
+const OUT_HINT = "Volume de boon que o jogador gerou para a squad: a duração das aplicações e extensões registradas pelo Elite Insights, já normalizada";
+
+/** Cada boon "Out" (squad) ganha a unidade na dica, e as versões Group e Self, com o mesmo nome e buff e a dica do alcance. */
+const outMeta = (): Record<`${BoonBase}Out`, StatMeta> =>
+  Object.fromEntries(BOON_BASES.map((b) => [`${b}Out`, withUnit(BASE_META[`${b}Out`], b, OUT_HINT)])) as Record<`${BoonBase}Out`, StatMeta>;
+
 const scopedMeta = (): Record<ScopedKey, StatMeta> =>
   Object.fromEntries(
     (["Group", "Self"] as const).flatMap((suffix) =>
       BOON_BASES.map((b) => {
         const scope = suffix === "Group" ? "group" : "self";
-        return [`${b}${suffix}`, { ...BASE_META[`${b}Out`], scope, hint: SCOPE_HINT[scope] }];
+        return [`${b}${suffix}`, { ...withUnit(BASE_META[`${b}Out`], b, SCOPE_HINT[scope]), scope }];
       }),
     ),
   ) as Record<ScopedKey, StatMeta>;
 
 const EFF_HINT =
-  "Volume gerado para a squad sem o que passou do limite de pilhas (overstack): o que de fato valeu. Quem joga as habilidades todas de uma vez tem volume alto e geração útil baixa. Só existe para logs enviados depois que o site passou a guardá-la";
+  "Geração efetiva (campo `generation` do Elite Insights): a duração de boon que ficou ativa e é atribuída ao jogador para a squad. O volume gerado inclui também a perda registrada (`wasted`), que vem da remoção ou substituição das pilhas (strip inimigo, substituição e boon consumido por design, como a Aegis ao bloquear). A diferença entre os dois não mede erro do jogador. Só existe para logs enviados depois que o site passou a guardá-la";
 
-/** Cada boon "Out" (squad) ganha a geração útil, com o mesmo buff, no alcance "útil". */
+/** Cada boon "Out" (squad) ganha a geração efetiva, com o mesmo buff, no alcance "effective". */
 const effMeta = (): Record<EffKey, StatMeta> =>
-  Object.fromEntries(BOON_BASES.map((b) => [`${b}Eff`, { ...BASE_META[`${b}Out`], label: `${BASE_META[`${b}Out`].label} útil`, short: `${BASE_META[`${b}Out`].short} útil`, scope: "useful", hint: EFF_HINT }])) as Record<EffKey, StatMeta>;
+  Object.fromEntries(
+    BOON_BASES.map((b) => [
+      `${b}Eff`,
+      { ...withUnit(BASE_META[`${b}Out`], b, EFF_HINT), label: `${BASE_META[`${b}Out`].label} (geração efetiva)`, short: `${BASE_META[`${b}Out`].short} efet.`, scope: "effective" },
+    ]),
+  ) as Record<EffKey, StatMeta>;
 
 const GROUP_UP_HINT =
   "Uptime médio do grupo do jogador (quem está no mesmo grupo do squad, ele incluído), sobre o tempo ativo dele. Mede o resultado do grupo, não só o que o jogador faz: dois suportes no mesmo grupo têm o mesmo valor";
@@ -236,7 +255,7 @@ const groupUpMeta = (): Record<GroupUpKey, StatMeta> =>
     }),
   ) as Record<GroupUpKey, StatMeta>;
 
-export const STAT_META: Record<StatKey, StatMeta> = { ...BASE_META, ...scopedMeta(), ...effMeta(), ...groupUpMeta() };
+export const STAT_META: Record<StatKey, StatMeta> = { ...BASE_META, ...outMeta(), ...scopedMeta(), ...effMeta(), ...groupUpMeta() };
 
 export const STAT_GROUPS: { id: StatGroup; label: string }[] = [
   { id: "offense", label: "Dano" },
@@ -294,7 +313,7 @@ export const statsOfGroup = (g: StatGroup, scope: BoonScope = "squad"): StatKey[
 export const BOON_VIEW_BASES = [...BOON_BASES, "swift", "vigor", "regen"] as const;
 export type BoonViewBase = (typeof BOON_VIEW_BASES)[number];
 
-/** As métricas de um boon lado a lado: volume gerado (squad, grupo, si), a geração útil, uptime recebido e uptime no grupo; só as que existem. */
+/** As métricas de um boon lado a lado: volume gerado (squad, grupo, si), a geração efetiva, uptime recebido e uptime no grupo; só as que existem. */
 export function boonViewKeys(base: BoonViewBase): StatKey[] {
   const all = STAT_KEYS as readonly string[];
   return [`${base}Out`, `${base}Eff`, `${base}Group`, `${base}Self`, `${base}Up`, `${base}GroupUp`].filter((k): k is StatKey => all.includes(k));
@@ -303,8 +322,11 @@ export function boonViewKeys(base: BoonViewBase): StatKey[] {
 /** Primeira métrica de um grupo (nos boons, no alcance pedido): para onde o gráfico vai quando o grupo muda. */
 export const metricForGroup = (g: StatGroup, scope: BoonScope = "squad"): StatKey => statsOfGroup(g, scope)[0]!;
 
-/** Parte do volume gerado de um boon que foi útil (0 a 1): a geração útil sobre o volume. Sem volume, 0. Nunca passa de 1 (arredondamento do log). */
-export const boonEfficiency = (a: Stats, base: BoonBase): number => {
+/**
+ * Aproveitamento do volume (BVU, métrica derivada do site, não do Elite Insights): a geração efetiva sobre o volume gerado (0 a 1). A parte que
+ * falta é a perda registrada, que não é erro do jogador (ver docs/research). Sem volume, 0. Por ora limitado a 1; a Etapa 2 troca isso por um aviso.
+ */
+export const boonVolumeUtilization = (a: Stats, base: BoonBase): number => {
   const out = a[`${base}Out`];
   return out > 0 ? Math.min(1, a[`${base}Eff`] / out) : 0;
 };
@@ -313,7 +335,7 @@ export const boonEfficiency = (a: Stats, base: BoonBase): number => {
 export function inScope(k: StatKey, scope: BoonScope): StatKey {
   if (STAT_META[k].group !== "boons") return k;
   const base = BOON_BASES.find((b) => k.startsWith(b));
-  const suffix = { squad: "Out", group: "Group", self: "Self", useful: "Eff" }[scope];
+  const suffix = { squad: "Out", group: "Group", self: "Self", effective: "Eff" }[scope];
   return base ? (`${base}${suffix}` as StatKey) : k;
 }
 
@@ -786,7 +808,7 @@ export const DEFAULT_CARDS: Cards = { offense: "damage", support: "healing", boo
 
 /** As métricas que o seletor de um card oferece: as do grupo (nos boons, as do alcance pedido) e, no Suporte, Cura + barreira no fim. */
 export function cardOptions(group: StatGroup): CardMetric[] {
-  const keys: CardMetric[] = group === "boons" ? [...statsOfGroup(group), ...statsOfGroup(group, "useful")] : statsOfGroup(group);
+  const keys: CardMetric[] = group === "boons" ? [...statsOfGroup(group), ...statsOfGroup(group, "effective")] : statsOfGroup(group);
   return group === "support" ? [...keys, HEALING_BARRIER] : keys;
 }
 

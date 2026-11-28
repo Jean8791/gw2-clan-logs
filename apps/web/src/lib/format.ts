@@ -35,7 +35,8 @@ export function stat(key: StatKey, v: number, perMin = false, perSec = false): s
   const format = STAT_META[key].format;
   if (format === "pct") return `${dec(v, 1)}%`;
   if (format === "avg") return dec(v, 1);
-  if (format === "volume") return dec(v, 2);
+  // boon de pilhas (Stability, Might): o volume é pilhas médias, em geral menor que 1, e 2 casas escondem a diferença entre 0,097 e 0,106
+  if (format === "volume") return dec(v, STAT_META[key].stacks ? 3 : 2);
   if (perSec) return perSecondText(v);
   if (perMin) return v >= 1e4 ? compact(v) : v >= 100 ? int(v) : v < 10 ? dec(v, 2) : dec(v, 1);
   return compact(v);
