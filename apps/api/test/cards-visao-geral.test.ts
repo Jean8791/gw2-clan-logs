@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  cardOptions, DEFAULT_CARDS, emptyStats, HEALING_BARRIER, isCardRate, parseCards, resolveCards, serializeCards, statsOfGroup, STAT_GROUPS, STAT_KEYS, STAT_META, topByCard,
+  cardOptions, cardUnit, DEFAULT_CARDS, emptyStats, HEALING_BARRIER, isCardRate, parseCards, resolveCards, serializeCards, statsOfGroup, STAT_GROUPS, STAT_KEYS, STAT_META, topByCard,
   type Cards, type RankingRow,
 } from "@gw2logs/shared";
 
@@ -125,5 +125,18 @@ describe("topByCard: o top de cada card", () => {
 
   it("quem lutou menos que o mínimo não entra", () => {
     expect(contas(topByCard([jogador("curto", 1, { damage: 9999 }), jogador("ok", 10, { damage: 10 })], "damage", 5, MIN))).toEqual(["ok"]);
+  });
+});
+
+describe("cards da Visão geral: unidade no rodapé", () => {
+  it("contagens (dano, cura, defesa) são por minuto, inclusive Cura + barreira", () => {
+    for (const m of ["damage", "healing", "strips", "dodges", HEALING_BARRIER] as const) expect(cardUnit(m)).toBe("perMin");
+  });
+
+  it("boon em volume e médias (pilhas, distância) são média no tempo; uptime em % é % do tempo", () => {
+    expect(cardUnit("stabOut")).toBe("avgTime");
+    expect(cardUnit("mightStacks")).toBe("avgTime");
+    expect(cardUnit("tagDist")).toBe("avgTime");
+    expect(cardUnit("stabUp")).toBe("pctTime");
   });
 });

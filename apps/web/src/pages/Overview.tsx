@@ -2,7 +2,7 @@ import { ArrowRight, X } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
-  ARCHIVE_MONTHS, cardHigherIsBetter, cardOptions, HEALING_BARRIER, isCardRate, isMonth, overviewDefaults, perSecond, ROUTES, STAT_GROUPS, statText, topByCard,
+  ARCHIVE_MONTHS, cardHigherIsBetter, cardOptions, cardUnit, HEALING_BARRIER, isCardRate, isMonth, overviewDefaults, perSecond, ROUTES, STAT_GROUPS, statText, topByCard,
   type CardMetric, type Cards, type Filters, type RankingRow, type StatGroup, type StatKey, type TimeAdjust,
 } from "@gw2logs/shared";
 import { DataTable, type Column } from "../components/DataTable";
@@ -23,6 +23,8 @@ const metricName = (m: CardMetric) => (m === HEALING_BARRIER ? t("overview.card.
 const formatKey = (m: CardMetric): StatKey => (m === HEALING_BARRIER ? "healing" : m);
 const totalOf = (row: RankingRow, m: CardMetric) => (m === HEALING_BARRIER ? row.healing + row.barrier : row[m]);
 
+const UNIT_TEXT = { perMin: "rate.perMin", pctTime: "overview.card.pctTime", avgTime: "overview.card.avgTime" } as const;
+
 /** Um card por grupo de métricas: o top 5 da métrica escolhida no seletor do cabeçalho; o detalhe (top 10) fica no rodapé. */
 function Leaderboard({ group, metric, rows, adjust, open, onMetric, onDetail }: { group: StatGroup; metric: CardMetric; rows: RankingRow[]; adjust?: TimeAdjust; open: boolean; onMetric: (m: CardMetric) => void; onDetail: () => void }) {
   const top = topByCard(rows, metric, 5, MIN_ACTIVE_MS, adjust);
@@ -32,7 +34,7 @@ function Leaderboard({ group, metric, rows, adjust, open, onMetric, onDetail }: 
   // a barra do melhor é a mais comprida; quando menos é melhor, o menor valor é o melhor
   const width = (v: number) => (higher ? v / best : best / v) * 100;
   const groupName = t(`group.${group}`);
-  const notes = [rate && t("rate.perMin"), !higher && t("overview.card.lessIsBetter")].filter(Boolean).join(" · ");
+  const notes = [t(UNIT_TEXT[cardUnit(metric)]), !higher && t("overview.card.lessIsBetter")].filter(Boolean).join(" · ");
   return (
     <Card
       className="flex flex-col"

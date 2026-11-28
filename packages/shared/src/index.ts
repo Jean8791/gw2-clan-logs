@@ -709,6 +709,10 @@ export const serializeCards = (cards: Cards): string =>
 /** Contagem (dano, cura, strips…) mostra por minuto de tempo ativo; boon e uptime já são valor por tempo. Cura + barreira é contagem. */
 export const isCardRate = (metric: CardMetric): boolean => metric === HEALING_BARRIER || !isTimeBased(metric);
 
+/** A unidade que o rodapé do card mostra: por minuto nas contagens, % do tempo no uptime em %, e média no tempo nos boons e nas médias (pilhas, distância). */
+export const cardUnit = (metric: CardMetric): "perMin" | "pctTime" | "avgTime" =>
+  isCardRate(metric) ? "perMin" : STAT_META[metric as StatKey].format === "pct" ? "pctTime" : "avgTime";
+
 /** Para métricas em que menos é melhor (mortes, dano recebido) o top vai do menor para o maior. */
 export const cardHigherIsBetter = (metric: CardMetric): boolean => metric === HEALING_BARRIER || STAT_META[metric].higherIsBetter;
 
