@@ -115,6 +115,21 @@ function migrate(db: DB) {
     );
     CREATE INDEX IF NOT EXISTS ix_pskills_account ON player_skills(account);
 
+    -- cura e barreira por habilidade de cada jogador em cada luta (Healing Stats; some com a luta, pela retenção).
+    -- kind: heal | barrier; indirect: 1 quando skill_id é de um buff (o nome está na mesma tabela skills)
+    CREATE TABLE IF NOT EXISTS player_support_skills (
+      fight_id      TEXT NOT NULL REFERENCES fights(id) ON DELETE CASCADE,
+      account       TEXT NOT NULL,
+      skill_id      INTEGER NOT NULL,
+      kind          TEXT NOT NULL,
+      amount        REAL NOT NULL,
+      downed_amount REAL NOT NULL,
+      hits          INTEGER NOT NULL,
+      indirect      INTEGER NOT NULL,
+      PRIMARY KEY (fight_id, account, skill_id, kind, indirect)
+    );
+    CREATE INDEX IF NOT EXISTS ix_psupskills_account ON player_support_skills(account);
+
     -- resumo de cada dia de batalha, guardado antes de a retenção apagar as lutas (ver archive.ts). Uma linha por jogador, classe, função e guilda.
     -- As métricas são somas, para a soma de vários dias dar o mesmo valor do Ranking; o boon em volume guarda Σ(valor × active_ms).
     -- profession e guild_id são '' quando não há (uma chave composta não trata dois NULL como iguais).
