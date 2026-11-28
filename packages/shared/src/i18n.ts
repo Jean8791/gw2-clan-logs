@@ -1,5 +1,5 @@
 // Idiomas do site: português (padrão) e inglês. Sem biblioteca: um dicionário por idioma e a função translate.
-import { BOON_BASES, GROUP_UP_BASES, type GroupUpKey, type ScopedKey } from "./boons.js";
+import { BOON_BASES, GROUP_UP_BASES, STACKING_BOONS, type BoonBase, type EffKey, type GroupUpKey, type RejKey, type ScopedKey, type WasteKey } from "./boons.js";
 import type { StatKey } from "./index.js";
 import { STAT_META } from "./index.js";
 
@@ -25,10 +25,15 @@ export const DICT: Record<Lang, Dict> = {
     loading: "Carregando…",
     "error.generic": "Algo deu errado.",
     "brand.name": "Logs do Clã",
+    "nav.group.overview": "Panorama",
+    "nav.group.fights": "Lutas",
+    "nav.group.players": "Jogadores",
+    "nav.group.account": "Minha conta",
     "nav.overview": "Visão geral",
     "nav.days": "Dias",
     "nav.fights": "Lutas",
     "nav.ranking": "Ranking",
+    "nav.months": "Meses",
     "nav.compare": "Comparar",
     "nav.guilds": "Guildas",
     "nav.me": "Eu",
@@ -94,6 +99,8 @@ export const DICT: Record<Lang, Dict> = {
     "page.days.subtitle": "Cada dia vai das 06:00 às 06:00 (Brasília): a noite que passa da meia-noite continua no mesmo dia.",
     "page.fights.title": "Lutas",
     "page.fights.subtitle": "Cada log enviado vira uma luta. Clique para ver os detalhes.",
+    "page.months.title": "Meses anteriores",
+    "page.months.subtitle": "O Ranking de cada mês, somado do resumo diário que o site guarda mesmo depois de as lutas serem apagadas.",
     "page.ranking.title": "Ranking",
     "page.ranking.subtitle": "Some as lutas por período, guilda, função ou classe. Os filtros ficam no link: dá para mandar no Discord.",
     "page.compare.title": "Comparar jogadores",
@@ -231,18 +238,31 @@ export const DICT: Record<Lang, Dict> = {
     "fight.role.support": "Suporte",
     "fight.role.dps": "DPS",
     "fight.uptimeNote": "Uptime sobre o tempo ativo de cada jogador. Em Estab. e Poder, é o tempo com pelo menos uma pilha; “Poder (pilhas)” é a média de pilhas. Na visão por grupo, “Squad todo” é a média do squad, ponderada pelo tempo ativo. “% Perto da tag” e “Distância da tag” só existem em logs enviados depois que o servidor passou a ler o replay (traço = sem dado); a porcentagem é o tempo vivo a até 1200 unidades do comandante.",
-    "archive.title": "Meses anteriores",
-    "archive.open": "Ver meses",
-    "archive.close": "Fechar",
     "archive.month": "Mês",
+    "monthPlayer.back": "Meses",
+    "monthPlayer.notFound": "Este jogador não aparece neste período.",
+    "monthPlayer.player": "Jogador ({kind})",
+    "monthPlayer.clan": "Média do clã ({kind})",
+    "monthPlayer.kind.month": "mês",
+    "monthPlayer.kind.week": "semana",
+    "monthPlayer.summary": "Resumo do período",
+    "monthPlayer.period": "Período",
+    "monthPlayer.lastFight": "Última luta",
+    "monthPlayer.note": "Vem do resumo diário, que fica guardado mesmo depois de as lutas serem apagadas. Por isso não tem as habilidades nem os números de cada luta: eles existem só enquanto as lutas estão guardadas. A linha 'Última luta' é o último dia de batalha em que ele jogou (as lutas do mesmo dia somadas), e o cartão mostra a hora da última luta.",
+    "monthPlayer.liveProfile": "Ver o perfil com as lutas guardadas",
+    "months.view.month": "Mês",
+    "months.view.week": "Semana",
+    "archive.weekNote": "Cada semana vai da sexta às 23:03 até a sexta seguinte às 23:00 (Brasília). As lutas entre 23:00 e 23:03 de sexta não entram em nenhuma semana, só no mês. O resumo por semana vale a partir de quando o site passou a guardá-lo.",
     "archive.inProgress": "em andamento",
     "archive.days_one": "{n} dia com dados, de {from} a {to}",
     "archive.days_other": "{n} dias com dados, de {from} a {to}",
     "archive.empty": "Ainda não há resumo guardado. Ele começa a ser guardado agora, um dia de cada vez, e os meses aparecem aqui.",
-    "archive.note": "Cada mês soma os dias guardados, com as métricas escolhidas nos cards acima. Valem os filtros de guilda e função; período, dia e tamanho do squad não. O resumo de cada dia (conta do jogo e desempenho) fica guardado por {n} meses, mesmo depois de as lutas serem apagadas.",
+    "archive.note": "Cada mês soma os dias guardados, com a métrica escolhida em cada card (a mesma da Visão geral). Vale o filtro de guilda; período, dia, semana e tamanho do squad não. O resumo de cada dia (conta do jogo e desempenho) fica guardado por {n} meses, mesmo depois de as lutas serem apagadas.",
     "overview.card.metric": "Métrica do card {group}",
     "overview.card.healingBarrier": "Cura + barreira",
     "overview.card.lessIsBetter": "menos é melhor",
+    "overview.card.pctTime": "% do tempo",
+    "overview.card.avgTime": "média no tempo",
     "overview.detail": "Detalhar",
     "overview.detail.close": "Fechar detalhe",
     "overview.detail.closeAria": "Fechar o detalhe",
@@ -255,12 +275,29 @@ export const DICT: Record<Lang, Dict> = {
     "overview.kpi.kills": "Abates",
     "overview.kpi.deaths": "Mortes",
     "overview.kpi.players": "Jogadores",
-    "overview.recent": "Lutas recentes",
-    "overview.seeAll": "Ver todas",
-    "overview.damage": "{value} dano",
     "overview.mostActive": "Quem mais lutou no período",
     "overview.fightsN_one": "{n} luta",
     "overview.fightsN_other": "{n} lutas",
+    "fight.skills.title": "Habilidades por jogador",
+    "fight.skills.player": "Jogador",
+    "fight.skills.noDamage": "Sem dano por habilidade guardado para este jogador nesta luta.",
+    "fight.skills.noSupport": "Sem cura ou barreira por habilidade para este jogador nesta luta. Ela só existe para quem grava com o addon Healing Stats e só para logs enviados depois que o site passou a guardá-la.",
+    "fight.skills.note.damage": "Dano em jogadores inimigos nesta luta, incluindo o de pets, clones e engenhocas. As 25 habilidades que mais causam dano. Condições, como Burning, aparecem como habilidades.",
+    "fight.skills.note.heal": "Cura nesta luta. A cura que vem de efeitos, como Regeneração, aparece com o nome do efeito. Não inclui a cura dos minions.",
+    "fight.skills.note.barrier": "Barreira nesta luta. A barreira que vem de efeitos aparece com o nome do efeito. Não inclui a dos minions.",
+    "skills.kind.cast": "Usos",
+    "skills.kind.taken": "Recebido",
+    "skills.col.uses": "Usos",
+    "skills.col.pctUses": "% dos usos",
+    "skills.col.taken": "Dano recebido",
+    "skills.col.pctTaken": "% do recebido",
+    "skills.col.avgTaken": "Média por acerto",
+    "skills.noUsage": "Sem usos de habilidade nem dano recebido por habilidade nos filtros escolhidos. Só existe para logs enviados depois que o site passou a guardá-los.",
+    "skills.note.cast": "Quantas vezes o jogador usou cada habilidade nas lutas filtradas, inclusive as que não causam dano (utilitárias, esquivas, troca de arma). Mostra o que ele usa e o que deixa de usar. As 25 mais usadas.",
+    "skills.note.taken": "Dano recebido de cada habilidade inimiga nas lutas filtradas. As condições, como Sangramento, aparecem com o nome do efeito. As 25 que mais machucaram.",
+    "fight.skills.noUsage": "Sem usos de habilidade nem dano recebido por habilidade para este jogador nesta luta. Só existe para logs enviados depois que o site passou a guardá-los.",
+    "fight.skills.note.cast": "Quantas vezes o jogador usou cada habilidade nesta luta, inclusive as que não causam dano (utilitárias, esquivas, troca de arma). As 25 mais usadas.",
+    "fight.skills.note.taken": "Dano recebido de cada habilidade inimiga nesta luta. As condições, como Sangramento, aparecem com o nome do efeito. As 25 que mais machucaram.",
     "skills.kind.damage": "Dano",
     "skills.kind.heal": "Cura",
     "skills.kind.barrier": "Barreira",
@@ -342,6 +379,13 @@ export const DICT: Record<Lang, Dict> = {
     "scope.squad": "Squad",
     "scope.group": "Grupo",
     "scope.self": "Próprio",
+    "scope.effective": "Squad efetiva",
+    "boon.accounted": "Aproveitamento",
+    "boon.accountedHint": "Geração efetiva ÷ (geração efetiva + rejeição explícita + perda registrada), os três do Elite Insights: o aproveitamento dentro do que o EI contabilizou. A perda registrada inclui pilhas removidas ou substituídas (strip inimigo, substituição, boon consumido por design, como a Aegis ao bloquear). Não mede a qualidade do jogador. Calculado com os mesmos valores das colunas vizinhas",
+    "boon.volumeUtilization": "Aproveitamento do volume",
+    "boon.volumeUtilizationHint": "Geração efetiva ÷ volume gerado (`outgoing`), os dois do Elite Insights. Complementar ao aproveitamento: as duas contas do EI são independentes, então o volume pode ser maior que a soma contabilizada (e a geração, em raros casos, maior que o volume: aparece com aviso). Não mede a qualidade do jogador",
+    "boon.wasteRate": "Taxa de perda",
+    "boon.wasteRateHint": "Perda registrada ÷ (geração efetiva + rejeição explícita + perda registrada). A perda vem da remoção ou substituição das pilhas, não é excesso de aplicação nem erro do jogador",
     "api.tooManyAttempts": "Muitas senhas erradas. Tente de novo mais tarde.",
     "nav.import": "Importar logs",
     "page.import.title": "Importar logs",
@@ -442,10 +486,15 @@ export const DICT: Record<Lang, Dict> = {
     loading: "Loading…",
     "error.generic": "Something went wrong.",
     "brand.name": "Clan Logs",
+    "nav.group.overview": "Overview",
+    "nav.group.fights": "Fights",
+    "nav.group.players": "Players",
+    "nav.group.account": "My account",
     "nav.overview": "Overview",
     "nav.days": "Days",
     "nav.fights": "Fights",
     "nav.ranking": "Ranking",
+    "nav.months": "Months",
     "nav.compare": "Compare",
     "nav.guilds": "Guilds",
     "nav.me": "Me",
@@ -511,6 +560,8 @@ export const DICT: Record<Lang, Dict> = {
     "page.days.subtitle": "Each day runs from 06:00 to 06:00 (Brasília time): a night that goes past midnight stays in the same day.",
     "page.fights.title": "Fights",
     "page.fights.subtitle": "Each uploaded log becomes a fight. Click to see the details.",
+    "page.months.title": "Previous months",
+    "page.months.subtitle": "The Ranking of each month, added up from the daily summary the site keeps even after the fights are deleted.",
     "page.ranking.title": "Ranking",
     "page.ranking.subtitle": "Add up the fights by period, guild, role or class. The filters live in the link, so you can send it on Discord.",
     "page.compare.title": "Compare players",
@@ -648,18 +699,31 @@ export const DICT: Record<Lang, Dict> = {
     "fight.role.support": "Support",
     "fight.role.dps": "DPS",
     "fight.uptimeNote": "Uptime over each player's active time. For Stability and Might, it is the time with at least one stack; “Might (stacks)” is the average number of stacks. In the group view, “Whole squad” is the squad average, weighted by active time. “% Near the tag” and “Distance to the tag” only exist for logs uploaded after the server started reading the replay (a dash means no data); the percentage is the time alive within 1200 units of the commander.",
-    "archive.title": "Previous months",
-    "archive.open": "See months",
-    "archive.close": "Close",
     "archive.month": "Month",
+    "monthPlayer.back": "Months",
+    "monthPlayer.notFound": "This player does not appear in this period.",
+    "monthPlayer.player": "Player ({kind})",
+    "monthPlayer.clan": "Clan average ({kind})",
+    "monthPlayer.kind.month": "month",
+    "monthPlayer.kind.week": "week",
+    "monthPlayer.summary": "Period summary",
+    "monthPlayer.period": "Period",
+    "monthPlayer.lastFight": "Last fight",
+    "monthPlayer.note": "It comes from the daily summary, which is kept even after the fights are deleted. That is why it has no skills and no numbers for each fight: they exist only while the fights are stored. The 'Last fight' row is the last battle day the player played (that day's fights added up), and the card shows the time of the last fight.",
+    "monthPlayer.liveProfile": "See the profile with the stored fights",
+    "months.view.month": "Month",
+    "months.view.week": "Week",
+    "archive.weekNote": "Each week runs from Friday 23:03 to the next Friday 23:00 (Brasília time). Fights between 23:00 and 23:03 on Friday are in no week, only in the month. The weekly summary only exists from when the site started saving it.",
     "archive.inProgress": "in progress",
     "archive.days_one": "{n} day with data, from {from} to {to}",
     "archive.days_other": "{n} days with data, from {from} to {to}",
     "archive.empty": "There is no saved summary yet. It starts being saved now, one day at a time, and the months will show up here.",
-    "archive.note": "Each month adds up the saved days, with the metrics chosen on the cards above. The guild and role filters apply; period, day and squad size do not. The summary of each day (game account and performance) is kept for {n} months, even after the fights are deleted.",
+    "archive.note": "Each month adds up the saved days, with the metric chosen on each card (the same as on the Overview). The guild filter applies; period, day, week and squad size do not. The summary of each day (game account and performance) is kept for {n} months, even after the fights are deleted.",
     "overview.card.metric": "Metric of the {group} card",
     "overview.card.healingBarrier": "Healing + barrier",
     "overview.card.lessIsBetter": "lower is better",
+    "overview.card.pctTime": "% of time",
+    "overview.card.avgTime": "time average",
     "overview.detail": "Details",
     "overview.detail.close": "Close details",
     "overview.detail.closeAria": "Close the details",
@@ -672,12 +736,29 @@ export const DICT: Record<Lang, Dict> = {
     "overview.kpi.kills": "Kills",
     "overview.kpi.deaths": "Deaths",
     "overview.kpi.players": "Players",
-    "overview.recent": "Recent fights",
-    "overview.seeAll": "See all",
-    "overview.damage": "{value} damage",
     "overview.mostActive": "Who fought the most in this period",
     "overview.fightsN_one": "{n} fight",
     "overview.fightsN_other": "{n} fights",
+    "fight.skills.title": "Skills by player",
+    "fight.skills.player": "Player",
+    "fight.skills.noDamage": "No damage by skill stored for this player in this fight.",
+    "fight.skills.noSupport": "No healing or barrier by skill for this player in this fight. It only exists for whoever records with the Healing Stats addon, and only for logs uploaded after the site started storing it.",
+    "fight.skills.note.damage": "Damage to enemy players in this fight, including pets, clones and gadgets. The 25 skills that deal the most damage. Conditions, such as Burning, appear as skills.",
+    "fight.skills.note.heal": "Healing in this fight. Healing that comes from effects, such as Regeneration, appears under the effect's name. It does not include minion healing.",
+    "fight.skills.note.barrier": "Barrier in this fight. Barrier that comes from effects appears under the effect's name. It does not include minion barrier.",
+    "skills.kind.cast": "Casts",
+    "skills.kind.taken": "Taken",
+    "skills.col.uses": "Casts",
+    "skills.col.pctUses": "% of casts",
+    "skills.col.taken": "Damage taken",
+    "skills.col.pctTaken": "% of taken",
+    "skills.col.avgTaken": "Average per hit",
+    "skills.noUsage": "No skill casts or damage taken by skill in the chosen filters. It only exists for logs uploaded after the site started storing them.",
+    "skills.note.cast": "How many times the player used each skill in the filtered fights, including skills that deal no damage (utilities, dodges, weapon swaps). Shows what they use and what they leave unused. The 25 most used.",
+    "skills.note.taken": "Damage taken from each enemy skill in the filtered fights. Conditions, such as Bleeding, appear under the effect's name. The 25 that hurt the most.",
+    "fight.skills.noUsage": "No skill casts or damage taken by skill for this player in this fight. It only exists for logs uploaded after the site started storing them.",
+    "fight.skills.note.cast": "How many times the player used each skill in this fight, including skills that deal no damage (utilities, dodges, weapon swaps). The 25 most used.",
+    "fight.skills.note.taken": "Damage taken from each enemy skill in this fight. Conditions, such as Bleeding, appear under the effect's name. The 25 that hurt the most.",
     "skills.kind.damage": "Damage",
     "skills.kind.heal": "Healing",
     "skills.kind.barrier": "Barrier",
@@ -759,6 +840,13 @@ export const DICT: Record<Lang, Dict> = {
     "scope.squad": "Squad",
     "scope.group": "Group",
     "scope.self": "Self",
+    "scope.effective": "Squad effective",
+    "boon.accounted": "Utilization",
+    "boon.accountedHint": "Effective generation ÷ (effective generation + explicit rejection + recorded waste), all three from Elite Insights: the utilization within what EI accounted for. Recorded waste includes removed or replaced stacks (enemy strips, replacement, boons consumed by design, such as Aegis when it blocks). It does not measure player quality. Calculated with the same values as the neighbouring columns",
+    "boon.volumeUtilization": "Volume utilization",
+    "boon.volumeUtilizationHint": "Effective generation ÷ generated volume (`outgoing`), both from Elite Insights. Complementary to utilization: the two EI calculations are independent, so the volume can be larger than the accounted sum (and, rarely, the generation larger than the volume: shown with a warning). It does not measure player quality",
+    "boon.wasteRate": "Waste rate",
+    "boon.wasteRateHint": "Recorded waste ÷ (effective generation + explicit rejection + recorded waste). The waste comes from removed or replaced stacks; it is not over-application or player error",
     "api.tooManyAttempts": "Too many wrong passwords. Try again later.",
     "nav.import": "Import logs",
     "page.import.title": "Import logs",
@@ -859,7 +947,7 @@ export const DICT: Record<Lang, Dict> = {
 
 /** Nome das métricas em inglês (o português fica em STAT_META). */
 type StatEn = { label: string; short: string; hint?: string };
-const BASE_EN: Record<Exclude<StatKey, ScopedKey | GroupUpKey>, StatEn> = {
+const BASE_EN: Record<Exclude<StatKey, ScopedKey | GroupUpKey | EffKey | WasteKey | RejKey>, StatEn> = {
   damage: { label: "Damage", short: "Damage", hint: "Damage to enemy players (WvW) or to the target (PvE)" },
   powerDamage: { label: "Power damage", short: "Power" },
   condiDamage: { label: "Condition damage", short: "Condi" },
@@ -919,9 +1007,41 @@ const SCOPE_HINT_EN = { Group: "Volume generated for your group (includes you)",
 const scopedEn = (): Record<ScopedKey, StatEn> =>
   Object.fromEntries(
     (["Group", "Self"] as const).flatMap((suffix) =>
-      BOON_BASES.map((b) => [`${b}${suffix}`, { ...BASE_EN[`${b}Out`], hint: SCOPE_HINT_EN[suffix] }]),
+      BOON_BASES.map((b) => [`${b}${suffix}`, { ...BASE_EN[`${b}Out`], hint: `${SCOPE_HINT_EN[suffix]}. ${unitHintEn(b)}` }]),
     ),
   ) as Record<ScopedKey, StatEn>;
+
+const unitHintEn = (base: BoonBase): string =>
+  STACKING_BOONS.includes(base) ? "Unit: average stacks" : "Unit: % of time, normalized by Elite Insights (can go over 100%)";
+
+const OUT_HINT_EN = "Boon volume the player generated for the squad: the duration of the applications and extensions recorded by Elite Insights, already normalized";
+
+/** Cada boon "Out" (squad) ganha a unidade na dica. */
+const outEn = (): Record<`${BoonBase}Out`, StatEn> =>
+  Object.fromEntries(BOON_BASES.map((b) => [`${b}Out`, { ...BASE_EN[`${b}Out`], hint: `${OUT_HINT_EN}. ${unitHintEn(b)}` }])) as Record<`${BoonBase}Out`, StatEn>;
+
+const EFF_HINT_EN =
+  "Effective generation (the Elite Insights `generation` field): the boon duration that stayed active and is credited to the player for the squad. The generated volume also includes the recorded waste (`wasted`), which comes from removed or replaced stacks (enemy strips, replacement and boons consumed by design, such as Aegis when it blocks). The difference between the two does not measure player error. Only logs uploaded after the site started storing it have it";
+
+/** Cada boon "Out" (squad) ganha a geração efetiva, com o mesmo nome e a dica do que ela mede. */
+const effEn = (): Record<EffKey, StatEn> =>
+  Object.fromEntries(
+    BOON_BASES.map((b) => [`${b}Eff`, { label: `${BASE_EN[`${b}Out`].label} (effective generation)`, short: `${BASE_EN[`${b}Out`].short} eff.`, hint: `${EFF_HINT_EN}. ${unitHintEn(b)}` }]),
+  ) as Record<EffKey, StatEn>;
+
+const WASTE_HINT_EN =
+  "Recorded waste (the Elite Insights `wasted` field): the remaining duration of stacks that were removed or replaced (enemy strips, replacement, boons consumed by design, such as Aegis when it blocks). It is not over-application or player error, and the aggregate does not separate the causes. Only logs uploaded after the site started storing it have it";
+const REJ_HINT_EN =
+  "Explicit rejection (Elite Insights `overstack` minus `generation`): applications the simulator rejected for exceeding the stack or duration limit. It was zero in all 1,644 measured pairs, so zero does not prove there was no excess: EI only records it in one of its simulators. Only logs uploaded after the site started storing it have it";
+
+/** Cada boon ganha a perda registrada e a rejeição explícita. */
+const lossEn = (): Record<WasteKey | RejKey, StatEn> =>
+  Object.fromEntries(
+    BOON_BASES.flatMap((b) => [
+      [`${b}Waste`, { label: `${BASE_EN[`${b}Out`].label} (recorded waste)`, short: `${BASE_EN[`${b}Out`].short} waste`, hint: `${WASTE_HINT_EN}. ${unitHintEn(b)}` }],
+      [`${b}Rej`, { label: `${BASE_EN[`${b}Out`].label} (explicit rejection)`, short: `${BASE_EN[`${b}Out`].short} rej.`, hint: `${REJ_HINT_EN}. ${unitHintEn(b)}` }],
+    ]),
+  ) as Record<WasteKey | RejKey, StatEn>;
 
 const GROUP_UP_HINT_EN =
   "Average uptime of the player's group (whoever is in the same squad group, the player included), over the player's active time. It measures the group's result, not only what the player does: two supports in the same group get the same value";
@@ -930,7 +1050,7 @@ const GROUP_UP_HINT_EN =
 const groupUpEn = (): Record<GroupUpKey, StatEn> =>
   Object.fromEntries(GROUP_UP_BASES.map((b) => [`${b}GroupUp`, { label: `${BASE_EN[`${b}Up`].label} in group`, short: `${BASE_EN[`${b}Up`].short} grp.`, hint: GROUP_UP_HINT_EN }])) as Record<GroupUpKey, StatEn>;
 
-export const STAT_EN: Record<StatKey, StatEn> = { ...BASE_EN, ...scopedEn(), ...groupUpEn() };
+export const STAT_EN: Record<StatKey, StatEn> = { ...BASE_EN, ...outEn(), ...scopedEn(), ...effEn(), ...lossEn(), ...groupUpEn() };
 
 /** Nome, abreviação e dica de uma métrica no idioma (português = o que está em STAT_META). */
 export function statText(key: StatKey, lang: Lang): { label: string; short: string; hint?: string } {

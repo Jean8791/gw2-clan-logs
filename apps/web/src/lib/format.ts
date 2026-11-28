@@ -35,7 +35,8 @@ export function stat(key: StatKey, v: number, perMin = false, perSec = false): s
   const format = STAT_META[key].format;
   if (format === "pct") return `${dec(v, 1)}%`;
   if (format === "avg") return dec(v, 1);
-  if (format === "volume") return dec(v, 2);
+  // boon de pilhas (Stability, Might): o volume é pilhas médias, em geral menor que 1, e 2 casas escondem a diferença entre 0,097 e 0,106
+  if (format === "volume") return dec(v, STAT_META[key].stacks ? 3 : 2);
   if (perSec) return perSecondText(v);
   if (perMin) return v >= 1e4 ? compact(v) : v >= 100 ? int(v) : v < 10 ? dec(v, 2) : dec(v, 1);
   return compact(v);
@@ -98,6 +99,16 @@ export function monthLabel(month: string): string {
   const s = new Date(Date.UTC(y!, m! - 1, 1)).toLocaleDateString(locale(), { month: "long", year: "numeric", timeZone: "UTC" });
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
+
+/** A semana (data da sexta em que começa) → ["06/11 23:03", "13/11 23:00"]: o começo e o fim, como o horário de Brasília. */
+export function weekEnds(week: string): [string, string] {
+  const short = (d: Date) => d.toLocaleDateString(locale(), { day: "2-digit", month: "2-digit", timeZone: "UTC" });
+  const start = new Date(`${week}T12:00:00Z`);
+  return [`${short(start)} 23:03`, `${short(new Date(start.getTime() + 7 * 86_400_000))} 23:00`];
+}
+
+/** A semana numa linha só: "06/11 23:03 → 13/11 23:00". */
+export const weekLabel = (week: string): string => weekEnds(week).join(" → ");
 
 /** "2026-11-12" → "qui, 12/11" (o dia de batalha, ver battleDay em shared). */
 export const dayLabel = (day: string) =>

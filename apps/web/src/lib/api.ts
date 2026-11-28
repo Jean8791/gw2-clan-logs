@@ -4,6 +4,8 @@ import {
   PAGE_SIZE,
   type Aggregate,
   type ArchiveMonth,
+  type ArchivePlayerProfile,
+  type ArchiveWeek,
   type DaySummary,
   type Fight,
   type FightDetail,
@@ -13,9 +15,12 @@ import {
   type PlayerOptions,
   type PlayerProfile,
   type PlayerSkill,
+  type PlayerSkillUsage,
   type PlayerSupportSkill,
+  type SkillKind,
   type RankingRow,
   type SupportKind,
+  type UsageKind,
   type UploadResult,
 } from "@gw2logs/shared";
 
@@ -92,12 +97,24 @@ export const useRanking = (f: Filters, enabled = true) =>
 /** Meses com resumo diário guardado (o Ranking deles vale mesmo depois de as lutas serem apagadas). */
 export const useArchiveMonths = (enabled: boolean) => useQuery({ queryKey: ["archive-months"], queryFn: () => get<ArchiveMonth[]>("/api/archive/months"), enabled });
 
-/** O Ranking de um mês; do resumo só valem a guilda e a função (período, dia e tamanho do squad não existem nele). */
+/** Semanas (sexta 23:03 a sexta 23:00) com resumo diário guardado. */
+export const useArchiveWeeks = (enabled: boolean) => useQuery({ queryKey: ["archive-weeks"], queryFn: () => get<ArchiveWeek[]>("/api/archive/weeks"), enabled });
+
+/** O Ranking de um mês, ou da semana `f.week` (que vale no lugar do mês); do resumo só valem a guilda e a função (período, dia e tamanho do squad não existem nele). */
 export const useArchiveRanking = (month: string | undefined, f: Filters, enabled: boolean) =>
   useQuery({
-    queryKey: ["archive-ranking", month, f.guild, f.role],
-    enabled: enabled && !!month,
-    queryFn: () => get<{ rows: RankingRow[]; baseline: Aggregate; referenceMs: number }>(withFilters(`/api/archive/ranking`, { guild: f.guild, role: f.role }, { month: month! })),
+    queryKey: ["archive-ranking", f.week ? undefined : month, f.week, f.guild, f.role],
+    enabled: enabled && (!!month || !!f.week),
+    queryFn: () => get<{ rows: RankingRow[]; baseline: Aggregate; referenceMs: number }>(withFilters(`/api/archive/ranking`, { guild: f.guild, role: f.role, week: f.week }, month ? { month } : {})),
+  });
+
+/** O perfil de um jogador num mês ou semana arquivados (do resumo diário). */
+export const useArchivePlayer = (account: string, month: string | undefined, f: Filters) =>
+  useQuery({
+    queryKey: ["archive-player", account, month, f.week, f.guild, f.role],
+    enabled: !!month || !!f.week,
+    retry: false,
+    queryFn: () => get<ArchivePlayerProfile>(withFilters(`/api/archive/players/${encodeURIComponent(account)}`, { guild: f.guild, role: f.role, week: f.week }, month ? { month } : {})),
   });
 
 export const usePlayer = (account: string, f: Filters) =>
@@ -115,6 +132,22 @@ export const usePlayerOptions = (account: string, f: Filters) =>
 
 export const usePlayerSkills = (account: string, f: Filters) =>
   useQuery({ queryKey: ["player-skills", account, f], queryFn: () => get<PlayerSkill[]>(withFilters(`/api/players/${encodeURIComponent(account)}/skills`, f)) });
+
+/** Habilidades de um jogador em uma luta: dano, cura ou barreira (a cura e a barreira só de quem grava com o Healing Stats). */
+export const useFightPlayerSkills = <T extends PlayerSkill | PlayerSupportSkill | PlayerSkillUsage>(fightId: string, account: string, kind: SkillKind) =>
+  useQuery({
+    queryKey: ["fight-player-skills", fightId, account, kind],
+    enabled: !!account,
+    queryFn: () => get<T[]>(`/api/fights/${encodeURIComponent(fightId)}/players/${encodeURIComponent(account)}/skills?kind=${kind}`),
+  });
+
+/** Usos de cada habilidade (cast) ou dano recebido por habilidade (taken) do jogador. */
+export const usePlayerSkillUsage = (account: string, f: Filters, kind: UsageKind, enabled = true) =>
+  useQuery({
+    queryKey: ["player-skill-usage", account, f, kind],
+    enabled,
+    queryFn: () => get<PlayerSkillUsage[]>(withFilters(`/api/players/${encodeURIComponent(account)}/skill-usage`, f, { kind })),
+  });
 
 /** Cura ou barreira do jogador por habilidade (só de quem grava com o Healing Stats). */
 export const usePlayerSupportSkills = (account: string, f: Filters, kind: SupportKind, enabled = true) =>

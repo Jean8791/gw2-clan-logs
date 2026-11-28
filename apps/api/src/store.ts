@@ -1,4 +1,4 @@
-import { mainRole, ROLE_MIN_ACTIVE_MS, STAT_KEYS, type Role } from "@gw2logs/shared";
+import { BOON_FORMULA_VERSION, mainRole, ROLE_MIN_ACTIVE_MS, STAT_KEYS, type Role } from "@gw2logs/shared";
 import { STAT_COL, type DB } from "./db.js";
 import type { ExtractedFight, ExtractedPlayer } from "./ingest.js";
 
@@ -7,7 +7,7 @@ import type { ExtractedFight, ExtractedPlayer } from "./ingest.js";
  * substitui o nome de habilidade já salvo. Num .json enviado pelo usuário o nome só entra se ainda estiver vazio (a tabela é de todos).
  */
 export function saveFight(db: DB, id: string, f: ExtractedFight, mapName: string | null, hasReport: boolean, trusted: boolean) {
-  const cols = ["fight_id", "account", "name", "profession", "guild_id", "grp", "commander", "role", "active_ms", "dist_to_com", "dist_cover_ms", "near_cover_ms", ...STAT_KEYS.map((k) => STAT_COL[k])];
+  const cols = ["fight_id", "account", "name", "profession", "guild_id", "grp", "commander", "role", "active_ms", "dist_to_com", "dist_cover_ms", "near_cover_ms", "gen_cover_ms", ...STAT_KEYS.map((k) => STAT_COL[k])];
   const insertPlayer = db.prepare(`INSERT OR REPLACE INTO player_stats (${cols.join(",")}) VALUES (${cols.map(() => "?").join(",")})`);
   const insertGuild = db.prepare("INSERT OR IGNORE INTO guilds (id) VALUES (?)");
 
@@ -15,6 +15,7 @@ export function saveFight(db: DB, id: string, f: ExtractedFight, mapName: string
   const insertSupportSkill = db.prepare(
     "INSERT INTO player_support_skills (fight_id, account, skill_id, kind, amount, downed_amount, hits, indirect) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
   );
+  const insertUsage = db.prepare("INSERT INTO player_skill_usage (fight_id, account, skill_id, kind, amount, hits, indirect) VALUES (?, ?, ?, ?, ?, ?, ?)");
   const upsertSkillName = db.prepare(
     `INSERT INTO skills (id, name) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET name = ${trusted ? "COALESCE(excluded.name, name)" : "COALESCE(NULLIF(name, ''), excluded.name)"}`,
   );
@@ -43,10 +44,11 @@ export function saveFight(db: DB, id: string, f: ExtractedFight, mapName: string
     db.prepare("DELETE FROM player_stats WHERE fight_id = ?").run(id);
     db.prepare("DELETE FROM player_skills WHERE fight_id = ?").run(id);
     db.prepare("DELETE FROM player_support_skills WHERE fight_id = ?").run(id);
+    db.prepare("DELETE FROM player_skill_usage WHERE fight_id = ?").run(id);
     for (const p of f.players) {
       if (p.guildId) insertGuild.run(p.guildId);
       insertPlayer.run(
-        id, p.account, p.name, p.profession, p.guildId, p.group, p.commander ? 1 : 0, roleOf(p), Math.round(p.activeMs), p.distToCom, p.distCoverMs, p.nearCoverMs,
+        id, p.account, p.name, p.profession, p.guildId, p.group, p.commander ? 1 : 0, roleOf(p), Math.round(p.activeMs), p.distToCom, p.distCoverMs, p.nearCoverMs, p.genCoverMs,
         ...STAT_KEYS.map((k) => p[k]),
       );
       for (const sk of p.skills) {
@@ -56,6 +58,10 @@ export function saveFight(db: DB, id: string, f: ExtractedFight, mapName: string
       for (const sk of p.supportSkills) {
         upsertSkillName.run(sk.id, sk.name?.slice(0, 100) ?? null);
         insertSupportSkill.run(id, p.account, sk.id, sk.kind, sk.amount, sk.downedAmount, sk.hits, sk.indirect ? 1 : 0);
+      }
+      for (const u of p.skillUsage) {
+        upsertSkillName.run(u.id, u.name?.slice(0, 100) ?? null);
+        insertUsage.run(id, p.account, u.id, u.kind, u.amount, u.hits, u.indirect ? 1 : 0);
       }
     }
     for (const p of f.players) {
@@ -67,7 +73,7 @@ export function saveFight(db: DB, id: string, f: ExtractedFight, mapName: string
          time_start=@timeStart, duration_ms=@durationMs, success=@success, recorded_by=@recordedBy, squad_count=@squadCount,
          ally_count=@allyCount, enemy_count=@enemyCount, squad_damage=@squadDamage, squad_kills=@squadKills,
          squad_downs=@squadDowns, squad_deaths=@squadDeaths, enemy_downs=@enemyDowns, enemy_deaths=@enemyDeaths,
-         ei_version=@eiVersion, has_report=@hasReport
+         ei_version=@eiVersion, has_report=@hasReport, boon_formula=@boonFormula
        WHERE id=@id`,
     ).run({
       id,
@@ -90,6 +96,7 @@ export function saveFight(db: DB, id: string, f: ExtractedFight, mapName: string
       enemyDowns: f.enemyDowns,
       enemyDeaths: f.enemyDeaths,
       eiVersion: f.eiVersion,
+      boonFormula: BOON_FORMULA_VERSION,
       hasReport: hasReport ? 1 : 0,
     });
   })();

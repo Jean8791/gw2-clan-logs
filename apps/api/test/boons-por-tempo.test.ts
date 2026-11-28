@@ -164,6 +164,8 @@ describe("ranking: boon vira média ponderada pelo tempo ativo; o resto continua
     nearCoverMs: 0,
     skills: [],
     supportSkills: [],
+    skillUsage: [],
+    genCoverMs: 0,
     ...o,
   });
   let n = 0;

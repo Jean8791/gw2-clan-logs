@@ -1,19 +1,19 @@
 import { describe, expect, it } from "vitest";
 import {
-  cardOptions, DEFAULT_CARDS, emptyStats, HEALING_BARRIER, isCardRate, parseCards, resolveCards, serializeCards, statsOfGroup, STAT_GROUPS, STAT_KEYS, STAT_META, topByCard,
+  cardOptions, cardUnit, DEFAULT_CARDS, emptyStats, HEALING_BARRIER, isCardRate, parseCards, resolveCards, serializeCards, statsOfGroup, STAT_GROUPS, STAT_KEYS, STAT_META, topByCard,
   type Cards, type RankingRow,
 } from "@gw2logs/shared";
 
 const MIN = 120_000;
 /** Jogador com `min` minutos ativos e as métricas dadas. */
 const jogador = (account: string, min: number, o: Partial<RankingRow> = {}): RankingRow =>
-  ({ ...emptyStats(), fights: 1, distCoverMs: 0, nearCoverMs: 0, name: account, profession: null, professions: [], guildId: null, supportFights: 0, account, activeMs: min * 60_000, ...o });
+  ({ ...emptyStats(), fights: 1, distCoverMs: 0, nearCoverMs: 0, genCoverMs: 0, name: account, profession: null, professions: [], guildId: null, supportFights: 0, account, activeMs: min * 60_000, ...o });
 const contas = (l: { row: { account: string } }[]) => l.map((x) => x.row.account);
 
 describe("cards da Visão geral: o que cada card oferece", () => {
   it("o padrão tem um card por grupo do Ranking e a métrica de cada um pertence ao grupo", () => {
     expect(Object.keys(DEFAULT_CARDS)).toEqual(STAT_GROUPS.map((g) => g.id));
-    for (const g of STAT_GROUPS) expect(cardOptions(g.id, "squad")).toContain(DEFAULT_CARDS[g.id]);
+    for (const g of STAT_GROUPS) expect(cardOptions(g.id)).toContain(DEFAULT_CARDS[g.id]);
     expect(DEFAULT_CARDS).toEqual({ offense: "damage", support: "healing", boons: "stabOut", uptime: "stabUp", defense: "dodges" });
   });
 
@@ -23,22 +23,23 @@ describe("cards da Visão geral: o que cada card oferece", () => {
     expect(cardOptions("defense")).not.toContain(HEALING_BARRIER);
   });
 
-  it("nos boons, o seletor lista só o alcance pedido", () => {
-    expect(cardOptions("boons", "squad")).toContain("stabOut");
-    expect(cardOptions("boons", "squad")).not.toContain("stabGroup");
-    expect(cardOptions("boons", "group")).toContain("stabGroup");
-    expect(cardOptions("boons", "self")).toContain("stabSelf");
+  it("nos boons, o seletor lista só as métricas da squad inteira", () => {
+    expect(cardOptions("boons")).toContain("stabOut");
+    expect(cardOptions("boons")).not.toContain("stabGroup");
+    expect(cardOptions("boons")).not.toContain("stabSelf");
   });
 });
 
 describe("cards da Visão geral: escolha guardada no link", () => {
   it("lê grupo:métrica separados por vírgula", () => {
-    expect(parseCards("support:strips,boons:stabGroup")).toEqual({ support: "strips", boons: "stabGroup" });
+    expect(parseCards("support:strips,boons:stabOut")).toEqual({ support: "strips", boons: "stabOut" });
     expect(parseCards("support:healingBarrier")).toEqual({ support: "healingBarrier" });
   });
 
   it.each([
     ["métrica de outro grupo", "offense:strips"],
+    ["boon só do grupo", "boons:stabGroup"],
+    ["boon só de si", "boons:stabSelf"],
     ["métrica que não existe", "offense:xxx"],
     ["grupo que não existe", "foo:damage"],
     ["Cura + barreira fora do Suporte", "offense:healingBarrier"],
@@ -71,9 +72,9 @@ describe("cards da Visão geral: escolha guardada no link", () => {
     expect(serializeCards(DEFAULT_CARDS)).toBe("");
   });
 
-  it("toda métrica oferecida em qualquer alcance sobrevive à ida e volta", () => {
+  it("toda métrica que o seletor oferece sobrevive à ida e volta", () => {
     for (const g of STAT_GROUPS) {
-      for (const m of [...STAT_KEYS.filter((k) => STAT_META[k].group === g.id), ...cardOptions(g.id)]) {
+      for (const m of cardOptions(g.id)) {
         expect(parseCards(`${g.id}:${m}`)).toEqual({ [g.id]: m });
       }
     }
@@ -89,7 +90,7 @@ describe("topByCard: o top de cada card", () => {
 
   it("uptime e boon: o valor não é por minuto (é % do tempo ou a média do volume) e sai ajustado pelo tempo jogado", () => {
     // média geral do filtro: 100 min ativos com 50% de estabilidade
-    const geral = { ...emptyStats(), fights: 10, distCoverMs: 0, nearCoverMs: 0, activeMs: 100 * 60_000, stabUp: 0.5 * 100 * 60_000 };
+    const geral = { ...emptyStats(), fights: 10, distCoverMs: 0, nearCoverMs: 0, genCoverMs: 0, activeMs: 100 * 60_000, stabUp: 0.5 * 100 * 60_000 };
     const longo = jogador("longo", 100, { stabUp: 0.9 * 100 * 60_000 }); // 90% do tempo, muito tempo jogado
     const curto = jogador("curto", 2, { stabUp: 1.0 * 2 * 60_000 }); // 100% do tempo, mas só 2 min
 
@@ -124,5 +125,18 @@ describe("topByCard: o top de cada card", () => {
 
   it("quem lutou menos que o mínimo não entra", () => {
     expect(contas(topByCard([jogador("curto", 1, { damage: 9999 }), jogador("ok", 10, { damage: 10 })], "damage", 5, MIN))).toEqual(["ok"]);
+  });
+});
+
+describe("cards da Visão geral: unidade no rodapé", () => {
+  it("contagens (dano, cura, defesa) são por minuto, inclusive Cura + barreira", () => {
+    for (const m of ["damage", "healing", "strips", "dodges", HEALING_BARRIER] as const) expect(cardUnit(m)).toBe("perMin");
+  });
+
+  it("boon em volume e médias (pilhas, distância) são média no tempo; uptime em % é % do tempo", () => {
+    expect(cardUnit("stabOut")).toBe("avgTime");
+    expect(cardUnit("mightStacks")).toBe("avgTime");
+    expect(cardUnit("tagDist")).toBe("avgTime");
+    expect(cardUnit("stabUp")).toBe("pctTime");
   });
 });

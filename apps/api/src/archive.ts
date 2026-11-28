@@ -19,15 +19,16 @@ const STAT_COLUMNS = STAT_KEYS.map((k) => STAT_COL[k]).join(", ");
 
 /**
  * Resume um dia de batalha por jogador, classe, função e guilda. Vale só as lutas visíveis (as mesmas condições do Ranking, inclusive a regra
- * do log mais completo), então a mesma luta gravada por duas pessoas conta uma vez. Nome e guilda são os da luta mais recente do dia.
+ * do log mais completo), então a mesma luta gravada por duas pessoas conta uma vez. Nome e guilda são os da luta mais recente do dia. Um dia que
+ * atravessa o corte de sexta (23:03) gera uma linha por semana.
  */
 const SUMMARIZE_DAY = (where: string) => `
-  INSERT INTO day_stats (day, mode, account, profession, role, guild_id, name, last_seen, fights, active_ms, dist_cover_ms, near_cover_ms, ${STAT_COLUMNS})
-  SELECT ${BATTLE_DAY}, COALESCE(f.mode, ''), ps.account, COALESCE(ps.profession, ''), ps.role, COALESCE(ps.guild_id, ''), ps.name, MAX(f.time_start),
-         COUNT(*), SUM(ps.active_ms), SUM(ps.dist_cover_ms), SUM(ps.near_cover_ms), ${STAT_KEYS.map(sumOf).join(", ")}
+  INSERT INTO day_stats (day, mode, account, profession, role, guild_id, week, name, last_seen, fights, active_ms, dist_cover_ms, near_cover_ms, gen_cover_ms, ${STAT_COLUMNS})
+  SELECT ${BATTLE_DAY}, COALESCE(f.mode, ''), ps.account, COALESCE(ps.profession, ''), ps.role, COALESCE(ps.guild_id, ''), week_of(f.time_start), ps.name, MAX(f.time_start),
+         COUNT(*), SUM(ps.active_ms), SUM(ps.dist_cover_ms), SUM(ps.near_cover_ms), SUM(ps.gen_cover_ms), ${STAT_KEYS.map(sumOf).join(", ")}
   FROM player_stats ps JOIN fights f ON f.id = ps.fight_id
   WHERE ${where} AND f.time_start IS NOT NULL AND ${BATTLE_DAY} = @day
-  GROUP BY ${BATTLE_DAY}, COALESCE(f.mode, ''), ps.account, COALESCE(ps.profession, ''), ps.role, COALESCE(ps.guild_id, '')`;
+  GROUP BY ${BATTLE_DAY}, COALESCE(f.mode, ''), ps.account, COALESCE(ps.profession, ''), ps.role, COALESCE(ps.guild_id, ''), week_of(f.time_start)`;
 
 /**
  * Guarda o resumo de cada dia de batalha antes de a retenção apagar as lutas (o top 10 de um mês não existe mais quando o mês fecha).
