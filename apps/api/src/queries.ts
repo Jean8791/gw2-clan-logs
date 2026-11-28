@@ -26,7 +26,7 @@ import { snake, STAT_COL, type DB } from "./db.js";
 type Params = Record<string, string | number>;
 
 /** Dia de batalha de uma luta (ver battleDay em shared): data da luta menos 9 horas. */
-const BATTLE_DAY = `date(f.time_start, '-${BATTLE_DAY_SHIFT_HOURS} hours')`;
+export const BATTLE_DAY = `date(f.time_start, '-${BATTLE_DAY_SHIFT_HOURS} hours')`;
 
 // ---------- A mesma luta gravada por mais de uma pessoa ----------
 
