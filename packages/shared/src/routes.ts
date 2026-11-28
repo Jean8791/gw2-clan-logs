@@ -5,6 +5,7 @@ export const ROUTES = {
   fights: "/fights",
   fight: (id: string) => `/fights/${id}`,
   ranking: "/ranking",
+  months: "/months",
   player: (account: string) => `/players/${encodeURIComponent(account)}`,
   compare: "/compare",
   guilds: "/guilds",

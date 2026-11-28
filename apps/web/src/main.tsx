@@ -7,6 +7,7 @@ import { Layout } from "./components/Layout";
 import { OverviewPage } from "./pages/Overview";
 import { FightsPage } from "./pages/Fights";
 import { FightPage } from "./pages/Fight";
+import { MonthsPage } from "./pages/Months";
 import { RankingPage } from "./pages/Ranking";
 import { PlayerPage, MePage } from "./pages/Player";
 import { ComparePage } from "./pages/Compare";
@@ -35,6 +36,7 @@ const routes = [
       { path: ROUTES.fights, element: <FightsPage /> },
       { path: `${ROUTES.fights}/:id`, element: <FightPage /> },
       { path: ROUTES.ranking, element: <RankingPage /> },
+      { path: ROUTES.months, element: <MonthsPage /> },
       { path: "/players/:account", element: <PlayerPage /> },
       { path: ROUTES.me, element: <MePage /> },
       { path: ROUTES.compare, element: <ComparePage /> },

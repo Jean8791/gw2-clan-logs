@@ -1,4 +1,4 @@
-import { BarChart3, CalendarDays, ChevronUp, GitCompareArrows, Home, Link2, LogIn, LogOut, Shield, Swords, Trash2, Upload, UserRound } from "lucide-react";
+import { BarChart3, CalendarDays, CalendarRange, ChevronUp, GitCompareArrows, Home, Link2, LogIn, LogOut, Shield, Swords, Trash2, Upload, UserRound } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ROUTES } from "@gw2logs/shared";
@@ -14,6 +14,7 @@ const NAV = [
   { to: ROUTES.days, label: "nav.days", icon: CalendarDays },
   { to: ROUTES.fights, label: "nav.fights", icon: Swords },
   { to: ROUTES.ranking, label: "nav.ranking", icon: BarChart3 },
+  { to: ROUTES.months, label: "nav.months", icon: CalendarRange },
   { to: ROUTES.compare, label: "nav.compare", icon: GitCompareArrows },
   { to: ROUTES.guilds, label: "nav.guilds", icon: Shield },
 ];
