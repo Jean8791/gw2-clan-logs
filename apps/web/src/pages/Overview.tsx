@@ -59,7 +59,7 @@ function Leaderboard({ group, metric, rows, adjust, open, onMetric, onDetail }: 
                 <span className="absolute inset-y-0 left-0 bg-gold/8" style={{ width: `${width(v)}%` }} />
                 <span className={`relative w-4 text-center text-xs font-bold ${i === 0 ? "text-gold" : "text-faint"}`}>{i + 1}</span>
                 <ProfessionDot profession={r.profession} className="relative" />
-                <span className="relative min-w-0 flex-1 truncate text-sm font-medium">{r.name ?? accountShort(r.account)}</span>
+                <span className="relative min-w-0 flex-1 truncate text-sm font-medium" title={r.name ?? accountShort(r.account)}>{r.name ?? accountShort(r.account)}</span>
                 <span className="tabular relative text-sm font-semibold text-text">{stat(formatKey(metric), v, rate)}</span>
               </Link>
             </li>
