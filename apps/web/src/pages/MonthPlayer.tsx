@@ -60,10 +60,12 @@ export function MonthPlayerPage() {
   const adjust: TimeAdjust = { baseline, refMs: data.referenceMs };
   // "total" do clã inteiro não é comparável com o de um jogador: a linha do clã só aparece nos modos por minuto e por segundo
   const [, month2, day2] = data.lastDay?.day.split("-") ?? [];
+  const kind = t(filters.week ? "monthPlayer.kind.week" : "monthPlayer.kind.month");
+  // jogador e média do clã no período mostrado (mês ou semana) e, por último, o último dia em que ele jogou
   const summary = [
-    { ...row, label: t("monthPlayer.player") },
+    { ...row, label: t("monthPlayer.player", { kind }) },
+    ...(mode === "total" ? [] : [{ ...baseline, label: t("monthPlayer.clan", { kind }) }]),
     ...(data.lastDay ? [{ ...data.lastDay, label: `${t("monthPlayer.lastFight")} ${day2}/${month2}` }] : []),
-    ...(mode === "total" ? [] : [{ ...baseline, label: t("monthPlayer.clan") }]),
   ];
   const labelCol = (id: string, header: string): Column<(typeof summary)[number]> => ({ id, header, sticky: true, cell: (r) => <span className="font-medium">{r.label}</span> });
   return (
