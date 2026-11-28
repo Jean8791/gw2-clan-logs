@@ -99,6 +99,13 @@ export function monthLabel(month: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
+/** A semana (data da sexta em que começa) → "27/11 23:03 → 04/12 23:00", como o horário de Brasília. */
+export function weekLabel(week: string): string {
+  const short = (d: Date) => d.toLocaleDateString(locale(), { day: "2-digit", month: "2-digit", timeZone: "UTC" });
+  const start = new Date(`${week}T12:00:00Z`);
+  return `${short(start)} 23:03 → ${short(new Date(start.getTime() + 7 * 86_400_000))} 23:00`;
+}
+
 /** "2026-11-12" → "qui, 12/11" (o dia de batalha, ver battleDay em shared). */
 export const dayLabel = (day: string) =>
   new Date(`${day}T12:00:00Z`).toLocaleDateString(locale(), { weekday: "short", day: "2-digit", month: "2-digit", timeZone: "UTC" }).replace(".", "");

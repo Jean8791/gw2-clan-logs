@@ -525,6 +525,8 @@ export interface Filters {
   profession?: string;
   /** dias de batalha (AAAA-MM-DD, ver battleDay): vale a união dos dias escolhidos */
   day?: string[];
+  /** semana (ver weekRange): a data da sexta em que ela começa, AAAA-MM-DD */
+  week?: string;
   /** id do usuário logado. Só o servidor preenche (nunca vem da query string): só ele vê as próprias lutas na fila ou com erro. */
   viewer?: number;
 }
@@ -543,6 +545,7 @@ export const FILTER_KEYS = [
   "role",
   "profession",
   "day",
+  "week",
 ] as const satisfies readonly (keyof Filters)[];
 
 const NUMERIC_FILTERS = new Set<keyof Filters>(["days", "map", "minSquad", "maxSquad", "minEnemies", "minDurationSec"]);
@@ -558,6 +561,47 @@ export const BATTLE_DAY_SHIFT_HOURS = 9;
 export function battleDay(iso: string | null | undefined): string | null {
   const t = iso ? Date.parse(iso) : NaN;
   return Number.isNaN(t) ? null : new Date(t - BATTLE_DAY_SHIFT_HOURS * 3_600_000).toISOString().slice(0, 10);
+}
+
+const HOUR_MS = 3_600_000;
+const WEEK_MS = 7 * 24 * HOUR_MS;
+
+/**
+ * A semana do clã vai da sexta às 23:03 até a sexta seguinte às 23:00 (horário de Brasília, UTC-3); entre 23:00 e 23:03 de sexta não há
+ * semana. Ela é identificada pela data da sexta em que começa (AAAA-MM-DD). `to` é exclusivo. Data que não é sexta-feira não é semana.
+ */
+export function weekRange(week: string): { from: string; to: string } | null {
+  if (!isValidDay(week) || new Date(`${week}T00:00:00Z`).getUTCDay() !== 5) return null;
+  return {
+    from: new Date(Date.parse(`${week}T23:03:00-03:00`)).toISOString(),
+    to: new Date(Date.parse(`${week}T23:00:00-03:00`) + WEEK_MS).toISOString(),
+  };
+}
+
+/** A semana a que um instante pertence (a data da sexta em que ela começa), ou null se ele cai na janela de 23:00 a 23:03 de sexta. */
+export function weekOf(iso: string | null | undefined): string | null {
+  const t = iso ? Date.parse(iso) : NaN;
+  if (Number.isNaN(t)) return null;
+  const local = new Date(t - 3 * HOUR_MS); // o relógio de Brasília lido como UTC
+  const sinceFriday = (local.getUTCDay() - 5 + 7) % 7;
+  const friday = new Date(Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate() - sinceFriday));
+  for (const candidate of [friday, new Date(friday.getTime() - WEEK_MS)]) {
+    const week = candidate.toISOString().slice(0, 10);
+    const range = weekRange(week)!;
+    if (t >= Date.parse(range.from) && t < Date.parse(range.to)) return week;
+  }
+  return null;
+}
+
+/** As semanas que cobrem de `first` a `last` (instantes), da mais recente para a mais antiga. Um instante na janela de sexta usa a semana que vem logo depois. */
+export function weeksBetween(first: string, last: string): string[] {
+  if (Number.isNaN(Date.parse(first)) || Number.isNaN(Date.parse(last))) return [];
+  const start = weekOf(first) ?? weekOf(new Date(Date.parse(first) + 3 * 60_000).toISOString());
+  const end = weekOf(last) ?? weekOf(new Date(Date.parse(last) + 3 * 60_000).toISOString());
+  if (!start || !end || start > end) return [];
+  const weeks: string[] = [];
+  for (let t = Date.parse(`${end}T00:00:00Z`); t >= Date.parse(`${start}T00:00:00Z`); t -= WEEK_MS) weeks.push(new Date(t).toISOString().slice(0, 10));
+  return weeks;
 }
 
 function isValidDay(d: string): boolean {
@@ -615,6 +659,8 @@ export function parseFilters(q: Record<string, unknown>): Filters {
     } else if (k === "day") {
       const days = [...new Set(s.split(",").map((d) => d.trim()).filter(isValidDay))].slice(0, 62);
       if (days.length) f.day = days;
+    } else if (k === "week") {
+      if (weekRange(s)) f.week = s;
     } else if (k === "role") {
       if (s === "dps" || s === "support") f.role = s;
     } else if (k === "from" || k === "to") {

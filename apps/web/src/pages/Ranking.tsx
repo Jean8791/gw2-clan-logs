@@ -115,7 +115,7 @@ export function RankingPage() {
           </Button>
         }
       />
-      <FilterBar value={filters} onChange={setFilters} fields={["period", "day", "guild", "role", "profession", "size", "duration", "map"]} />
+      <FilterBar value={filters} onChange={setFilters} fields={["period", "day", "week", "guild", "role", "profession", "size", "duration", "map"]} />
 
       <Card className="flex min-h-0 flex-1 flex-col">
         <div className="flex flex-wrap items-center gap-3 border-b border-line px-4 py-3">

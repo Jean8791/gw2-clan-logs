@@ -36,7 +36,7 @@ export function MonthsPage() {
   return (
     <>
       <PageHeader title={t("page.months.title")} subtitle={t("page.months.subtitle")} />
-      <FilterBar value={filters} onChange={setFilters} fields={["guild", "role"]} />
+      <FilterBar value={filters} onChange={setFilters} fields={["guild"]} />
       {months.error && <ErrorBox error={months.error} />}
       {months.isLoading && <Loading />}
       {months.data && list.length === 0 && (

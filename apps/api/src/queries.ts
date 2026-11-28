@@ -7,6 +7,7 @@ import {
   STAT_KEYS,
   STAT_META,
   TAG_COVER,
+  weekRange,
   type ArchiveMonth,
   type DaySummary,
   type Aggregate,
@@ -99,6 +100,8 @@ export function fightConditions(fl: Filters, now = new Date()): { where: string[
   // "De"/"Até" chegam como dia (AAAA-MM-DD: o dia inteiro, em UTC) ou como instante com hora (já em UTC)
   if (fl.from) (where.push("f.time_start >= @from"), (params.from = fl.from.includes("T") ? fl.from : `${fl.from}T00:00:00.000Z`));
   if (fl.to) (where.push("f.time_start < @to"), (params.to = fl.to.includes("T") ? fl.to : new Date(Date.parse(`${fl.to}T00:00:00.000Z`) + 86_400_000).toISOString()));
+  const week = fl.week ? weekRange(fl.week) : null;
+  if (week) (where.push("f.time_start >= @weekFrom AND f.time_start < @weekTo"), (params.weekFrom = week.from), (params.weekTo = week.to));
   if (fl.map) (where.push("f.map_id = @map"), (params.map = fl.map));
   if (fl.minSquad) (where.push("f.squad_count >= @minSquad"), (params.minSquad = fl.minSquad));
   if (fl.maxSquad) (where.push("f.squad_count <= @maxSquad"), (params.maxSquad = fl.maxSquad));

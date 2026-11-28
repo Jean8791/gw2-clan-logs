@@ -27,7 +27,7 @@ export function OverviewPage() {
         title={t("page.overview.title")}
         subtitle={t("page.overview.subtitle")}
       />
-      <FilterBar value={filters} onChange={setFilters} fields={["period", "day", "guild", "role", "size"]} />
+      <FilterBar value={filters} onChange={setFilters} fields={["period", "day", "week", "guild", "role", "size"]} />
 
       {ov.error && <ErrorBox error={ov.error} />}
       {(!ready || ov.isLoading) && <Loading />}
