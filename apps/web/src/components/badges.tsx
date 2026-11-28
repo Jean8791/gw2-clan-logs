@@ -68,10 +68,11 @@ export function GuildTag({ id, withName = false }: { id: string | null; withName
   );
 }
 
-export function PlayerLink({ account, name }: { account: string; name?: string | null }) {
+/** `to`: para onde o link vai (padrão, o perfil do jogador). */
+export function PlayerLink({ account, name, to }: { account: string; name?: string | null; to?: string }) {
   const me = useMe();
   return (
-    <Link to={ROUTES.player(account)} className="group flex min-w-0 flex-col leading-tight">
+    <Link to={to ?? ROUTES.player(account)} className="group flex min-w-0 flex-col leading-tight">
       <span className={cx("truncate font-medium group-hover:text-gold", me === account ? "text-gold" : "text-text")}>
         {name ?? accountShort(account)}
         {me === account && <span className="ml-1.5 text-[10px] font-bold uppercase tracking-wider">{t("common.you")}</span>}

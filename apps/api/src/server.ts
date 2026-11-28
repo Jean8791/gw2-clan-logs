@@ -331,6 +331,15 @@ export async function buildApp(cfg: Config, opts: { logger?: FastifyServerOption
     return { rows, baseline, referenceMs: referenceTimeMs(rows.map((r) => r.activeMs)) };
   });
 
+  // o perfil de um jogador num mês ou semana arquivados (do resumo diário, vale depois de as lutas serem apagadas)
+  server.get<{ Params: { account: string } }>("/api/archive/players/:account", async (req, reply) => {
+    const month = String((req.query as Record<string, unknown>).month ?? "");
+    const fl = parseFilters(req.query as Record<string, string>);
+    if (!fl.week && !isMonth(month)) return reply.code(400).send({ error: "Use month=AAAA-MM or week=AAAA-MM-DD (the Friday the week starts).", code: "badMonth" });
+    const profile = q.archivePlayer(db, month, req.params.account, fl);
+    return profile ?? reply.code(404).send({ error: "Player not found.", code: "playerNotFound" });
+  });
+
   server.get<{ Params: { account: string } }>("/api/players/:account", async (req, reply) => {
     const prof = q.playerProfile(db, req.params.account, filtersOf(req));
     return prof ?? reply.code(404).send({ error: "Player not found.", code: "playerNotFound" });

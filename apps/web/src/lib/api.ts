@@ -4,6 +4,7 @@ import {
   PAGE_SIZE,
   type Aggregate,
   type ArchiveMonth,
+  type ArchivePlayerProfile,
   type ArchiveWeek,
   type DaySummary,
   type Fight,
@@ -105,6 +106,15 @@ export const useArchiveRanking = (month: string | undefined, f: Filters, enabled
     queryKey: ["archive-ranking", f.week ? undefined : month, f.week, f.guild, f.role],
     enabled: enabled && (!!month || !!f.week),
     queryFn: () => get<{ rows: RankingRow[]; baseline: Aggregate; referenceMs: number }>(withFilters(`/api/archive/ranking`, { guild: f.guild, role: f.role, week: f.week }, month ? { month } : {})),
+  });
+
+/** O perfil de um jogador num mês ou semana arquivados (do resumo diário). */
+export const useArchivePlayer = (account: string, month: string | undefined, f: Filters) =>
+  useQuery({
+    queryKey: ["archive-player", account, month, f.week, f.guild, f.role],
+    enabled: !!month || !!f.week,
+    retry: false,
+    queryFn: () => get<ArchivePlayerProfile>(withFilters(`/api/archive/players/${encodeURIComponent(account)}`, { guild: f.guild, role: f.role, week: f.week }, month ? { month } : {})),
   });
 
 export const usePlayer = (account: string, f: Filters) =>

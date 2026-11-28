@@ -621,6 +621,15 @@ export interface ArchiveWeek {
   current: boolean;
 }
 
+/** O desempenho de um jogador num mês (ou semana) arquivado, do resumo diário: a linha do período, a média do clã no mesmo período e o dia a dia. */
+export interface ArchivePlayerProfile {
+  row: RankingRow;
+  baseline: Aggregate;
+  /** o tempo de referência do ajuste dos boons e do uptime (o mesmo do Ranking do período) */
+  referenceMs: number;
+  days: (Aggregate & { day: string })[];
+}
+
 export const isMonth = (m: string): boolean => /^\d{4}-(0[1-9]|1[0-2])$/.test(m);
 
 /** Resumo de um dia de batalha. */

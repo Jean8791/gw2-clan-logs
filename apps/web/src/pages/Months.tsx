@@ -1,5 +1,5 @@
 import { useSearchParams } from "react-router-dom";
-import { ARCHIVE_MONTHS, isMonth, type TimeAdjust } from "@gw2logs/shared";
+import { ARCHIVE_MONTHS, isMonth, ROUTES, type TimeAdjust } from "@gw2logs/shared";
 import { CardsGrid } from "../components/CardsGrid";
 import { FilterBar } from "../components/FilterBar";
 import { Card, ErrorBox, Loading, PageHeader, Segmented, Select } from "../components/ui";
@@ -38,6 +38,16 @@ export function MonthsPage() {
       },
       { replace: true },
     );
+  // o clique no jogador abre o perfil do mês (ou da semana) mostrado, com os mesmos filtros de guilda e função
+  const periodQuery = () => {
+    const p = new URLSearchParams();
+    if (week) p.set("week", week);
+    else if (month) p.set("month", month);
+    if (filters.guild) p.set("guild", filters.guild);
+    if (filters.role) p.set("role", filters.role);
+    return p.toString();
+  };
+  const playerLink = (account: string) => `${ROUTES.monthPlayer(account)}?${periodQuery()}`;
   const setView = (view: "month" | "week") => setFilters({ ...filters, week: view === "week" ? (weekList.find((w) => !w.current) ?? weekList[0])?.week : undefined });
   return (
     <>
@@ -91,7 +101,7 @@ export function MonthsPage() {
           </div>
           {rk.error && <ErrorBox error={rk.error} />}
           {rk.isLoading && <Loading />}
-          {rk.data && <CardsGrid initialDetail="offense" rows={rk.data.rows} adjust={adjust} cards={cards} setCard={setCard} />}
+          {rk.data && <CardsGrid initialDetail="offense" playerLink={playerLink} rows={rk.data.rows} adjust={adjust} cards={cards} setCard={setCard} />}
           <p className="mt-4 text-xs text-faint">{t("archive.note", { n: ARCHIVE_MONTHS })}</p>
           {week && <p className="mt-1 text-xs text-faint">{t("archive.weekNote")}</p>}
         </>

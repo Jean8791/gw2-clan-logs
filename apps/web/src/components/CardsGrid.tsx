@@ -22,7 +22,7 @@ const totalOf = (row: RankingRow, m: CardMetric) => (m === HEALING_BARRIER ? row
 const UNIT_TEXT = { perMin: "rate.perMin", pctTime: "overview.card.pctTime", avgTime: "overview.card.avgTime" } as const;
 
 /** Um card por grupo de métricas: o top 5 da métrica escolhida no seletor do cabeçalho; o detalhe (top 10) fica no rodapé. */
-function Leaderboard({ group, metric, rows, adjust, open, onMetric, onDetail }: { group: StatGroup; metric: CardMetric; rows: RankingRow[]; adjust?: TimeAdjust; open: boolean; onMetric: (m: CardMetric) => void; onDetail: () => void }) {
+function Leaderboard({ group, metric, rows, adjust, open, onMetric, onDetail, playerLink }: { playerLink: (account: string) => string; group: StatGroup; metric: CardMetric; rows: RankingRow[]; adjust?: TimeAdjust; open: boolean; onMetric: (m: CardMetric) => void; onDetail: () => void }) {
   const top = topByCard(rows, metric, 5, MIN_ACTIVE_MS, adjust);
   const rate = isCardRate(metric);
   const higher = cardHigherIsBetter(metric);
@@ -51,7 +51,7 @@ function Leaderboard({ group, metric, rows, adjust, open, onMetric, onDetail }: 
         <ol className="flex flex-col gap-1 p-3">
           {top.map(({ row: r, value: v }, i) => (
             <li key={r.account}>
-              <Link to={ROUTES.player(r.account)} className="relative flex items-center gap-3 overflow-hidden rounded-lg px-2.5 py-2 hover:bg-surface-2">
+              <Link to={playerLink(r.account)} className="relative flex items-center gap-3 overflow-hidden rounded-lg px-2.5 py-2 hover:bg-surface-2">
                 <span className="absolute inset-y-0 left-0 bg-gold/8" style={{ width: `${width(v)}%` }} />
                 <span className={`relative w-4 text-center text-xs font-bold ${i === 0 ? "text-gold" : "text-faint"}`}>{i + 1}</span>
                 <ProfessionDot profession={r.profession} className="relative" />
@@ -78,13 +78,13 @@ function Leaderboard({ group, metric, rows, adjust, open, onMetric, onDetail }: 
 }
 
 /** Os 10 melhores de um card: nas contagens, o total, o por minuto e o por segundo; nos boons e no uptime, o valor ajustado pelo tempo jogado. */
-function BoardDetail({ metric, rows, adjust, onClose }: { metric: CardMetric; rows: RankingRow[]; adjust?: TimeAdjust; onClose: () => void }) {
+function BoardDetail({ metric, rows, adjust, onClose, playerLink }: { playerLink: (account: string) => string; metric: CardMetric; rows: RankingRow[]; adjust?: TimeAdjust; onClose: () => void }) {
   const top = topByCard(rows, metric, 10, MIN_ACTIVE_MS, adjust);
   const key = formatKey(metric);
   const rate = isCardRate(metric);
   const columns: Column<(typeof top)[number]>[] = [
     { id: "pos", header: "#", align: "right", cell: (_x, i) => <span className="text-faint">{i + 1}</span> },
-    { id: "player", header: t("table.player"), sticky: true, cell: (x) => <PlayerLink account={x.row.account} name={x.row.name} /> },
+    { id: "player", header: t("table.player"), sticky: true, cell: (x) => <PlayerLink account={x.row.account} name={x.row.name} to={playerLink(x.row.account)} /> },
     { id: "prof", header: t("table.class"), sort: (x) => x.row.profession ?? "", cell: (x) => <Profession profession={x.row.profession} /> },
     { id: "guild", header: t("table.guild"), cell: (x) => <GuildTag id={x.row.guildId} /> },
     { id: "fights", header: t("table.fights"), align: "right", sort: (x) => x.row.fights, cell: (x) => x.row.fights },
@@ -115,8 +115,8 @@ function BoardDetail({ metric, rows, adjust, onClose }: { metric: CardMetric; ro
   );
 }
 
-/** Os cinco cards (um por grupo de métricas) e o top 10 do que estiver aberto; serve para a Visão geral e para os meses anteriores. */
-export function CardsGrid({ rows, adjust, cards, setCard, className, initialDetail = null }: { rows: RankingRow[]; adjust?: TimeAdjust; cards: Cards; setCard: (group: StatGroup, metric: CardMetric) => void; className?: string; initialDetail?: StatGroup | null }) {
+/** Os cinco cards (um por grupo de métricas) e o top 10 do que estiver aberto; serve para a Visão geral e para os meses anteriores; `playerLink` diz para onde o clique no jogador vai (o perfil, ou o perfil do mês). */
+export function CardsGrid({ rows, adjust, cards, setCard, className, initialDetail = null, playerLink = ROUTES.player }: { playerLink?: (account: string) => string; rows: RankingRow[]; adjust?: TimeAdjust; cards: Cards; setCard: (group: StatGroup, metric: CardMetric) => void; className?: string; initialDetail?: StatGroup | null }) {
   const [detail, setDetail] = useState<StatGroup | null>(initialDetail);
   return (
     <div className={className}>
@@ -131,10 +131,11 @@ export function CardsGrid({ rows, adjust, cards, setCard, className, initialDeta
             open={detail === g.id}
             onMetric={(m) => setCard(g.id, m)}
             onDetail={() => setDetail(detail === g.id ? null : g.id)}
+            playerLink={playerLink}
           />
         ))}
       </div>
-      {detail && <BoardDetail key={`${detail}:${cards[detail]}`} metric={cards[detail]} rows={rows} adjust={adjust} onClose={() => setDetail(null)} />}
+      {detail && <BoardDetail key={`${detail}:${cards[detail]}`} metric={cards[detail]} rows={rows} adjust={adjust} onClose={() => setDetail(null)} playerLink={playerLink} />}
     </div>
   );
 }

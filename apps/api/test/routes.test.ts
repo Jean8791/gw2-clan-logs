@@ -31,6 +31,7 @@ describe("ROUTES: as rotas do site, todas em inglês", () => {
     expect(ROUTES.fight("abc")).toBe("/fights/abc");
     expect(ROUTES.ranking).toBe("/ranking");
     expect(ROUTES.months).toBe("/months");
+    expect(ROUTES.monthPlayer("Ana Maria.1234")).toBe("/months/players/Ana%20Maria.1234");
     expect(ROUTES.player("Nome.1234")).toBe("/players/Nome.1234");
     expect(ROUTES.compare).toBe("/compare");
     expect(ROUTES.guilds).toBe("/guilds");
