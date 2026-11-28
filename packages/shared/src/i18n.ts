@@ -1,5 +1,5 @@
 // Idiomas do site: português (padrão) e inglês. Sem biblioteca: um dicionário por idioma e a função translate.
-import { BOON_BASES, type ScopedKey } from "./boons.js";
+import { BOON_BASES, GROUP_UP_BASES, type GroupUpKey, type ScopedKey } from "./boons.js";
 import type { StatKey } from "./index.js";
 import { STAT_META } from "./index.js";
 
@@ -130,7 +130,7 @@ export const DICT: Record<Lang, Dict> = {
     "ranking.selected": "{n}/4 selecionados",
     "ranking.empty.title": "Ninguém com esses filtros",
     "ranking.empty.text": "Tente outro período, guilda ou um tempo mínimo menor.",
-    "ranking.note": "“Total” soma todas as lutas do filtro. “Por minuto” divide pelo tempo ativo de cada jogador (0,74 em Kills = 0,74 abate por minuto) e serve para comparar quem jogou mais ou menos lutas. “Por segundo” é a mesma conta por segundo (o DPS). Suporte é a parcela das lutas em que a pessoa jogou de suporte. Boons mostram o volume gerado para o squad (unidade do Elite Insights, já normalizada pela duração da luta: por isso não há “por minuto”), como média ponderada pelo tempo jogado. Boons e Uptime são ajustados pelo tempo jogado: quem jogou menos que a referência do período (metade do tempo mediano de jogo, no mínimo 5 min) é puxado para a média geral, e quem jogou muito quase mantém o próprio valor. Uptime é a % do tempo ativo do jogador com o boon (em Estab. e Poder, o tempo com pelo menos uma pilha; “Poder (pilhas)” é a média de pilhas). A função (DPS/suporte) é estimada por luta, pela cura, barreira e boons gerados.",
+    "ranking.note": "“Total” soma todas as lutas do filtro. “Por minuto” divide pelo tempo ativo de cada jogador (0,74 em Kills = 0,74 abate por minuto) e serve para comparar quem jogou mais ou menos lutas. “Por segundo” é a mesma conta por segundo (o DPS). Suporte é a parcela das lutas em que a pessoa jogou de suporte. Boons mostram o volume gerado para o squad (unidade do Elite Insights, já normalizada pela duração da luta: por isso não há “por minuto”), como média ponderada pelo tempo jogado. Boons e Uptime são ajustados pelo tempo jogado: quem jogou menos que a referência do período (metade do tempo mediano de jogo, no mínimo 5 min) é puxado para a média geral, e quem jogou muito quase mantém o próprio valor. Uptime é a % do tempo ativo do jogador com o boon (em Estab. e Poder, o tempo com pelo menos uma pilha; “Poder (pilhas)” é a média de pilhas). A função (DPS/suporte) é estimada por luta, pela cura, barreira e boons gerados. “% … no grupo” é o uptime médio do grupo do jogador no squad (ele incluído), sobre o tempo ativo dele: mede o resultado do grupo, não só o do jogador, e faz mais sentido com a função suporte filtrada.",
     "common.error": "Erro",
     "common.remove": "Remover",
     "common.choose": "Escolher",
@@ -310,6 +310,8 @@ export const DICT: Record<Lang, Dict> = {
     "guilds.searchHint": "Tag ou nome da guilda",
     "guilds.noMatch": "Nenhuma guilda encontrada para essa busca.",
     "guilds.note": "A guilda de cada jogador é a que ele estava representando na luta. Nomes e tags vêm da API oficial do Guild Wars 2.",
+    "ranking.boon.label": "Boon",
+    "ranking.boon.all": "Todos os boons",
     "scope.label": "Boons gerados para",
     "scope.squad": "Squad",
     "scope.group": "Grupo",
@@ -518,7 +520,7 @@ export const DICT: Record<Lang, Dict> = {
     "ranking.selected": "{n}/4 selected",
     "ranking.empty.title": "Nobody matches these filters",
     "ranking.empty.text": "Try another period, guild or a smaller minimum time.",
-    "ranking.note": "“Total” adds up all the fights in the filter. “Per minute” divides by each player's active time (0.74 in Kills = 0.74 kills per minute) and is for comparing people who played more or fewer fights. “Per second” is the same math per second (the DPS). Support is the share of fights the person played as support. Boons show the volume generated for the squad (an Elite Insights unit, already normalized by fight length, so there is no “per minute”), as an average weighted by time played. Boons and Uptime are adjusted by time played: whoever played less than the period reference (half the median play time, at least 5 min) is pulled toward the overall average, and whoever played a lot almost keeps their own value. Uptime is the % of the player's active time with the boon (for Stab. and Might, the time with at least one stack; “Might (stacks)” is the average stack count). The role (DPS/support) is estimated per fight from healing, barrier and boons generated.",
+    "ranking.note": "“Total” adds up all the fights in the filter. “Per minute” divides by each player's active time (0.74 in Kills = 0.74 kills per minute) and is for comparing people who played more or fewer fights. “Per second” is the same math per second (the DPS). Support is the share of fights the person played as support. Boons show the volume generated for the squad (an Elite Insights unit, already normalized by fight length, so there is no “per minute”), as an average weighted by time played. Boons and Uptime are adjusted by time played: whoever played less than the period reference (half the median play time, at least 5 min) is pulled toward the overall average, and whoever played a lot almost keeps their own value. Uptime is the % of the player's active time with the boon (for Stab. and Might, the time with at least one stack; “Might (stacks)” is the average stack count). The role (DPS/support) is estimated per fight from healing, barrier and boons generated. “% … in group” is the average uptime of the player's group in the squad (the player included), over the player's active time: it measures the group's result, not only the player's, and makes more sense with the support role filtered.",
     "common.error": "Error",
     "common.remove": "Remove",
     "common.choose": "Choose",
@@ -698,6 +700,8 @@ export const DICT: Record<Lang, Dict> = {
     "guilds.searchHint": "Guild tag or name",
     "guilds.noMatch": "No guild found for this search.",
     "guilds.note": "Each player's guild is the one they were representing in the fight. Names and tags come from the official Guild Wars 2 API.",
+    "ranking.boon.label": "Boon",
+    "ranking.boon.all": "All boons",
     "scope.label": "Boons generated for",
     "scope.squad": "Squad",
     "scope.group": "Group",
@@ -801,7 +805,7 @@ export const DICT: Record<Lang, Dict> = {
 
 /** Nome das métricas em inglês (o português fica em STAT_META). */
 type StatEn = { label: string; short: string; hint?: string };
-const BASE_EN: Record<Exclude<StatKey, ScopedKey>, StatEn> = {
+const BASE_EN: Record<Exclude<StatKey, ScopedKey | GroupUpKey>, StatEn> = {
   damage: { label: "Damage", short: "Damage", hint: "Damage to enemy players (WvW) or to the target (PvE)" },
   powerDamage: { label: "Power damage", short: "Power" },
   condiDamage: { label: "Condition damage", short: "Condi" },
@@ -865,7 +869,14 @@ const scopedEn = (): Record<ScopedKey, StatEn> =>
     ),
   ) as Record<ScopedKey, StatEn>;
 
-export const STAT_EN: Record<StatKey, StatEn> = { ...BASE_EN, ...scopedEn() };
+const GROUP_UP_HINT_EN =
+  "Average uptime of the player's group (whoever is in the same squad group, the player included), over the player's active time. It measures the group's result, not only what the player does: two supports in the same group get the same value";
+
+/** Cada uptime ganha a versão do grupo, com o nome do boon e a dica do que ela mede. */
+const groupUpEn = (): Record<GroupUpKey, StatEn> =>
+  Object.fromEntries(GROUP_UP_BASES.map((b) => [`${b}GroupUp`, { label: `${BASE_EN[`${b}Up`].label} in group`, short: `${BASE_EN[`${b}Up`].short} grp.`, hint: GROUP_UP_HINT_EN }])) as Record<GroupUpKey, StatEn>;
+
+export const STAT_EN: Record<StatKey, StatEn> = { ...BASE_EN, ...scopedEn(), ...groupUpEn() };
 
 /** Nome, abreviação e dica de uma métrica no idioma (português = o que está em STAT_META). */
 export function statText(key: StatKey, lang: Lang): { label: string; short: string; hint?: string } {
