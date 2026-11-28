@@ -1,68 +1,96 @@
 import { ArrowRight, X } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { overviewDefaults, perSecond, ROUTES, topByRate, type RankingRow, type StatKey } from "@gw2logs/shared";
+import {
+  cardHigherIsBetter, cardOptions, HEALING_BARRIER, inScope, isCardRate, overviewDefaults, perSecond, ROUTES, STAT_GROUPS, STAT_META, statText, topByCard,
+  type BoonScope, type CardMetric, type RankingRow, type StatGroup, type StatKey, type TimeAdjust,
+} from "@gw2logs/shared";
 import { DataTable, type Column } from "../components/DataTable";
 import { FilterBar } from "../components/FilterBar";
 import { FightStatus, fightKills, KillDeath, SquadVsEnemy, Won } from "../components/FightBits";
 import { GuildTag, PlayerLink, Profession, ProfessionDot } from "../components/badges";
-import { Card, Empty, ErrorBox, Kpi, Loading, PageHeader, cx } from "../components/ui";
+import { ScopeToggle } from "../components/statColumns";
+import { Card, Empty, ErrorBox, Kpi, Loading, PageHeader, Select, cx } from "../components/ui";
 import { useDays, useOverview, useRanking } from "../lib/api";
-import { useFilters } from "../lib/hooks";
-import { t } from "../lib/i18n";
+import { useCards, useFilters } from "../lib/hooks";
+import { getLang, t } from "../lib/i18n";
 import { accountShort, compact, dateTime, dec, duration, int, stat } from "../lib/format";
-
-const BOARDS: { key: StatKey; title: string }[] = [
-  { key: "damage", title: "overview.board.damage" },
-  { key: "strips", title: "overview.board.strips" },
-  { key: "cleanses", title: "overview.board.cleanses" },
-  { key: "healing", title: "overview.board.healing" },
-];
 
 /** Precisa de pelo menos 2 min de luta para entrar nos destaques (evita quem apareceu 10 s). */
 const MIN_ACTIVE_MS = 120_000;
 
-function Leaderboard({ rows, k, title, open, onDetail }: { rows: RankingRow[]; k: StatKey; title: string; open: boolean; onDetail: () => void }) {
-  const top = topByRate(rows, k, 5, MIN_ACTIVE_MS).map(({ row, perMin }) => ({ r: row, v: perMin }));
-  const max = top[0]?.v ?? 1;
+const metricName = (m: CardMetric) => (m === HEALING_BARRIER ? t("overview.card.healingBarrier") : statText(m, getLang()).label);
+/** Cura + barreira mostra os números como a cura. */
+const formatKey = (m: CardMetric): StatKey => (m === HEALING_BARRIER ? "healing" : m);
+const totalOf = (row: RankingRow, m: CardMetric) => (m === HEALING_BARRIER ? row.healing + row.barrier : row[m]);
+const scopeOf = (m: CardMetric): BoonScope => (m === HEALING_BARRIER ? "squad" : (STAT_META[m].scope ?? "squad"));
+
+/** Um card por grupo de métricas: o top 5 da métrica escolhida no seletor do cabeçalho; o detalhe (top 10) fica no rodapé. */
+function Leaderboard({ group, metric, rows, adjust, open, onMetric, onDetail }: { group: StatGroup; metric: CardMetric; rows: RankingRow[]; adjust?: TimeAdjust; open: boolean; onMetric: (m: CardMetric) => void; onDetail: () => void }) {
+  const top = topByCard(rows, metric, 5, MIN_ACTIVE_MS, adjust);
+  const rate = isCardRate(metric);
+  const higher = cardHigherIsBetter(metric);
+  const best = top[0]?.value ?? 1;
+  // a barra do melhor é a mais comprida; quando menos é melhor, o menor valor é o melhor
+  const width = (v: number) => (higher ? v / best : best / v) * 100;
+  const groupName = t(`group.${group}`);
+  const notes = [rate && t("rate.perMin"), !higher && t("overview.card.lessIsBetter")].filter(Boolean).join(" · ");
   return (
     <Card
-      title={title}
+      className="flex flex-col"
+      title={<span className="whitespace-nowrap">{groupName}</span>}
       action={
-        <button
-          type="button"
-          onClick={onDetail}
-          aria-expanded={open}
-          className={cx("rounded-md px-2 py-1 text-xs font-medium transition hover:bg-surface-2", open ? "bg-surface-3 text-gold" : "text-gold/80 hover:text-gold")}
-        >
-          {open ? t("overview.detail.close") : t("overview.detail")}
-        </button>
+        <Select className="w-40" aria-label={t("overview.card.metric", { group: groupName })} value={metric} onChange={(e) => onMetric(e.target.value as CardMetric)}>
+          {cardOptions(group, scopeOf(metric)).map((m) => (
+            <option key={m} value={m}>
+              {metricName(m)}
+            </option>
+          ))}
+        </Select>
       }
     >
+      {group === "boons" && (
+        <div className="px-3 pt-3">
+          <ScopeToggle value={scopeOf(metric)} onChange={(s) => onMetric(inScope(metric as StatKey, s))} />
+        </div>
+      )}
       {top.length === 0 ? (
         <p className="px-5 py-6 text-sm text-faint">{t("overview.noData")}</p>
       ) : (
         <ol className="flex flex-col gap-1 p-3">
-          {top.map(({ r, v }, i) => (
+          {top.map(({ row: r, value: v }, i) => (
             <li key={r.account}>
               <Link to={ROUTES.player(r.account)} className="relative flex items-center gap-3 overflow-hidden rounded-lg px-2.5 py-2 hover:bg-surface-2">
-                <span className="absolute inset-y-0 left-0 bg-gold/8" style={{ width: `${(v / max) * 100}%` }} />
+                <span className="absolute inset-y-0 left-0 bg-gold/8" style={{ width: `${width(v)}%` }} />
                 <span className={`relative w-4 text-center text-xs font-bold ${i === 0 ? "text-gold" : "text-faint"}`}>{i + 1}</span>
                 <ProfessionDot profession={r.profession} className="relative" />
                 <span className="relative min-w-0 flex-1 truncate text-sm font-medium">{r.name ?? accountShort(r.account)}</span>
-                <span className="tabular relative text-sm font-semibold text-text">{stat(k, v, true)}</span>
+                <span className="tabular relative text-sm font-semibold text-text">{stat(formatKey(metric), v, rate)}</span>
               </Link>
             </li>
           ))}
         </ol>
       )}
+      <div className="mt-auto flex items-center justify-between gap-2 border-t border-line px-3 py-2 text-xs">
+        <span className="text-faint">{notes}</span>
+        <button
+          type="button"
+          onClick={onDetail}
+          aria-expanded={open}
+          className={cx("rounded-md px-2 py-1 font-medium transition hover:bg-surface-2", open ? "bg-surface-3 text-gold" : "text-gold/80 hover:text-gold")}
+        >
+          {open ? t("overview.detail.close") : t("overview.detail")}
+        </button>
+      </div>
     </Card>
   );
 }
 
-/** Os 10 melhores de um destaque, com os valores detalhados (total, por minuto, por segundo, lutas e tempo). */
-function BoardDetail({ rows, k, title, onClose }: { rows: RankingRow[]; k: StatKey; title: string; onClose: () => void }) {
-  const top = topByRate(rows, k, 10, MIN_ACTIVE_MS);
+/** Os 10 melhores de um card: nas contagens, o total, o por minuto e o por segundo; nos boons e no uptime, o valor ajustado pelo tempo jogado. */
+function BoardDetail({ metric, rows, adjust, onClose }: { metric: CardMetric; rows: RankingRow[]; adjust?: TimeAdjust; onClose: () => void }) {
+  const top = topByCard(rows, metric, 10, MIN_ACTIVE_MS, adjust);
+  const key = formatKey(metric);
+  const rate = isCardRate(metric);
   const columns: Column<(typeof top)[number]>[] = [
     { id: "pos", header: "#", align: "right", cell: (_x, i) => <span className="text-faint">{i + 1}</span> },
     { id: "player", header: t("table.player"), sticky: true, cell: (x) => <PlayerLink account={x.row.account} name={x.row.name} /> },
@@ -70,21 +98,25 @@ function BoardDetail({ rows, k, title, onClose }: { rows: RankingRow[]; k: StatK
     { id: "guild", header: t("table.guild"), cell: (x) => <GuildTag id={x.row.guildId} /> },
     { id: "fights", header: t("table.fights"), align: "right", sort: (x) => x.row.fights, cell: (x) => x.row.fights },
     { id: "time", header: t("common.activeTime"), align: "right", sort: (x) => x.row.activeMs, cell: (x) => <span className="text-muted">{duration(x.row.activeMs)}</span> },
-    { id: "total", header: t("common.total"), align: "right", sort: (x) => x.row[k], cell: (x) => compact(x.row[k]) },
-    { id: "perMin", header: t("common.perMinute"), align: "right", sort: (x) => x.perMin, cell: (x) => <span className="font-semibold">{stat(k, x.perMin, true)}</span> },
-    { id: "perSec", header: t("common.perSecond"), align: "right", sort: (x) => x.perMin, cell: (x) => stat(k, perSecond(x.row[k], x.row.activeMs), false, true) },
+    ...(rate
+      ? ([
+          { id: "total", header: t("common.total"), align: "right", sort: (x) => totalOf(x.row, metric), cell: (x) => compact(totalOf(x.row, metric)) },
+          { id: "value", header: t("common.perMinute"), align: "right", sort: (x) => x.value, cell: (x) => <span className="font-semibold">{stat(key, x.value, true)}</span> },
+          { id: "perSec", header: t("common.perSecond"), align: "right", sort: (x) => x.value, cell: (x) => stat(key, perSecond(totalOf(x.row, metric), x.row.activeMs), false, true) },
+        ] satisfies Column<(typeof top)[number]>[])
+      : ([{ id: "value", header: metricName(metric), align: "right", sort: (x) => x.value, cell: (x) => <span className="font-semibold">{stat(key, x.value)}</span> }] satisfies Column<(typeof top)[number]>[])),
   ];
   return (
     <Card
       className="mt-4"
-      title={t("overview.detail.title", { title })}
+      title={t("overview.detail.title", { title: metricName(metric) })}
       action={
         <button type="button" onClick={onClose} aria-label={t("overview.detail.closeAria")} className="rounded-md p-1 text-faint hover:bg-surface-2 hover:text-text">
           <X className="size-4" />
         </button>
       }
     >
-      <DataTable rows={top} columns={columns} rowKey={(x) => x.row.account} initialSort={{ id: "perMin", desc: true }} dense />
+      <DataTable rows={top} columns={columns} rowKey={(x) => x.row.account} initialSort={{ id: "value", desc: cardHigherIsBetter(metric) }} dense />
       <p className="border-t border-line px-5 py-2.5 text-xs text-faint">
         {t("overview.detail.note")}
       </p>
@@ -98,10 +130,13 @@ export function OverviewPage() {
   const days = useDays({});
   const ready = !days.isLoading;
   const [filters, setFilters] = useFilters(overviewDefaults(days.data));
-  const [detail, setDetail] = useState<StatKey | null>(null);
+  const [cards, setCard] = useCards();
+  const [detail, setDetail] = useState<StatGroup | null>(null);
   const ov = useOverview(filters, ready);
   const rk = useRanking(filters, ready);
   const nav = useNavigate();
+  // boons e uptime saem ajustados pelo tempo jogado, o mesmo número do Ranking com estes filtros
+  const adjust: TimeAdjust | undefined = rk.data ? { baseline: rk.data.baseline, refMs: rk.data.referenceMs } : undefined;
 
   return (
     <>
@@ -109,7 +144,7 @@ export function OverviewPage() {
         title={t("page.overview.title")}
         subtitle={t("page.overview.subtitle")}
       />
-      <FilterBar value={filters} onChange={setFilters} fields={["period", "day", "guild", "size"]} />
+      <FilterBar value={filters} onChange={setFilters} fields={["period", "day", "guild", "role", "size"]} />
 
       {ov.error && <ErrorBox error={ov.error} />}
       {(!ready || ov.isLoading) && <Loading />}
@@ -130,12 +165,21 @@ export function OverviewPage() {
             <Kpi label={t("overview.kpi.players")} value={int(ov.data.players)} />
           </div>
 
-          <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            {BOARDS.map((b) => (
-              <Leaderboard key={b.key} rows={rk.data?.rows ?? []} k={b.key} title={t(b.title)} open={detail === b.key} onDetail={() => setDetail(detail === b.key ? null : b.key)} />
+          <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
+            {STAT_GROUPS.map((g) => (
+              <Leaderboard
+                key={g.id}
+                group={g.id}
+                metric={cards[g.id]}
+                rows={rk.data?.rows ?? []}
+                adjust={adjust}
+                open={detail === g.id}
+                onMetric={(m) => setCard(g.id, m)}
+                onDetail={() => setDetail(detail === g.id ? null : g.id)}
+              />
             ))}
           </div>
-          {detail && <BoardDetail key={detail} rows={rk.data?.rows ?? []} k={detail} title={t(BOARDS.find((b) => b.key === detail)!.title)} onClose={() => setDetail(null)} />}
+          {detail && <BoardDetail key={`${detail}:${cards[detail]}`} metric={cards[detail]} rows={rk.data?.rows ?? []} adjust={adjust} onClose={() => setDetail(null)} />}
 
           <Card
             className="mt-6"
