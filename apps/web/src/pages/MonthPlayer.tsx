@@ -58,13 +58,12 @@ export function MonthPlayerPage() {
   const { row, baseline } = data;
   const keys = statsOfGroup(group, scope);
   const adjust: TimeAdjust = { baseline, refMs: data.referenceMs };
-  // "total" do clã inteiro não é comparável com o de um jogador: a linha do clã só aparece nos modos por minuto e por segundo
   const [, month2, day2] = data.lastDay?.day.split("-") ?? [];
   const kind = t(filters.week ? "monthPlayer.kind.week" : "monthPlayer.kind.month");
   // jogador e média do clã no período mostrado (mês ou semana) e, por último, o último dia em que ele jogou
   const summary = [
     { ...row, label: t("monthPlayer.player", { kind }) },
-    ...(mode === "total" ? [] : [{ ...baseline, label: t("monthPlayer.clan", { kind }) }]),
+    { ...baseline, label: t("monthPlayer.clan", { kind }) },
     ...(data.lastDay ? [{ ...data.lastDay, label: `${t("monthPlayer.lastFight")} ${day2}/${month2}` }] : []),
   ];
   const labelCol = (id: string, header: string): Column<(typeof summary)[number]> => ({ id, header, sticky: true, cell: (r) => <span className="font-medium">{r.label}</span> });
@@ -83,7 +82,7 @@ export function MonthPlayerPage() {
       </div>
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <GroupTabs value={group} onChange={setGroup} scope={scope} onScopeChange={setScope} />
-        <ModeToggle value={mode} onChange={setMode} />
+        <ModeToggle value={mode} onChange={setMode} withTotal={false} />
       </div>
       <Card title={t("monthPlayer.summary")}>
         <DataTable

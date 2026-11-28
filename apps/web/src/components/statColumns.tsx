@@ -107,14 +107,15 @@ export function ScopeToggle({ value, onChange }: { value: BoonScope; onChange: (
   );
 }
 
-export function ModeToggle({ value, onChange }: { value: ValueMode; onChange: (m: ValueMode) => void }) {
+/** Total, por minuto e por segundo; `withTotal={false}` deixa só os dois por tempo (onde o total não se compara, como no perfil do mês). */
+export function ModeToggle({ value, onChange, withTotal = true }: { value: ValueMode; onChange: (m: ValueMode) => void; withTotal?: boolean }) {
   return (
     <Segmented
       size="sm"
       value={value}
       onChange={onChange}
       options={[
-        { value: "total", label: t("mode.total") },
+        ...(withTotal ? [{ value: "total" as const, label: t("mode.total") }] : []),
         { value: "perMin", label: t("mode.perMin") },
         { value: "perSec", label: t("mode.perSec") },
       ]}
