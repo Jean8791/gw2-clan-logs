@@ -66,7 +66,7 @@ export function FightsPage() {
   return (
     <>
       <PageHeader title={t("page.fights.title")} subtitle={t("page.fights.subtitle")} />
-      <FilterBar value={filters} onChange={setFilters} fields={["period", "day", "week", "map", "size", "duration", "guild"]} />
+      <FilterBar value={filters} onChange={setFilters} fields={["period", "day", "map", "size", "duration", "guild"]} />
       {error && <ErrorBox error={error} />}
       {isLoading && <Loading />}
       {data && (

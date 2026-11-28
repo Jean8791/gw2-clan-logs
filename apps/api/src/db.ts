@@ -1,5 +1,5 @@
 import Database from "better-sqlite3";
-import { STAT_KEYS, type StatKey } from "@gw2logs/shared";
+import { STAT_KEYS, weekOf, type StatKey } from "@gw2logs/shared";
 
 export type DB = Database.Database;
 
@@ -14,10 +14,37 @@ export const STAT_COL: Record<StatKey, string> = Object.fromEntries(STAT_KEYS.ma
  */
 export const SCHEMA_VERSION = 5;
 
+/**
+ * O resumo de um dia de batalha por jogador. `week` é a semana da luta (a data da sexta em que ela começa, ver weekOf em shared), '' quando a
+ * luta cai na janela de 23:00 a 23:03 de sexta ou quando o dia foi resumido antes de a semana existir; um dia que atravessa o corte de sexta
+ * se divide em duas linhas por jogador. As métricas são somas, para a soma de vários dias dar o mesmo valor do Ranking; o boon em volume guarda
+ * Σ(valor × active_ms). profession e guild_id são '' quando não há (uma chave composta não trata dois NULL como iguais).
+ */
+const dayStatsDdl = (name: string, statCols: string, ifNotExists = false) => `
+    CREATE TABLE ${ifNotExists ? "IF NOT EXISTS " : ""}${name} (
+      day           TEXT NOT NULL,
+      mode          TEXT NOT NULL,
+      account       TEXT NOT NULL,
+      profession    TEXT NOT NULL,
+      role          TEXT NOT NULL,
+      guild_id      TEXT NOT NULL,
+      week          TEXT NOT NULL DEFAULT '',
+      name          TEXT,
+      last_seen     TEXT,
+      fights        INTEGER NOT NULL DEFAULT 0,
+      active_ms     INTEGER NOT NULL DEFAULT 0,
+      dist_cover_ms REAL NOT NULL DEFAULT 0,
+      near_cover_ms REAL NOT NULL DEFAULT 0,
+      ${statCols},
+      PRIMARY KEY (day, mode, account, profession, role, guild_id, week)
+    );`;
+
 export function openDb(file: string): DB {
   const db = new Database(file);
   db.pragma("journal_mode = WAL");
   db.pragma("foreign_keys = ON");
+  // a semana de uma luta, para o resumo diário (sem semana, ''); o SQLite não calcula a janela de sexta sozinho
+  db.function("week_of", { deterministic: true }, (iso: unknown) => weekOf(typeof iso === "string" ? iso : null) ?? "");
   migrate(db);
   return db;
 }
@@ -147,22 +174,7 @@ function migrate(db: DB) {
     -- resumo de cada dia de batalha, guardado antes de a retenção apagar as lutas (ver archive.ts). Uma linha por jogador, classe, função e guilda.
     -- As métricas são somas, para a soma de vários dias dar o mesmo valor do Ranking; o boon em volume guarda Σ(valor × active_ms).
     -- profession e guild_id são '' quando não há (uma chave composta não trata dois NULL como iguais).
-    CREATE TABLE IF NOT EXISTS day_stats (
-      day           TEXT NOT NULL,
-      mode          TEXT NOT NULL,
-      account       TEXT NOT NULL,
-      profession    TEXT NOT NULL,
-      role          TEXT NOT NULL,
-      guild_id      TEXT NOT NULL,
-      name          TEXT,
-      last_seen     TEXT,
-      fights        INTEGER NOT NULL DEFAULT 0,
-      active_ms     INTEGER NOT NULL DEFAULT 0,
-      dist_cover_ms REAL NOT NULL DEFAULT 0,
-      near_cover_ms REAL NOT NULL DEFAULT 0,
-      ${statCols},
-      PRIMARY KEY (day, mode, account, profession, role, guild_id)
-    );
+    ${dayStatsDdl("day_stats", statCols, true)}
     -- signature: quais lutas o dia tinha quando foi resumido (muda quando entra, sai ou troca uma luta); frozen: a retenção já o alcançou
     CREATE TABLE IF NOT EXISTS day_snapshots (
       day       TEXT PRIMARY KEY,
@@ -199,6 +211,7 @@ function migrate(db: DB) {
   for (const k of STAT_KEYS) {
     if (!haveDay.has(STAT_COL[k])) db.exec(`ALTER TABLE day_stats ADD COLUMN ${STAT_COL[k]} REAL NOT NULL DEFAULT 0`);
   }
+  addWeekToDayStats(db, statCols);
   const haveFights = new Set((db.pragma("table_info(fights)") as { name: string }[]).map((c) => c.name));
   for (const col of ["enemy_downs", "enemy_deaths"]) {
     if (!haveFights.has(col)) db.exec(`ALTER TABLE fights ADD COLUMN ${col} INTEGER`);
@@ -220,6 +233,23 @@ function migrate(db: DB) {
     CREATE INDEX IF NOT EXISTS ix_fights_owner ON fights(owner_id);
     CREATE UNIQUE INDEX IF NOT EXISTS ux_fights_owner_sha ON fights(owner_id, sha256);
   `);
+}
+
+/**
+ * O resumo diário de antes da semana não tem a coluna `week` na chave: a tabela é refeita (o SQLite não muda a chave com ALTER) e as linhas
+ * antigas ficam com semana ''. Os dias ainda abertos são refeitos com a semana na próxima rodada do resumo; os congelados (as lutas deles já
+ * foram apagadas) ficam como estão, só no mês.
+ */
+function addWeekToDayStats(db: DB, statCols: string) {
+  const cols = (db.pragma("table_info(day_stats)") as { name: string }[]).map((c) => c.name);
+  if (cols.includes("week")) return;
+  db.transaction(() => {
+    db.exec(dayStatsDdl("day_stats_novo", statCols));
+    db.exec(`INSERT INTO day_stats_novo (${cols.join(", ")}) SELECT ${cols.join(", ")} FROM day_stats`);
+    db.exec("DROP TABLE day_stats");
+    db.exec("ALTER TABLE day_stats_novo RENAME TO day_stats");
+    db.exec("DELETE FROM day_snapshots WHERE frozen = 0");
+  })();
 }
 
 /**

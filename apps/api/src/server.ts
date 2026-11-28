@@ -322,10 +322,12 @@ export async function buildApp(cfg: Config, opts: { logger?: FastifyServerOption
 
   // o Ranking de um mês, somado do resumo diário (vale mesmo depois de as lutas serem apagadas); só modo, guilda, função e classe filtram
   server.get("/api/archive/months", async () => q.archiveMonths(db));
+  server.get("/api/archive/weeks", async () => q.archiveWeeks(db));
   server.get("/api/archive/ranking", async (req, reply) => {
     const month = String((req.query as Record<string, unknown>).month ?? "");
-    if (!isMonth(month)) return reply.code(400).send({ error: "Use month=AAAA-MM.", code: "badMonth" });
-    const { rows, baseline } = q.archiveRanking(db, month, parseFilters(req.query as Record<string, string>));
+    const fl = parseFilters(req.query as Record<string, string>);
+    if (!fl.week && !isMonth(month)) return reply.code(400).send({ error: "Use month=AAAA-MM or week=AAAA-MM-DD (the Friday the week starts).", code: "badMonth" });
+    const { rows, baseline } = q.archiveRanking(db, month, fl);
     return { rows, baseline, referenceMs: referenceTimeMs(rows.map((r) => r.activeMs)) };
   });
 

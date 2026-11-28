@@ -7,8 +7,10 @@ import {
   STAT_KEYS,
   STAT_META,
   TAG_COVER,
+  weekOf,
   weekRange,
   type ArchiveMonth,
+  type ArchiveWeek,
   type DaySummary,
   type Aggregate,
   type Fight,
@@ -100,8 +102,6 @@ export function fightConditions(fl: Filters, now = new Date()): { where: string[
   // "De"/"Até" chegam como dia (AAAA-MM-DD: o dia inteiro, em UTC) ou como instante com hora (já em UTC)
   if (fl.from) (where.push("f.time_start >= @from"), (params.from = fl.from.includes("T") ? fl.from : `${fl.from}T00:00:00.000Z`));
   if (fl.to) (where.push("f.time_start < @to"), (params.to = fl.to.includes("T") ? fl.to : new Date(Date.parse(`${fl.to}T00:00:00.000Z`) + 86_400_000).toISOString()));
-  const week = fl.week ? weekRange(fl.week) : null;
-  if (week) (where.push("f.time_start >= @weekFrom AND f.time_start < @weekTo"), (params.weekFrom = week.from), (params.weekTo = week.to));
   if (fl.map) (where.push("f.map_id = @map"), (params.map = fl.map));
   if (fl.minSquad) (where.push("f.squad_count >= @minSquad"), (params.minSquad = fl.minSquad));
   if (fl.maxSquad) (where.push("f.squad_count <= @maxSquad"), (params.maxSquad = fl.maxSquad));
@@ -292,10 +292,27 @@ export function archiveMonths(db: DB, now = new Date()): ArchiveMonth[] {
   ).map((m) => ({ ...m, current: m.month === current }));
 }
 
-/** Filtros que o resumo diário entende: modo, guilda, função e classe. Dia, período, mapa e tamanho do squad não existem nele. */
+/** Semanas com resumo diário, da mais nova para a mais antiga; `current` marca a semana de agora. Lutas na janela de sexta ficam só no mês. */
+export function archiveWeeks(db: DB, now = new Date()): ArchiveWeek[] {
+  const current = weekOf(now.toISOString());
+  return (
+    db
+      .prepare(
+        `SELECT week, COUNT(DISTINCT day) AS days, MIN(day) AS first, MAX(day) AS last, COUNT(DISTINCT account) AS players
+         FROM day_stats WHERE week <> '' GROUP BY week ORDER BY week DESC`,
+      )
+      .all() as Omit<ArchiveWeek, "current">[]
+  ).map((w) => ({ ...w, current: w.week === current }));
+}
+
+/**
+ * Filtros que o resumo diário entende: modo, guilda, função e classe. Dia, período, mapa e tamanho do squad não existem nele. O período é o
+ * mês, ou a semana quando `fl.week` vem (a semana vale no lugar do mês).
+ */
 function archiveConditions(month: string, fl: Filters): { where: string; params: Params } {
-  const where = ["substr(ds.day, 1, 7) = @month"];
-  const params: Params = { month };
+  const byWeek = !!fl.week && !!weekRange(fl.week);
+  const where = [byWeek ? "ds.week = @week" : "substr(ds.day, 1, 7) = @month"];
+  const params: Params = byWeek ? { week: fl.week! } : { month };
   if (fl.mode) (where.push("ds.mode = @mode"), (params.mode = fl.mode));
   if (fl.guild === "alliance") where.push("ds.guild_id IN (SELECT id FROM guilds WHERE in_alliance = 1)");
   else if (fl.guild) (where.push("ds.guild_id = @guild"), (params.guild = fl.guild));
@@ -307,7 +324,7 @@ function archiveConditions(month: string, fl: Filters): { where: string; params:
 const ARCHIVE_AGG = `SUM(ds.fights) AS fights, SUM(ds.active_ms) AS activeMs, SUM(ds.dist_cover_ms) AS distCoverMs, SUM(ds.near_cover_ms) AS nearCoverMs, ${STAT_KEYS.map((k) => aggColumnOf(k, "ds")).join(", ")}`;
 
 /**
- * O Ranking de um mês, somado do resumo diário (as lutas dele podem já ter sido apagadas pela retenção): as mesmas linhas, o mesmo
+ * O Ranking de um mês (ou de uma semana, com `fl.week`), somado do resumo diário (as lutas dele podem já ter sido apagadas pela retenção): as mesmas linhas, o mesmo
  * cálculo de boon e de uptime e a mesma média geral que `ranking` e `baseline` dariam com as lutas dos mesmos dias.
  */
 export function archiveRanking(db: DB, month: string, fl: Filters): { rows: RankingRow[]; baseline: Aggregate } {

@@ -593,17 +593,6 @@ export function weekOf(iso: string | null | undefined): string | null {
   return null;
 }
 
-/** As semanas que cobrem de `first` a `last` (instantes), da mais recente para a mais antiga. Um instante na janela de sexta usa a semana que vem logo depois. */
-export function weeksBetween(first: string, last: string): string[] {
-  if (Number.isNaN(Date.parse(first)) || Number.isNaN(Date.parse(last))) return [];
-  const start = weekOf(first) ?? weekOf(new Date(Date.parse(first) + 3 * 60_000).toISOString());
-  const end = weekOf(last) ?? weekOf(new Date(Date.parse(last) + 3 * 60_000).toISOString());
-  if (!start || !end || start > end) return [];
-  const weeks: string[] = [];
-  for (let t = Date.parse(`${end}T00:00:00Z`); t >= Date.parse(`${start}T00:00:00Z`); t -= WEEK_MS) weeks.push(new Date(t).toISOString().slice(0, 10));
-  return weeks;
-}
-
 function isValidDay(d: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return false;
   const t = Date.parse(`${d}T00:00:00Z`);
@@ -614,6 +603,17 @@ function isValidDay(d: string): boolean {
 /** Um mês (AAAA-MM) com resumo diário guardado: o primeiro e o último dia com dados, e se é o mês em andamento. */
 export interface ArchiveMonth {
   month: string;
+  days: number;
+  first: string;
+  last: string;
+  players: number;
+  current: boolean;
+}
+
+/** Uma semana (sexta 23:03 a sexta 23:00) com resumo diário guardado: o primeiro e o último dia com dados, e se é a semana em andamento. */
+export interface ArchiveWeek {
+  /** a data da sexta em que a semana começa */
+  week: string;
   days: number;
   first: string;
   last: string;

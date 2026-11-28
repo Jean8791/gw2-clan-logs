@@ -2,13 +2,13 @@ import { useMediaQuery } from "../lib/media-query";
 import { SHORT_SCREEN } from "../lib/screen";
 import { RotateCcw, SlidersHorizontal } from "lucide-react";
 import { useState } from "react";
-import { weeksBetween, type Filters, type PlayerOptions, type Role } from "@gw2logs/shared";
+import type { Filters, PlayerOptions, Role } from "@gw2logs/shared";
 import { useDays, useGuilds, useMeta } from "../lib/api";
-import { dayLabel, instantToLocal, localToInstant, weekLabel } from "../lib/format";
+import { dayLabel, instantToLocal, localToInstant } from "../lib/format";
 import { useT } from "../lib/i18n";
 import { Button, Input, Select, cx } from "./ui";
 
-type Field = "period" | "day" | "week" | "map" | "size" | "duration" | "guild" | "role" | "profession";
+type Field = "period" | "day" | "map" | "size" | "duration" | "guild" | "role" | "profession";
 
 const SIZES = [
   { id: "", label: "filter.size.any", min: undefined, max: undefined },
@@ -29,10 +29,8 @@ export function FilterBar({ value, onChange, fields, options }: { value: Filters
   const t = useT();
   const { data: meta } = useMeta();
   const { data: guilds } = useGuilds();
-  const { data: spaceDays } = useDays({ ...value, day: undefined, week: undefined }, (fields.includes("day") || fields.includes("week")) && !options);
+  const { data: spaceDays } = useDays({ ...value, day: undefined }, fields.includes("day") && !options);
   const days = options?.days ?? spaceDays;
-  // as semanas que cobrem as lutas guardadas (do primeiro ao último instante dos dias com lutas)
-  const weeks = spaceDays?.length ? weeksBetween(spaceDays.reduce((m, d) => (d.first < m ? d.first : m), spaceDays[0]!.first), spaceDays.reduce((m, d) => (d.last > m ? d.last : m), spaceDays[0]!.last)) : [];
   const roles = withCurrent<Role>(options?.roles ?? ["dps", "support"], value.role);
   const professions = withCurrent(options?.professions ?? meta?.professions ?? [], value.profession);
   const [open, setOpen] = useState(false);
@@ -65,7 +63,7 @@ export function FilterBar({ value, onChange, fields, options }: { value: Filters
             onChange={(e) => {
               const v = e.target.value;
               if (v === "custom") set({ days: undefined, from: new Date(Date.now() - 7 * 864e5).toISOString().slice(0, 10) });
-              else set({ days: v ? Number(v) : undefined, from: undefined, to: undefined, week: undefined });
+              else set({ days: v ? Number(v) : undefined, from: undefined, to: undefined });
             }}
           >
             <option value="">{t("filter.period.all")}</option>
@@ -80,7 +78,7 @@ export function FilterBar({ value, onChange, fields, options }: { value: Filters
           <Select
             label={t("filter.day")}
             value={value.day?.length === 1 ? value.day[0] : value.day?.length ? "varios" : ""}
-            onChange={(e) => set({ day: e.target.value && e.target.value !== "varios" ? [e.target.value] : undefined, week: undefined })}
+            onChange={(e) => set({ day: e.target.value && e.target.value !== "varios" ? [e.target.value] : undefined })}
           >
             <option value="">{t("filter.day.all")}</option>
             {(value.day?.length ?? 0) > 1 && <option value="varios">{t("filter.day.many", { n: value.day!.length })}</option>}
@@ -88,22 +86,6 @@ export function FilterBar({ value, onChange, fields, options }: { value: Filters
             {(days ?? []).map((d) => (
               <option key={d.day} value={d.day}>
                 {dayLabel(d.day)} · {t("filter.day.fights", { n: d.fights })}
-              </option>
-            ))}
-          </Select>
-        )}
-        {has("week") && (
-          <Select
-            label={t("filter.week")}
-            value={value.week ?? ""}
-            // escolher a semana troca o período e o dia (a semana já é um período): os dois juntos só confundiriam
-            onChange={(e) => set({ week: e.target.value || undefined, days: undefined, from: undefined, to: undefined, day: undefined })}
-          >
-            <option value="">{t("filter.week.all")}</option>
-            {value.week && !weeks.includes(value.week) && <option value={value.week}>{weekLabel(value.week)}</option>}
-            {weeks.map((w) => (
-              <option key={w} value={w}>
-                {weekLabel(w)}
               </option>
             ))}
           </Select>

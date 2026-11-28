@@ -42,7 +42,7 @@ export function DaysPage() {
   return (
     <>
       <PageHeader title={t("page.days.title")} subtitle={t("page.days.subtitle")} />
-      <FilterBar value={filters} onChange={setFilters} fields={["period", "week", "guild", "size", "map"]} />
+      <FilterBar value={filters} onChange={setFilters} fields={["period", "guild", "size", "map"]} />
       {error && <ErrorBox error={error} />}
       {isLoading && <Loading />}
       {data && (

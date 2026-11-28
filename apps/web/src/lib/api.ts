@@ -4,6 +4,7 @@ import {
   PAGE_SIZE,
   type Aggregate,
   type ArchiveMonth,
+  type ArchiveWeek,
   type DaySummary,
   type Fight,
   type FightDetail,
@@ -95,12 +96,15 @@ export const useRanking = (f: Filters, enabled = true) =>
 /** Meses com resumo diário guardado (o Ranking deles vale mesmo depois de as lutas serem apagadas). */
 export const useArchiveMonths = (enabled: boolean) => useQuery({ queryKey: ["archive-months"], queryFn: () => get<ArchiveMonth[]>("/api/archive/months"), enabled });
 
-/** O Ranking de um mês; do resumo só valem a guilda e a função (período, dia e tamanho do squad não existem nele). */
+/** Semanas (sexta 23:03 a sexta 23:00) com resumo diário guardado. */
+export const useArchiveWeeks = (enabled: boolean) => useQuery({ queryKey: ["archive-weeks"], queryFn: () => get<ArchiveWeek[]>("/api/archive/weeks"), enabled });
+
+/** O Ranking de um mês, ou da semana `f.week` (que vale no lugar do mês); do resumo só valem a guilda e a função (período, dia e tamanho do squad não existem nele). */
 export const useArchiveRanking = (month: string | undefined, f: Filters, enabled: boolean) =>
   useQuery({
-    queryKey: ["archive-ranking", month, f.guild, f.role],
-    enabled: enabled && !!month,
-    queryFn: () => get<{ rows: RankingRow[]; baseline: Aggregate; referenceMs: number }>(withFilters(`/api/archive/ranking`, { guild: f.guild, role: f.role }, { month: month! })),
+    queryKey: ["archive-ranking", f.week ? undefined : month, f.week, f.guild, f.role],
+    enabled: enabled && (!!month || !!f.week),
+    queryFn: () => get<{ rows: RankingRow[]; baseline: Aggregate; referenceMs: number }>(withFilters(`/api/archive/ranking`, { guild: f.guild, role: f.role, week: f.week }, month ? { month } : {})),
   });
 
 export const usePlayer = (account: string, f: Filters) =>
