@@ -4,11 +4,11 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import { isMonth, parseFilters, ROUTES, statsOfGroup, type BoonScope, type StatGroup, type TimeAdjust } from "@gw2logs/shared";
 import { DataTable, type Column } from "../components/DataTable";
 import { GuildTag, Profession } from "../components/badges";
-import { defaultSort, GroupTabs, ModeToggle, statColumnsFor, type ValueMode } from "../components/statColumns";
+import { GroupTabs, ModeToggle, statColumnsFor, type ValueMode } from "../components/statColumns";
 import { PeriodPicker } from "../components/PeriodPicker";
 import { Card, Empty, ErrorBox, Kpi, Loading, PageHeader } from "../components/ui";
 import { useArchiveMonths, useArchivePlayer, useArchiveWeeks } from "../lib/api";
-import { accountShort, dateTime, duration, int, monthLabel, weekLabel } from "../lib/format";
+import { accountShort, dateTime, duration, int, monthLabel, weekEnds, weekLabel } from "../lib/format";
 import { t } from "../lib/i18n";
 
 /**
@@ -74,7 +74,7 @@ export function MonthPlayerPage() {
       <PageHeader title={row.name ?? accountShort(account)} subtitle={`${period} · ${account}`} />
       {picker}
       <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-6">
-        <Kpi label={t("monthPlayer.period")} value={<span className="text-base">{period}</span>} accent />
+        <Kpi label={t("monthPlayer.period")} value={<PeriodText week={filters.week} month={month} />} accent />
         <Kpi label={t("table.fights")} value={int(row.fights)} />
         <Kpi label={t("common.activeTime")} value={duration(row.activeMs)} />
         <Kpi label={t("table.class")} value={<span className="flex flex-wrap gap-x-3 gap-y-1 text-base">{row.professions.map((p) => <span key={p.profession} className="inline-flex items-center gap-1"><Profession profession={p.profession} /><span className="text-xs text-faint">{p.fights}</span></span>)}</span>} />
@@ -91,7 +91,6 @@ export function MonthPlayerPage() {
           rows={summary}
           columns={[labelCol("who", ""), ...statColumnsFor(keys, mode, summary, adjust)]}
           rowKey={(r) => r.label}
-          initialSort={{ ...defaultSort(group, scope), desc: true }}
           dense
         />
       </Card>
@@ -103,6 +102,20 @@ export function MonthPlayerPage() {
       </p>
     </>
   );
+}
+
+/** O período no cartão: o mês numa linha; a semana com o começo em cima e o fim embaixo. */
+function PeriodText({ week, month }: { week?: string; month?: string }) {
+  if (week) {
+    const [start, end] = weekEnds(week);
+    return (
+      <span className="block text-base leading-snug">
+        <span className="block">{start}</span>
+        <span className="block text-muted">→ {end}</span>
+      </span>
+    );
+  }
+  return <span className="text-base">{month ? monthLabel(month) : ""}</span>;
 }
 
 function BackLink({ to }: { to: string }) {

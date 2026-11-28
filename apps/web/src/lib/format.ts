@@ -99,12 +99,15 @@ export function monthLabel(month: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-/** A semana (data da sexta em que começa) → "27/11 23:03 → 04/12 23:00", como o horário de Brasília. */
-export function weekLabel(week: string): string {
+/** A semana (data da sexta em que começa) → ["06/11 23:03", "13/11 23:00"]: o começo e o fim, como o horário de Brasília. */
+export function weekEnds(week: string): [string, string] {
   const short = (d: Date) => d.toLocaleDateString(locale(), { day: "2-digit", month: "2-digit", timeZone: "UTC" });
   const start = new Date(`${week}T12:00:00Z`);
-  return `${short(start)} 23:03 → ${short(new Date(start.getTime() + 7 * 86_400_000))} 23:00`;
+  return [`${short(start)} 23:03`, `${short(new Date(start.getTime() + 7 * 86_400_000))} 23:00`];
 }
+
+/** A semana numa linha só: "06/11 23:03 → 13/11 23:00". */
+export const weekLabel = (week: string): string => weekEnds(week).join(" → ");
 
 /** "2026-11-12" → "qui, 12/11" (o dia de batalha, ver battleDay em shared). */
 export const dayLabel = (day: string) =>
