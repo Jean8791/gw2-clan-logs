@@ -518,6 +518,18 @@ function isValidDay(d: string): boolean {
   return !Number.isNaN(t) && new Date(t).toISOString().slice(0, 10) === d;
 }
 
+/** Um mês (AAAA-MM) com resumo diário guardado: o primeiro e o último dia com dados, e se é o mês em andamento. */
+export interface ArchiveMonth {
+  month: string;
+  days: number;
+  first: string;
+  last: string;
+  players: number;
+  current: boolean;
+}
+
+export const isMonth = (m: string): boolean => /^\d{4}-(0[1-9]|1[0-2])$/.test(m);
+
 /** Resumo de um dia de batalha. */
 export interface DaySummary {
   day: string;

@@ -1,9 +1,9 @@
 import { ArrowRight, X } from "lucide-react";
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
-  cardHigherIsBetter, cardOptions, HEALING_BARRIER, inScope, isCardRate, overviewDefaults, perSecond, ROUTES, STAT_GROUPS, STAT_META, statText, topByCard,
-  type BoonScope, type CardMetric, type RankingRow, type StatGroup, type StatKey, type TimeAdjust,
+  ARCHIVE_MONTHS, cardHigherIsBetter, cardOptions, HEALING_BARRIER, inScope, isCardRate, isMonth, overviewDefaults, perSecond, ROUTES, STAT_GROUPS, STAT_META, statText, topByCard,
+  type BoonScope, type CardMetric, type Cards, type Filters, type RankingRow, type StatGroup, type StatKey, type TimeAdjust,
 } from "@gw2logs/shared";
 import { DataTable, type Column } from "../components/DataTable";
 import { FilterBar } from "../components/FilterBar";
@@ -11,10 +11,10 @@ import { FightStatus, fightKills, KillDeath, SquadVsEnemy, Won } from "../compon
 import { GuildTag, PlayerLink, Profession, ProfessionDot } from "../components/badges";
 import { ScopeToggle } from "../components/statColumns";
 import { Card, Empty, ErrorBox, Kpi, Loading, PageHeader, Select, cx } from "../components/ui";
-import { useDays, useOverview, useRanking } from "../lib/api";
+import { useArchiveMonths, useArchiveRanking, useDays, useOverview, useRanking } from "../lib/api";
 import { useCards, useFilters } from "../lib/hooks";
 import { getLang, t } from "../lib/i18n";
-import { accountShort, compact, dateTime, dec, duration, int, stat } from "../lib/format";
+import { accountShort, compact, dateTime, dayLabel, dec, duration, int, monthLabel, stat } from "../lib/format";
 
 /** Precisa de pelo menos 2 min de luta para entrar nos destaques (evita quem apareceu 10 s). */
 const MIN_ACTIVE_MS = 120_000;
@@ -124,6 +124,95 @@ function BoardDetail({ metric, rows, adjust, onClose }: { metric: CardMetric; ro
   );
 }
 
+/** Os cinco cards (um por grupo de métricas) e o top 10 do que estiver aberto; serve para o período escolhido e para um mês arquivado. */
+function CardsGrid({ rows, adjust, cards, setCard, className }: { rows: RankingRow[]; adjust?: TimeAdjust; cards: Cards; setCard: (group: StatGroup, metric: CardMetric) => void; className?: string }) {
+  const [detail, setDetail] = useState<StatGroup | null>(null);
+  return (
+    <div className={className}>
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
+        {STAT_GROUPS.map((g) => (
+          <Leaderboard
+            key={g.id}
+            group={g.id}
+            metric={cards[g.id]}
+            rows={rows}
+            adjust={adjust}
+            open={detail === g.id}
+            onMetric={(m) => setCard(g.id, m)}
+            onDetail={() => setDetail(detail === g.id ? null : g.id)}
+          />
+        ))}
+      </div>
+      {detail && <BoardDetail key={`${detail}:${cards[detail]}`} metric={cards[detail]} rows={rows} adjust={adjust} onClose={() => setDetail(null)} />}
+    </div>
+  );
+}
+
+/**
+ * Meses anteriores: o Ranking de um mês arquivado, com os mesmos cards e as mesmas métricas escolhidas acima. Aberto e com o mês no
+ * endereço (`month=`), para mandar o link. Vem do resumo diário, que fica guardado depois de as lutas serem apagadas.
+ */
+function MonthlySection({ filters, cards, setCard }: { filters: Filters; cards: Cards; setCard: (group: StatGroup, metric: CardMetric) => void }) {
+  const [params, setParams] = useSearchParams();
+  const open = params.has("month");
+  const months = useArchiveMonths(open);
+  const list = months.data ?? [];
+  const asked = params.get("month") ?? "";
+  // sem mês no endereço: o mais recente que já fechou; se só existe o mês em andamento, ele
+  const month = isMonth(asked) ? asked : (list.find((m) => !m.current) ?? list[0])?.month;
+  const info = list.find((m) => m.month === month);
+  const rk = useArchiveRanking(month, filters, open);
+  const adjust: TimeAdjust | undefined = rk.data ? { baseline: rk.data.baseline, refMs: rk.data.referenceMs } : undefined;
+  const setMonth = (value: string | null) =>
+    setParams(
+      (prev) => {
+        const p = new URLSearchParams(prev);
+        if (value === null) p.delete("month");
+        else p.set("month", value);
+        return p;
+      },
+      { replace: true },
+    );
+  return (
+    <Card
+      className="mt-6"
+      title={t("archive.title")}
+      action={
+        <button type="button" onClick={() => setMonth(open ? null : "")} aria-expanded={open} className="rounded-md px-2 py-1 text-xs font-medium text-gold/80 transition hover:bg-surface-2 hover:text-gold">
+          {open ? t("archive.close") : t("archive.open")}
+        </button>
+      }
+    >
+      {open && (
+        <div className="p-4">
+          {months.error && <ErrorBox error={months.error} />}
+          {months.isLoading && <Loading />}
+          {months.data && list.length === 0 && <p className="text-sm text-faint">{t("archive.empty")}</p>}
+          {month && (
+            <>
+              <div className="mb-4 flex flex-wrap items-center gap-3">
+                <Select className="w-64" value={month} onChange={(e) => setMonth(e.target.value)} aria-label={t("archive.month")}>
+                  {list.map((m) => (
+                    <option key={m.month} value={m.month}>
+                      {monthLabel(m.month)}
+                      {m.current ? ` (${t("archive.inProgress")})` : ""}
+                    </option>
+                  ))}
+                </Select>
+                {info && <span className="text-xs text-muted">{t("archive.days", { n: info.days, from: dayLabel(info.first), to: dayLabel(info.last) })}</span>}
+              </div>
+              {rk.error && <ErrorBox error={rk.error} />}
+              {rk.isLoading && <Loading />}
+              {rk.data && <CardsGrid rows={rk.data.rows} adjust={adjust} cards={cards} setCard={setCard} />}
+              <p className="mt-4 text-xs text-faint">{t("archive.note", { n: ARCHIVE_MONTHS })}</p>
+            </>
+          )}
+        </div>
+      )}
+    </Card>
+  );
+}
+
 export function OverviewPage() {
   // abre no último dia de batalha com lutas; a lista de dias é a mesma do seletor de dia (já está em cache), e as consultas esperam por
   // ela para a tela não abrir nos 30 dias e trocar de dia depois
@@ -131,7 +220,6 @@ export function OverviewPage() {
   const ready = !days.isLoading;
   const [filters, setFilters] = useFilters(overviewDefaults(days.data));
   const [cards, setCard] = useCards();
-  const [detail, setDetail] = useState<StatGroup | null>(null);
   const ov = useOverview(filters, ready);
   const rk = useRanking(filters, ready);
   const nav = useNavigate();
@@ -165,21 +253,8 @@ export function OverviewPage() {
             <Kpi label={t("overview.kpi.players")} value={int(ov.data.players)} />
           </div>
 
-          <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
-            {STAT_GROUPS.map((g) => (
-              <Leaderboard
-                key={g.id}
-                group={g.id}
-                metric={cards[g.id]}
-                rows={rk.data?.rows ?? []}
-                adjust={adjust}
-                open={detail === g.id}
-                onMetric={(m) => setCard(g.id, m)}
-                onDetail={() => setDetail(detail === g.id ? null : g.id)}
-              />
-            ))}
-          </div>
-          {detail && <BoardDetail key={`${detail}:${cards[detail]}`} metric={cards[detail]} rows={rk.data?.rows ?? []} adjust={adjust} onClose={() => setDetail(null)} />}
+          <CardsGrid className="mt-6" rows={rk.data?.rows ?? []} adjust={adjust} cards={cards} setCard={setCard} />
+          <MonthlySection filters={filters} cards={cards} setCard={setCard} />
 
           <Card
             className="mt-6"

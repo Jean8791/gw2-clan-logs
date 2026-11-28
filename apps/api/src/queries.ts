@@ -1,11 +1,13 @@
 // Consultas da API. Todas aceitam os mesmos filtros (Filters) do pacote compartilhado.
 import {
+  battleDay,
   BATTLE_DAY_SHIFT_HOURS,
   FIGHT_SORT_KEYS,
   isTagStat,
   STAT_KEYS,
   STAT_META,
   TAG_COVER,
+  type ArchiveMonth,
   type DaySummary,
   type Aggregate,
   type Fight,
@@ -152,13 +154,15 @@ const toPlayer = <T extends PlayerFight>(r: any): T => ({ ...r, commander: !!r.c
  * dividir pelas lutas) distorce. Ele vira a média ponderada pelo tempo ativo (Σ valor × tempo ÷ Σ tempo), igual ao uptime, que já é tempo
  * com o boon sobre tempo ativo. Sem tempo ativo, 0.
  */
-const aggColumn = (k: (typeof STAT_KEYS)[number]) =>
+const aggColumnOf = (k: (typeof STAT_KEYS)[number], a: "ps" | "ds") =>
   isTagStat(k)
     ? // soma sobre soma, só das lutas com o dado: Σ valor ÷ Σ coberto, reescalado para o tempo ativo (ver statSelect)
-      `COALESCE(SUM(ps.${STAT_COL[k]}) * 1.0 * SUM(ps.active_ms) / NULLIF(SUM(ps.${coverCol(k)}), 0), 0) AS "${k}"`
+      `COALESCE(SUM(${a}.${STAT_COL[k]}) * 1.0 * SUM(${a}.active_ms) / NULLIF(SUM(${a}.${coverCol(k)}), 0), 0) AS "${k}"`
     : STAT_META[k].format === "volume"
-      ? `COALESCE(SUM(ps.${STAT_COL[k]} * ps.active_ms) * 1.0 / NULLIF(SUM(ps.active_ms), 0), 0) AS "${k}"`
-      : `SUM(ps.${STAT_COL[k]}) AS "${k}"`;
+      ? // o resumo diário (ds) já guarda o boon como Σ(valor × tempo ativo); nas lutas (ps) a conta é feita aqui
+        `COALESCE(SUM(${a === "ps" ? `ps.${STAT_COL[k]} * ps.active_ms` : `ds.${STAT_COL[k]}`}) * 1.0 / NULLIF(SUM(${a}.active_ms), 0), 0) AS "${k}"`
+      : `SUM(${a}.${STAT_COL[k]}) AS "${k}"`;
+const aggColumn = (k: (typeof STAT_KEYS)[number]) => aggColumnOf(k, "ps");
 const AGG_SELECT = `COUNT(*) AS fights, SUM(ps.active_ms) AS activeMs, SUM(ps.dist_cover_ms) AS distCoverMs, SUM(ps.near_cover_ms) AS nearCoverMs, ${STAT_KEYS.map(aggColumn).join(", ")}`;
 const toAggregate = (r: any): Aggregate => {
   const a: any = { fights: r?.fights ?? 0, activeMs: r?.activeMs ?? 0, distCoverMs: r?.distCoverMs ?? 0, nearCoverMs: r?.nearCoverMs ?? 0 };
@@ -266,6 +270,67 @@ export function ranking(db: DB, fl: Filters): RankingRow[] {
       supportFights: r.supportFights,
     };
   });
+}
+
+// ---------- Arquivo mensal (resumo diário, ver archive.ts) ----------
+
+/** Meses com resumo diário, do mais novo para o mais antigo; `current` marca o mês do dia de batalha de agora. */
+export function archiveMonths(db: DB, now = new Date()): ArchiveMonth[] {
+  const current = battleDay(now.toISOString())?.slice(0, 7);
+  return (
+    db
+      .prepare(
+        `SELECT substr(day, 1, 7) AS month, COUNT(DISTINCT day) AS days, MIN(day) AS first, MAX(day) AS last, COUNT(DISTINCT account) AS players
+         FROM day_stats GROUP BY month ORDER BY month DESC`,
+      )
+      .all() as Omit<ArchiveMonth, "current">[]
+  ).map((m) => ({ ...m, current: m.month === current }));
+}
+
+/** Filtros que o resumo diário entende: modo, guilda, função e classe. Dia, período, mapa e tamanho do squad não existem nele. */
+function archiveConditions(month: string, fl: Filters): { where: string; params: Params } {
+  const where = ["substr(ds.day, 1, 7) = @month"];
+  const params: Params = { month };
+  if (fl.mode) (where.push("ds.mode = @mode"), (params.mode = fl.mode));
+  if (fl.guild === "alliance") where.push("ds.guild_id IN (SELECT id FROM guilds WHERE in_alliance = 1)");
+  else if (fl.guild) (where.push("ds.guild_id = @guild"), (params.guild = fl.guild));
+  if (fl.role) (where.push("ds.role = @role"), (params.role = fl.role));
+  if (fl.profession) (where.push("ds.profession = @profession"), (params.profession = fl.profession));
+  return { where: where.join(" AND "), params };
+}
+
+const ARCHIVE_AGG = `SUM(ds.fights) AS fights, SUM(ds.active_ms) AS activeMs, SUM(ds.dist_cover_ms) AS distCoverMs, SUM(ds.near_cover_ms) AS nearCoverMs, ${STAT_KEYS.map((k) => aggColumnOf(k, "ds")).join(", ")}`;
+
+/**
+ * O Ranking de um mês, somado do resumo diário (as lutas dele podem já ter sido apagadas pela retenção): as mesmas linhas, o mesmo
+ * cálculo de boon e de uptime e a mesma média geral que `ranking` e `baseline` dariam com as lutas dos mesmos dias.
+ */
+export function archiveRanking(db: DB, month: string, fl: Filters): { rows: RankingRow[]; baseline: Aggregate } {
+  const { where, params } = archiveConditions(month, fl);
+  // nome e guilda são os da aparição mais recente (o único MAX da consulta); '' no resumo é "sem guilda"
+  const rows = db
+    .prepare(
+      `SELECT ds.account, MAX(ds.last_seen) AS lastSeen, ds.name, NULLIF(ds.guild_id, '') AS guildId,
+              SUM(CASE WHEN ds.role = 'support' THEN ds.fights ELSE 0 END) AS supportFights, ${ARCHIVE_AGG}
+       FROM day_stats ds WHERE ${where} GROUP BY ds.account ORDER BY "damage" DESC`,
+    )
+    .all(params) as any[];
+  const classes = new Map<string, ProfessionCount[]>();
+  const perClass = db
+    .prepare(
+      `SELECT ds.account, ds.profession, SUM(ds.fights) AS fights FROM day_stats ds
+       WHERE ${where} AND ds.profession <> '' GROUP BY ds.account, ds.profession ORDER BY fights DESC, MAX(ds.last_seen) DESC`,
+    )
+    .all(params) as { account: string; profession: string; fights: number }[];
+  for (const c of perClass) classes.set(c.account, [...(classes.get(c.account) ?? []), { profession: c.profession, fights: c.fights }]);
+  const baseline = toAggregate(db.prepare(`SELECT ${ARCHIVE_AGG} FROM day_stats ds WHERE ${where}`).get(params));
+  return {
+    rows: rows.map((r) => {
+      const professions = classes.get(r.account) ?? [];
+      return { ...toAggregate(r), account: r.account, name: r.name, profession: professions[0]?.profession ?? null, professions, guildId: r.guildId, supportFights: r.supportFights };
+    }),
+    baseline,
+  };
 }
 
 /** Soma de todas as linhas de jogador com os filtros (base para "média do squad" por minuto). */

@@ -92,6 +92,13 @@ export function instantToLocal(value: string | undefined, isEnd = false): string
 
 export const accountShort = (account: string) => account.replace(/\.\d{4}$/, "");
 
+/** "2026-11" → "Novembro de 2026". */
+export function monthLabel(month: string): string {
+  const [y, m] = month.split("-").map(Number);
+  const s = new Date(Date.UTC(y!, m! - 1, 1)).toLocaleDateString(locale(), { month: "long", year: "numeric", timeZone: "UTC" });
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
 /** "2026-11-12" → "qui, 12/11" (o dia de batalha, ver battleDay em shared). */
 export const dayLabel = (day: string) =>
   new Date(`${day}T12:00:00Z`).toLocaleDateString(locale(), { weekday: "short", day: "2-digit", month: "2-digit", timeZone: "UTC" }).replace(".", "");
