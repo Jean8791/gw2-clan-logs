@@ -19,7 +19,8 @@ flock -n 9 || { echo "$(date -u +%FT%TZ) outro envio já está rodando; saindo";
 
 command -v rclone >/dev/null || { echo "rclone não está instalado" >&2; exit 1; }
 # o -wal e o -shm nascem quando a cópia é aberta para conferir a integridade
-trap 'docker compose exec -T app rm -f "$TMP" "$TMP-wal" "$TMP-shm" "$TMP-journal" </dev/null || true' EXIT
+LOCAL="$(mktemp)" # cópia no disco da VM: o rclone copyto tenta de novo; o rcat lendo de um pipe não pode
+trap 'rm -f "$LOCAL"; docker compose exec -T app rm -f "$TMP" "$TMP-wal" "$TMP-shm" "$TMP-journal" </dev/null || true' EXIT
 
 echo "$(date -u +%FT%TZ) início: $NOME"
 rclone lsd "$REMOTE" >/dev/null # falha cedo se o Drive ou a credencial não responderem
@@ -49,7 +50,9 @@ new Database("/data/gw2logs-v2.db", { readonly: true })
 
 # 2) envia (cifrado) e 3) confere que o tamanho no Drive é o da cópia
 TAMANHO="$(docker compose exec -T app stat -c %s "$TMP" </dev/null | tr -d '\r')"
-docker compose exec -T app cat "$TMP" </dev/null | rclone rcat "${REMOTE}${NOME}"
+# o Drive responde 403 de cota por minuto quando o projeto compartilhado do rclone está cheio: repete com pausa
+docker compose exec -T app cat "$TMP" </dev/null >"$LOCAL"
+rclone copyto "$LOCAL" "${REMOTE}${NOME}" --retries 6 --retries-sleep 120s --low-level-retries 20
 NO_DRIVE="$(rclone size "${REMOTE}${NOME}" --json | grep -oE '"bytes": *[0-9]+' | grep -oE '[0-9]+$')"
 [ "$TAMANHO" = "$NO_DRIVE" ] || { echo "tamanho diferente: cópia $TAMANHO, Drive $NO_DRIVE" >&2; exit 1; }
 
