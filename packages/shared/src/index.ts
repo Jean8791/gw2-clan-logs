@@ -600,16 +600,63 @@ export const isShortParticipation = (activeMs: number): boolean => activeMs < SH
  */
 export const ROLE_MIN_ACTIVE_MS = 60_000;
 
-/** Valor por segundo de tempo ativo em luta (o "DPS"). */
+// ---------- Cards da Visão geral ----------
+
+/** Cura + barreira: métrica só dos cards (a soma é calculada na tela, sem coluna própria), por isso vale também para lutas antigas. */
+export const HEALING_BARRIER = "healingBarrier";
+export type CardMetric = StatKey | typeof HEALING_BARRIER;
+/** A métrica de cada card; há um card por grupo do Ranking. */
+export type Cards = Record<StatGroup, CardMetric>;
+
+/** O que cada card mostra para quem nunca escolheu: o padrão de cada grupo. */
+export const DEFAULT_CARDS: Cards = { offense: "damage", support: "healing", boons: "stabOut", uptime: "stabUp", defense: "dodges" };
+
+/** As métricas que o seletor de um card oferece: as do grupo (nos boons, as do alcance pedido) e, no Suporte, Cura + barreira no fim. */
+export function cardOptions(group: StatGroup, scope: BoonScope = "squad"): CardMetric[] {
+  const keys: CardMetric[] = statsOfGroup(group, scope);
+  return group === "support" ? [...keys, HEALING_BARRIER] : keys;
+}
+
+const isCardMetric = (group: StatGroup, metric: string): metric is CardMetric =>
+  metric === HEALING_BARRIER ? group === "support" : (STAT_KEYS as readonly string[]).includes(metric) && STAT_META[metric as StatKey].group === group;
+
+/** Lê o `cards` do link (`grupo:métrica,grupo:métrica`): o que for inválido, de outro grupo ou repetido de forma estranha é descartado. */
+export function parseCards(raw: string | null | undefined): Partial<Cards> {
+  const cards: Partial<Cards> = {};
+  if (!raw || raw.length > 300) return cards;
+  for (const part of raw.split(",")) {
+    const [group, metric] = part.split(":");
+    const known = STAT_GROUPS.find((g) => g.id === group);
+    if (known && metric && isCardMetric(known.id, metric)) cards[known.id] = metric;
+  }
+  return cards;
+}
+
+export const resolveCards = (chosen: Partial<Cards>): Cards => ({ ...DEFAULT_CARDS, ...chosen });
+
+/** Só o que difere do padrão: o link fica curto e quem nunca escolheu segue o padrão. */
+export const serializeCards = (cards: Cards): string =>
+  STAT_GROUPS.filter((g) => cards[g.id] !== DEFAULT_CARDS[g.id])
+    .map((g) => `${g.id}:${cards[g.id]}`)
+    .join(",");
+
+/** Contagem (dano, cura, strips…) mostra por minuto de tempo ativo; boon e uptime já são valor por tempo. Cura + barreira é contagem. */
+export const isCardRate = (metric: CardMetric): boolean => metric === HEALING_BARRIER || !isTimeBased(metric);
+
+/** Para métricas em que menos é melhor (mortes, dano recebido) o top vai do menor para o maior. */
+export const cardHigherIsBetter = (metric: CardMetric): boolean => metric === HEALING_BARRIER || STAT_META[metric].higherIsBetter;
+
 /**
- * Os `n` jogadores com mais `key` por minuto de tempo ativo, do maior para o menor. Ignora quem lutou menos de `minActiveMs`
- * (quem apareceu 10 s) e quem tem zero. O cartão do top 5 e o painel do top 10 usam esta mesma conta.
+ * Os `n` do topo de um card, com o valor mostrado: por minuto nas contagens; nos boons e no uptime, o valor ajustado pelo tempo jogado
+ * (o mesmo do Ranking, com `adjust`). Fica de fora quem lutou menos de `minActiveMs` e quem tem zero (sem dado, ou sem nenhuma morte
+ * quando menos é melhor): zero não é um resultado a premiar.
  */
-export function topByRate<T extends Stats & { activeMs: number }>(rows: T[], key: StatKey, n: number, minActiveMs: number): { row: T; perMin: number }[] {
+export function topByCard<T extends Stats & { activeMs: number }>(rows: T[], metric: CardMetric, n: number, minActiveMs: number, adjust?: TimeAdjust): { row: T; value: number }[] {
+  const higher = cardHigherIsBetter(metric);
   return rows
-    .filter((r) => r.activeMs >= minActiveMs && r[key] > 0)
-    .map((row) => ({ row, perMin: perMinute(row[key], row.activeMs) }))
-    .sort((a, b) => b.perMin - a.perMin)
+    .filter((r) => r.activeMs >= minActiveMs && (metric === HEALING_BARRIER ? r.healing + r.barrier : r[metric]) > 0)
+    .map((row) => ({ row, value: metric === HEALING_BARRIER ? perMinute(row.healing + row.barrier, row.activeMs) : statValue(metric, "perMin", row, adjust) }))
+    .sort((a, b) => (higher ? b.value - a.value : a.value - b.value))
     .slice(0, n);
 }
 
