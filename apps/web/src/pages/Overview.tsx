@@ -1,13 +1,12 @@
-import { ArrowRight, X } from "lucide-react";
+import { X } from "lucide-react";
 import { useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import {
   ARCHIVE_MONTHS, cardHigherIsBetter, cardOptions, cardUnit, HEALING_BARRIER, isCardRate, isMonth, overviewDefaults, perSecond, ROUTES, STAT_GROUPS, statText, topByCard,
   type CardMetric, type Cards, type Filters, type RankingRow, type StatGroup, type StatKey, type TimeAdjust,
 } from "@gw2logs/shared";
 import { DataTable, type Column } from "../components/DataTable";
 import { FilterBar } from "../components/FilterBar";
-import { FightStatus, fightKills, KillDeath, SquadVsEnemy, Won } from "../components/FightBits";
 import { GuildTag, PlayerLink, Profession, ProfessionDot } from "../components/badges";
 import { Card, Empty, ErrorBox, Kpi, Loading, PageHeader, Select, cx } from "../components/ui";
 import { useArchiveMonths, useArchiveRanking, useDays, useOverview, useRanking } from "../lib/api";
@@ -120,8 +119,8 @@ function BoardDetail({ metric, rows, adjust, onClose }: { metric: CardMetric; ro
 }
 
 /** Os cinco cards (um por grupo de métricas) e o top 10 do que estiver aberto; serve para o período escolhido e para um mês arquivado. */
-function CardsGrid({ rows, adjust, cards, setCard, className }: { rows: RankingRow[]; adjust?: TimeAdjust; cards: Cards; setCard: (group: StatGroup, metric: CardMetric) => void; className?: string }) {
-  const [detail, setDetail] = useState<StatGroup | null>(null);
+function CardsGrid({ rows, adjust, cards, setCard, className, initialDetail = null }: { rows: RankingRow[]; adjust?: TimeAdjust; cards: Cards; setCard: (group: StatGroup, metric: CardMetric) => void; className?: string; initialDetail?: StatGroup | null }) {
+  const [detail, setDetail] = useState<StatGroup | null>(initialDetail);
   return (
     <div className={className}>
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
@@ -217,8 +216,7 @@ export function OverviewPage() {
   const [cards, setCard] = useCards();
   const ov = useOverview(filters, ready);
   const rk = useRanking(filters, ready);
-  const nav = useNavigate();
-  // boons e uptime saem ajustados pelo tempo jogado, o mesmo número do Ranking com estes filtros
+    // boons e uptime saem ajustados pelo tempo jogado, o mesmo número do Ranking com estes filtros
   const adjust: TimeAdjust | undefined = rk.data ? { baseline: rk.data.baseline, refMs: rk.data.referenceMs } : undefined;
 
   return (
@@ -248,40 +246,8 @@ export function OverviewPage() {
             <Kpi label={t("overview.kpi.players")} value={int(ov.data.players)} />
           </div>
 
-          <CardsGrid className="mt-6" rows={rk.data?.rows ?? []} adjust={adjust} cards={cards} setCard={setCard} />
+          <CardsGrid className="mt-6" initialDetail="offense" rows={rk.data?.rows ?? []} adjust={adjust} cards={cards} setCard={setCard} />
           <MonthlySection filters={filters} cards={cards} setCard={setCard} />
-
-          <Card
-            className="mt-6"
-            title={t("overview.recent")}
-            action={
-              <Link to={ROUTES.fights} className="inline-flex items-center gap-1 text-xs font-medium text-gold hover:underline">
-                {t("overview.seeAll")} <ArrowRight className="size-3" />
-              </Link>
-            }
-          >
-            <ul className="divide-y divide-line/60">
-              {ov.data.recent.map((f) => (
-                <li key={f.id}>
-                  <button onClick={() => nav(ROUTES.fight(f.id))} className="grid w-full grid-cols-[auto_1fr_auto] items-center gap-x-4 gap-y-1 px-5 py-3 text-left hover:bg-surface-2/60 sm:grid-cols-[auto_1.4fr_1fr_1fr_auto]">
-                    <Won fight={f} />
-                    <div className="min-w-0">
-                      <div className="truncate font-medium">{f.fightName}</div>
-                      <div className="text-xs text-faint">{dateTime(f.timeStart)} · {duration(f.durationMs)}</div>
-                    </div>
-                    <div className="hidden sm:block">
-                      <SquadVsEnemy fight={f} />
-                    </div>
-                    <div className="hidden text-sm text-muted sm:block">{t("overview.damage", { value: compact(f.squadDamage) })}</div>
-                    <div className="flex items-center gap-2">
-                      <FightStatus fight={f} />
-                      <KillDeath kills={fightKills(f)} deaths={f.squadDeaths} />
-                    </div>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </Card>
 
           {rk.data && rk.data.rows.length > 0 && (
             <Card className="mt-6" title={t("overview.mostActive")}>
