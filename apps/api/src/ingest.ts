@@ -12,6 +12,18 @@ export interface ExtractedSkill {
   connectedHits: number;
 }
 
+/** Cura ou barreira de uma habilidade (Healing Stats). `indirect`: o id é de um buff (cura que vem de um efeito, como Regeneração). */
+export interface ExtractedSupportSkill {
+  id: number;
+  name: string | null;
+  kind: "heal" | "barrier";
+  amount: number;
+  /** parte da cura que foi em jogadores caídos (a barreira não tem) */
+  downedAmount: number;
+  hits: number;
+  indirect: boolean;
+}
+
 export interface ExtractedPlayer extends Stats {
   account: string;
   name: string | null;
@@ -26,6 +38,7 @@ export interface ExtractedPlayer extends Stats {
   distCoverMs: number;
   nearCoverMs: number;
   skills: ExtractedSkill[];
+  supportSkills: ExtractedSupportSkill[];
 }
 
 export interface ExtractedFight {
@@ -298,6 +311,7 @@ export function extractFight(r: J): ExtractedFight {
       distCoverMs: tag.distCoverMs,
       nearCoverMs: tag.nearCoverMs,
       skills: skillDamage(p, targetIdx, skillMap, buffMap),
+      supportSkills: supportSkills(p, skillMap, buffMap),
     };
   });
 
@@ -337,7 +351,7 @@ function mergeSameAccount(players: ExtractedPlayer[]): ExtractedPlayer[] {
   return [...byAccount.values()].map((group) => {
     if (group.length === 1) return group[0]!;
     const main = group.reduce((a, b) => (b.activeMs > a.activeMs ? b : a));
-    const merged: ExtractedPlayer = { ...main, activeMs: 0, commander: group.some((p) => p.commander), skills: [] };
+    const merged: ExtractedPlayer = { ...main, activeMs: 0, commander: group.some((p) => p.commander), skills: [], supportSkills: [] };
     for (const k of STAT_KEYS) merged[k] = group.reduce((a, p) => a + p[k], 0);
     merged.activeMs = group.reduce((a, p) => a + p.activeMs, 0);
     merged.distCoverMs = group.reduce((a, p) => a + p.distCoverMs, 0);
@@ -352,6 +366,17 @@ function mergeSameAccount(players: ExtractedPlayer[]): ExtractedPlayer[] {
       skills.set(sk.id, cur);
     }
     merged.skills = [...skills.values()];
+    const support = new Map<string, ExtractedSupportSkill>();
+    for (const sk of group.flatMap((p) => p.supportSkills)) {
+      const key = `${sk.kind}:${sk.indirect}:${sk.id}`;
+      const cur = support.get(key) ?? { ...sk, amount: 0, downedAmount: 0, hits: 0 };
+      cur.amount += sk.amount;
+      cur.downedAmount += sk.downedAmount;
+      cur.hits += sk.hits;
+      cur.name ??= sk.name;
+      support.set(key, cur);
+    }
+    merged.supportSkills = [...support.values()];
     return merged;
   });
 }
@@ -378,6 +403,33 @@ function skillDamage(p: J, targetIdx: number[], skillMap: J, buffMap: J): Extrac
     }
   }
   return [...sum.values()].filter((s) => s.damage > 0);
+}
+
+/**
+ * Cura e barreira por habilidade, da distribuição do Healing Stats (`totalHealingDist` e `totalBarrierDist`, fase 0). A soma bate com a cura
+ * e a barreira totais do jogador, que não incluem a cura dos minions: por isso eles ficam de fora aqui também (conferido em logs do EI 3.32).
+ * A habilidade indireta tem id de buff, então o nome vem do `buffMap`. Sem Healing Stats o jogador não tem esses blocos e a lista sai vazia.
+ */
+function supportSkills(p: J, skillMap: J, buffMap: J): ExtractedSupportSkill[] {
+  const nameOf = (id: number, indirect: boolean) => {
+    const [first, second] = indirect ? [buffMap[`b${id}`], skillMap[`s${id}`]] : [skillMap[`s${id}`], buffMap[`b${id}`]];
+    return str(first, "name") ?? str(second, "name");
+  };
+  const phase0 = (owner: unknown, field: string): J[] => {
+    const first = arr(owner, field)[0] as unknown;
+    return Array.isArray(first) ? first : [];
+  };
+  const heals = phase0(p.extHealingStats, "totalHealingDist").map((d): ExtractedSupportSkill => {
+    const id = num(d, "id");
+    const indirect = d.indirectHealing === true;
+    return { id, name: nameOf(id, indirect), kind: "heal", amount: num(d, "totalHealing"), downedAmount: num(d, "totalDownedHealing"), hits: num(d, "hits"), indirect };
+  });
+  const barriers = phase0(p.extBarrierStats, "totalBarrierDist").map((d): ExtractedSupportSkill => {
+    const id = num(d, "id");
+    const indirect = d.indirectBarrier === true;
+    return { id, name: nameOf(id, indirect), kind: "barrier", amount: num(d, "totalBarrier"), downedAmount: 0, hits: num(d, "hits"), indirect };
+  });
+  return [...heals, ...barriers].filter((s) => s.amount > 0 || s.downedAmount > 0);
 }
 
 /**
