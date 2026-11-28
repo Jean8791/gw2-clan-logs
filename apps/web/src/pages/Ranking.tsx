@@ -1,28 +1,37 @@
 import { GitCompareArrows, Link2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { filtersToQuery, PAGE_SIZE, ROUTES, type BoonScope, type RankingRow, type StatGroup } from "@gw2logs/shared";
+import { boonViewKeys, BOON_VIEW_BASES, filtersToQuery, PAGE_SIZE, ROUTES, statsOfGroup, statText, STAT_KEYS, type BoonScope, type BoonViewBase, type RankingRow, type StatGroup, type StatKey } from "@gw2logs/shared";
 import { DataTable, type Column } from "../components/DataTable";
 import { FilterBar } from "../components/FilterBar";
-import { defaultSort, GroupTabs, pickerView, ModeToggle, statColumns, type ValueMode } from "../components/statColumns";
+import { defaultSort, GroupTabs, pickerView, ModeToggle, statColumnsFor, type ValueMode } from "../components/statColumns";
 import { GuildTag, NoAllianceNote, PlayerLink, Profession } from "../components/badges";
 import { Button, Card, Empty, ErrorBox, Loading, PageHeader, Select } from "../components/ui";
 import { useRanking } from "../lib/api";
 import { useFilters, useMe } from "../lib/hooks";
 import { duration } from "../lib/format";
-import { t } from "../lib/i18n";
+import { getLang, t } from "../lib/i18n";
+
+/** Nome do boon sem o "% " dos uptimes (swiftness, vigor e regeneração só têm a métrica de uptime). */
+const boonName = (b: BoonViewBase) => statText(((STAT_KEYS as readonly string[]).includes(`${b}Out`) ? `${b}Out` : `${b}Up`) as StatKey, getLang()).label.replace(/^% /, "");
 
 export function RankingPage() {
   const [filters, setFilters] = useFilters({ mode: "wvw" });
   const { data, error, isLoading } = useRanking(filters);
   const [group, setGroup] = useState<StatGroup>("offense");
   const [scope, setScope] = useState<BoonScope>("squad");
+  const [boon, setBoon] = useState<BoonViewBase | "all">("all");
   const [mode, setMode] = useState<ValueMode>("total");
   const [minMinutes, setMinMinutes] = useState(2);
   const [selected, setSelected] = useState<string[]>([]);
   const [copied, setCopied] = useState(false);
   const me = useMe();
   const nav = useNavigate();
+
+  // com um boon escolhido, a tabela mostra as métricas dele lado a lado (volume para squad, grupo e si, uptime e uptime no grupo)
+  const oneBoon = group === "boons" && boon !== "all";
+  const keys: StatKey[] = oneBoon ? boonViewKeys(boon) : statsOfGroup(group, scope);
+  const sort = oneBoon ? { id: (keys.find((k) => k.endsWith("GroupUp")) ?? keys[0]!) as StatKey, desc: true } : defaultSort(group, scope);
 
   const rows = useMemo(() => (data?.rows ?? []).filter((r) => r.activeMs >= minMinutes * 60000), [data, minMinutes]);
 
@@ -80,7 +89,7 @@ export function RankingPage() {
       sort: (r) => r.supportFights / r.fights,
       cell: (r) => <span className="text-muted">{Math.round((r.supportFights / r.fights) * 100)}%</span>,
     },
-    ...statColumns(group, mode, rows, scope, data ? { baseline: data.baseline, refMs: data.referenceMs } : undefined),
+    ...statColumnsFor(keys, mode, rows, data ? { baseline: data.baseline, refMs: data.referenceMs } : undefined),
   ];
 
   const copyLink = async () => {
@@ -108,7 +117,17 @@ export function RankingPage() {
 
       <Card className="flex min-h-0 flex-1 flex-col">
         <div className="flex flex-wrap items-center gap-3 border-b border-line px-4 py-3">
-          <GroupTabs value={group} onChange={setGroup} scope={scope} onScopeChange={setScope} />
+          <GroupTabs value={group} onChange={setGroup} scope={scope} onScopeChange={setScope} showScope={!oneBoon} />
+          {group === "boons" && (
+            <Select className="w-48" value={boon} onChange={(e) => setBoon(e.target.value as BoonViewBase | "all")} aria-label={t("ranking.boon.label")}>
+              <option value="all">{t("ranking.boon.all")}</option>
+              {BOON_VIEW_BASES.map((b) => (
+                <option key={b} value={b}>
+                  {boonName(b)}
+                </option>
+              ))}
+            </Select>
+          )}
           {group !== "boons" && group !== "uptime" && <ModeToggle value={mode} onChange={setMode} />}
           <Select className="w-56" value={String(minMinutes)} onChange={(e) => setMinMinutes(Number(e.target.value))} aria-label={t("ranking.minTime")}>
             <option value="0">{t("ranking.minTime.any")}</option>
@@ -148,12 +167,12 @@ export function RankingPage() {
           </Empty>}
         {data && rows.length > 0 && (
           <DataTable
-            key={`${group}-${scope}`}
-            pickerKey={`ranking:${pickerView(group, scope)}`}
+            key={`${group}-${scope}-${oneBoon ? boon : "all"}`}
+            pickerKey={`ranking:${pickerView(group, scope, oneBoon)}`}
             rows={rows}
             columns={columns}
             rowKey={(r) => r.account}
-            initialSort={defaultSort(group, scope)}
+            initialSort={sort}
             pageSize={PAGE_SIZE}
             fill
             rowClassName={(r) => (r.account === me ? "bg-gold/5" : selected.includes(r.account) ? "bg-info/5" : undefined)}

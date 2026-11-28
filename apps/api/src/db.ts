@@ -171,8 +171,11 @@ function migrate(db: DB) {
   // CREATE TABLE IF NOT EXISTS não mexe numa tabela que já existe: métricas novas precisam de ALTER TABLE.
   // Os nomes das colunas vêm de STAT_KEYS (código), nunca de entrada do usuário.
   const have = new Set((db.pragma("table_info(player_stats)") as { name: string }[]).map((c) => c.name));
+  let addedGroupUptime = false;
   for (const k of STAT_KEYS) {
-    if (!have.has(STAT_COL[k])) db.exec(`ALTER TABLE player_stats ADD COLUMN ${STAT_COL[k]} REAL NOT NULL DEFAULT 0`);
+    if (have.has(STAT_COL[k])) continue;
+    db.exec(`ALTER TABLE player_stats ADD COLUMN ${STAT_COL[k]} REAL NOT NULL DEFAULT 0`);
+    if (k.endsWith("GroupUp")) addedGroupUptime = true;
   }
   for (const col of ["dist_cover_ms", "near_cover_ms"]) {
     if (!have.has(col)) db.exec(`ALTER TABLE player_stats ADD COLUMN ${col} REAL NOT NULL DEFAULT 0`);
@@ -195,6 +198,7 @@ function migrate(db: DB) {
     db.exec("ALTER TABLE users ADD COLUMN verified_at TEXT");
     db.prepare("UPDATE users SET verified_at = ?").run(new Date().toISOString());
   }
+  if (addedGroupUptime) backfillGroupUptime(db);
   dropGlobalShaUnique(db);
   db.exec(`
     CREATE INDEX IF NOT EXISTS ix_fights_time ON fights(time_start);
@@ -202,6 +206,27 @@ function migrate(db: DB) {
     CREATE INDEX IF NOT EXISTS ix_fights_owner ON fights(owner_id);
     CREATE UNIQUE INDEX IF NOT EXISTS ux_fights_owner_sha ON fights(owner_id, sha256);
   `);
+}
+
+/**
+ * O uptime no grupo (`<boon>GroupUp`) sai do uptime e do grupo de cada jogador, que já estavam no banco: as lutas anteriores à métrica são
+ * preenchidas uma vez, quando as colunas nascem. Os dias ainda abertos do resumo diário são refeitos com a métrica; os congelados não (as
+ * lutas deles já foram apagadas). A conta é a mesma de ingest.ts: Σ uptime do grupo ÷ Σ tempo ativo do grupo × tempo ativo do jogador.
+ */
+function backfillGroupUptime(db: DB) {
+  const pairs = STAT_KEYS.filter((k) => k.endsWith("GroupUp")).map((k) => ({ up: STAT_COL[k.replace("GroupUp", "Up") as StatKey], groupUp: STAT_COL[k] }));
+  db.transaction(() => {
+    db.exec(
+      `CREATE TEMP TABLE grupo_uptime AS SELECT fight_id, grp, SUM(active_ms) AS active, ${pairs.map((p) => `SUM(${p.up}) AS ${p.up}`).join(", ")}
+       FROM player_stats WHERE grp IS NOT NULL GROUP BY fight_id, grp`,
+    );
+    db.exec(
+      `UPDATE player_stats SET ${pairs.map((p) => `${p.groupUp} = g.${p.up} * 1.0 / g.active * player_stats.active_ms`).join(", ")}
+       FROM grupo_uptime g WHERE g.fight_id = player_stats.fight_id AND g.grp = player_stats.grp AND g.active > 0`,
+    );
+    db.exec("DROP TABLE grupo_uptime");
+    db.exec("DELETE FROM day_snapshots WHERE frozen = 0");
+  })();
 }
 
 /**

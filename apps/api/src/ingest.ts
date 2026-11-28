@@ -75,8 +75,13 @@ const BOON_VOLUMES: [string, Record<number, keyof Stats>][] = [
 
 /** Boons cujo uptime recebido guardamos (a média de pilhas do might, mightStacks, sai do mesmo buff). */
 const UPTIME_BOONS: Record<number, keyof Stats> = Object.fromEntries(
-  STAT_KEYS.flatMap((k) => (STAT_META[k].group === "uptime" && STAT_META[k].format === "pct" && STAT_META[k].buffId ? [[STAT_META[k].buffId, k]] : [])),
+  STAT_KEYS.flatMap((k) =>
+    // a versão do grupo (`<boon>GroupUp`) tem o mesmo buff, mas não vem do log: é calculada depois, a partir do uptime de cada um
+    STAT_META[k].group === "uptime" && STAT_META[k].format === "pct" && STAT_META[k].buffId && !STAT_META[k].scope ? [[STAT_META[k].buffId, k]] : [],
+  ),
 );
+/** O uptime de cada boon e o dele no grupo: `stabUp` → `stabGroupUp`. */
+const GROUP_UPTIME: [up: keyof Stats, groupUp: keyof Stats][] = STAT_KEYS.filter((k) => k.endsWith("GroupUp")).map((k) => [k.replace("GroupUp", "Up") as keyof Stats, k]);
 const MIGHT_ID = STAT_META.mightStacks.buffId!;
 
 const SUPPORT_BOONS: (keyof Stats)[] = ["stabOut", "protOut", "aegisOut", "resistOut", "resolOut", "quickOut", "alacOut"];
@@ -316,6 +321,7 @@ export function extractFight(r: J): ExtractedFight {
   });
 
   const players = mergeSameAccount(instances);
+  addGroupUptime(players);
   classifyRoles(players);
 
   const sum = (k: keyof Stats) => players.reduce((a, p) => a + p[k], 0);
@@ -403,6 +409,24 @@ function skillDamage(p: J, targetIdx: number[], skillMap: J, buffMap: J): Extrac
     }
   }
   return [...sum.values()].filter((s) => s.damage > 0);
+}
+
+/**
+ * O uptime médio do grupo de cada jogador: a média do uptime dos jogadores do mesmo grupo do squad (ele incluído), ponderada pelo tempo
+ * ativo, guardada como os outros uptimes: ms com o boon sobre o tempo ativo do próprio jogador (a % é Σ ms ÷ Σ tempo). Sem grupo no log, zero.
+ * Mede o resultado do grupo, não só o que o jogador faz.
+ */
+function addGroupUptime(players: ExtractedPlayer[]) {
+  const groups = new Map<number, ExtractedPlayer[]>();
+  for (const p of players) if (p.group !== null) groups.set(p.group, [...(groups.get(p.group) ?? []), p]);
+  for (const members of groups.values()) {
+    const active = members.reduce((a, p) => a + p.activeMs, 0);
+    if (active <= 0) continue;
+    for (const [up, groupUp] of GROUP_UPTIME) {
+      const share = members.reduce((a, p) => a + p[up], 0) / active;
+      for (const p of members) p[groupUp] = share * p.activeMs;
+    }
+  }
 }
 
 /**

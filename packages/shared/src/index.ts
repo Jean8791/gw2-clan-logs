@@ -10,7 +10,7 @@ export * from "./pagination.js";
 export * from "./fit-height.js";
 export * from "./search.js";
 export * from "./retention.js";
-import { BOON_BASES, type ScopedKey } from "./boons.js";
+import { BOON_BASES, GROUP_UP_BASES, type GroupUpKey, type ScopedKey } from "./boons.js";
 
 export type Mode = "wvw" | "pve";
 export type Role = "dps" | "support";
@@ -89,6 +89,19 @@ export const STAT_KEYS = [
   "swiftUp",
   "vigorUp",
   "regenUp",
+  // o uptime médio do grupo do jogador (quem está no mesmo grupo do squad, ele incluído), na mesma conta: ms com o boon sobre o tempo ativo dele
+  "stabGroupUp",
+  "quickGroupUp",
+  "alacGroupUp",
+  "protGroupUp",
+  "mightGroupUp",
+  "aegisGroupUp",
+  "resistGroupUp",
+  "resolGroupUp",
+  "furyGroupUp",
+  "swiftGroupUp",
+  "vigorGroupUp",
+  "regenGroupUp",
   "mightStacks",
   // posição em relação à tag (o comandante), só nos logs com o replay do Elite Insights: tempo perto (ms) e distância × tempo (ms)
   "tagNear",
@@ -122,7 +135,7 @@ export interface StatMeta {
   scope?: BoonScope;
 }
 
-const BASE_META: Record<Exclude<StatKey, ScopedKey>, StatMeta> = {
+const BASE_META: Record<Exclude<StatKey, ScopedKey | GroupUpKey>, StatMeta> = {
   damage: { label: "Dano", short: "Dano", group: "offense", higherIsBetter: true, format: "int", hint: "Dano em jogadores inimigos (WvW) ou no alvo (PvE)" },
   powerDamage: { label: "Dano físico", short: "Físico", group: "offense", higherIsBetter: true, format: "int" },
   condiDamage: { label: "Dano de condição", short: "Condi", group: "offense", higherIsBetter: true, format: "int" },
@@ -192,7 +205,19 @@ const scopedMeta = (): Record<ScopedKey, StatMeta> =>
     ),
   ) as Record<ScopedKey, StatMeta>;
 
-export const STAT_META: Record<StatKey, StatMeta> = { ...BASE_META, ...scopedMeta() };
+const GROUP_UP_HINT =
+  "Uptime médio do grupo do jogador (quem está no mesmo grupo do squad, ele incluído), sobre o tempo ativo dele. Mede o resultado do grupo, não só o que o jogador faz: dois suportes no mesmo grupo têm o mesmo valor";
+
+/** Cada uptime ganha a versão do grupo, com o mesmo boon e ícone; fica no grupo Uptime e não conta como alcance dos boons. */
+const groupUpMeta = (): Record<GroupUpKey, StatMeta> =>
+  Object.fromEntries(
+    GROUP_UP_BASES.map((b) => {
+      const up = BASE_META[`${b}Up`];
+      return [`${b}GroupUp`, { ...up, label: `${up.label} no grupo`, short: `${up.short} grupo`, scope: "group", hint: GROUP_UP_HINT }];
+    }),
+  ) as Record<GroupUpKey, StatMeta>;
+
+export const STAT_META: Record<StatKey, StatMeta> = { ...BASE_META, ...scopedMeta(), ...groupUpMeta() };
 
 export const STAT_GROUPS: { id: StatGroup; label: string }[] = [
   { id: "offense", label: "Dano" },
@@ -245,6 +270,16 @@ export function uptimeValue(k: StatKey, ms: number, activeMs: number): number {
 /** Métricas de um grupo; na aba Boons, só as do alcance pedido (squad por padrão). */
 export const statsOfGroup = (g: StatGroup, scope: BoonScope = "squad"): StatKey[] =>
   STAT_KEYS.filter((k) => STAT_META[k].group === g && (g !== "boons" || (STAT_META[k].scope ?? "squad") === scope));
+
+/** Os boons que a aba Boons deixa escolher: os com volume gerado e os que só têm uptime (swiftness, vigor e regeneração). */
+export const BOON_VIEW_BASES = [...BOON_BASES, "swift", "vigor", "regen"] as const;
+export type BoonViewBase = (typeof BOON_VIEW_BASES)[number];
+
+/** As métricas de um boon lado a lado: volume gerado (squad, grupo, si), uptime recebido e uptime no grupo; só as que existem. */
+export function boonViewKeys(base: BoonViewBase): StatKey[] {
+  const all = STAT_KEYS as readonly string[];
+  return [`${base}Out`, `${base}Group`, `${base}Self`, `${base}Up`, `${base}GroupUp`].filter((k): k is StatKey => all.includes(k));
+}
 
 /** Primeira métrica de um grupo (nos boons, no alcance pedido): para onde o gráfico vai quando o grupo muda. */
 export const metricForGroup = (g: StatGroup, scope: BoonScope = "squad"): StatKey => statsOfGroup(g, scope)[0]!;

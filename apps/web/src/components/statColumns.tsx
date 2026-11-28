@@ -12,7 +12,12 @@ export type { ValueMode };
  * uptime são ajustados pelo tempo jogado (puxados para a média geral de quem jogou menos que a referência do período).
  */
 export function statColumns<T extends Stats & { activeMs: number }>(group: StatGroup, mode: ValueMode, rows: T[], scope: BoonScope = "squad", adjust?: TimeAdjust): Column<T>[] {
-  return statsOfGroup(group, scope).map((k: StatKey) => {
+  return statColumnsFor(statsOfGroup(group, scope), mode, rows, adjust);
+}
+
+/** As colunas de uma lista de métricas (um grupo inteiro, ou as de um boon só), na ordem dada. */
+export function statColumnsFor<T extends Stats & { activeMs: number }>(keys: StatKey[], mode: ValueMode, rows: T[], adjust?: TimeAdjust): Column<T>[] {
+  return keys.map((k: StatKey) => {
     const meta = STAT_META[k];
     const text = statText(k, getLang());
     // uptime é % do tempo ativo (ou média de pilhas) nos dois modos: o "por minuto" não se aplica
@@ -64,15 +69,15 @@ export const defaultSort = (group: StatGroup, scope: BoonScope): { id: StatKey; 
   desc: group !== "defense",
 });
 
-/** Chave do seletor de colunas: nos boons, cada alcance tem a sua. */
-export const pickerView = (group: StatGroup, scope: BoonScope) => (group === "boons" ? `${group}-${scope}` : group);
+/** Chave do seletor de colunas: nos boons, cada alcance tem a sua, e a visão de um boon só tem outra. */
+export const pickerView = (group: StatGroup, scope: BoonScope, oneBoon = false) => (group === "boons" ? (oneBoon ? "boons-one" : `${group}-${scope}`) : group);
 
 /** Abas dos grupos de métricas; na aba Boons aparece também a escolha do alcance (squad, grupo ou próprio). */
-export function GroupTabs({ value, onChange, scope, onScopeChange }: { value: StatGroup; onChange: (g: StatGroup) => void; scope: BoonScope; onScopeChange: (s: BoonScope) => void }) {
+export function GroupTabs({ value, onChange, scope, onScopeChange, showScope = true }: { value: StatGroup; onChange: (g: StatGroup) => void; scope: BoonScope; onScopeChange: (s: BoonScope) => void; showScope?: boolean }) {
   return (
     <>
       <Segmented value={value} onChange={onChange} options={STAT_GROUPS.map((g) => ({ value: g.id, label: t(`group.${g.id}`) }))} />
-      {value === "boons" && <ScopeToggle value={scope} onChange={onScopeChange} />}
+      {value === "boons" && showScope && <ScopeToggle value={scope} onChange={onScopeChange} />}
     </>
   );
 }
