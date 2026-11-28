@@ -21,7 +21,7 @@ export function RankingPage() {
   const [group, setGroup] = useState<StatGroup>("offense");
   const [scope, setScope] = useState<BoonScope>("squad");
   const [boon, setBoon] = useState<BoonViewBase | "all">("all");
-  const [mode, setMode] = useState<ValueMode>("total");
+  const [mode, setMode] = useState<ValueMode>("perMin");
   const [minMinutes, setMinMinutes] = useState(2);
   const [selected, setSelected] = useState<string[]>([]);
   const [copied, setCopied] = useState(false);

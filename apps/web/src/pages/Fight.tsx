@@ -63,7 +63,7 @@ export function FightPage() {
   const { data, error, isLoading } = useFight(id);
   const [group, setGroup] = useState<StatGroup>("offense");
   const [scope, setScope] = useState<BoonScope>("squad");
-  const [mode, setMode] = useState<ValueMode>("total");
+  const [mode, setMode] = useState<ValueMode>("perMin");
   const [view, setView] = useState<"players" | "guilds" | "groups">("players");
   const [guild, setGuild] = useState("");
   // coluna que a pessoa ordenou na tabela de jogadores (guardada com o grupo e o alcance em que foi escolhida)

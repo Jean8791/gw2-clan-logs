@@ -107,15 +107,14 @@ export function ScopeToggle({ value, onChange }: { value: BoonScope; onChange: (
   );
 }
 
-/** Total, por minuto e por segundo; `withTotal={false}` deixa só os dois por tempo (onde o total não se compara, como no perfil do mês). */
-export function ModeToggle({ value, onChange, withTotal = true }: { value: ValueMode; onChange: (m: ValueMode) => void; withTotal?: boolean }) {
+/** Por minuto ou por segundo de tempo ativo (o total não se compara entre jogadores que jogaram tempos diferentes). */
+export function ModeToggle({ value, onChange }: { value: ValueMode; onChange: (m: ValueMode) => void }) {
   return (
     <Segmented
       size="sm"
       value={value}
       onChange={onChange}
       options={[
-        ...(withTotal ? [{ value: "total" as const, label: t("mode.total") }] : []),
         { value: "perMin", label: t("mode.perMin") },
         { value: "perSec", label: t("mode.perSec") },
       ]}
