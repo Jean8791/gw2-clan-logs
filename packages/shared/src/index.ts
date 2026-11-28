@@ -10,7 +10,7 @@ export * from "./pagination.js";
 export * from "./fit-height.js";
 export * from "./search.js";
 export * from "./retention.js";
-import { BOON_BASES, GROUP_UP_BASES, STACKING_BOONS, type BoonBase, type EffKey, type GroupUpKey, type ScopedKey } from "./boons.js";
+import { BOON_BASES, GROUP_UP_BASES, STACKING_BOONS, type BoonBase, type EffKey, type GroupUpKey, type RejKey, type ScopedKey, type WasteKey } from "./boons.js";
 
 export type Mode = "wvw" | "pve";
 export type Role = "dps" | "support";
@@ -87,6 +87,27 @@ export const STAT_KEYS = [
   "resolEff",
   "furyEff",
   "superspeedEff",
+  // a perda registrada (`wasted`) e a rejeição explícita (`overstack − generation`), para o aproveitamento contabilizado
+  "stabWaste",
+  "quickWaste",
+  "alacWaste",
+  "protWaste",
+  "mightWaste",
+  "aegisWaste",
+  "resistWaste",
+  "resolWaste",
+  "furyWaste",
+  "superspeedWaste",
+  "stabRej",
+  "quickRej",
+  "alacRej",
+  "protRej",
+  "mightRej",
+  "aegisRej",
+  "resistRej",
+  "resolRej",
+  "furyRej",
+  "superspeedRej",
   // uptime recebido: milissegundos com o boon (% × tempo ativo), para somar entre lutas; o % é uptimeValue
   "stabUp",
   "quickUp",
@@ -123,8 +144,11 @@ export type StatKey = (typeof STAT_KEYS)[number];
 export type Stats = Record<StatKey, number>;
 
 /** Para quem o boon é gerado: o squad todo (padrão, as métricas "Out"), só o grupo ou só o próprio jogador. */
-/** Para quem o boon foi gerado; "effective" é a geração efetiva da squad (`generation` do Elite Insights), sem a perda registrada (`wasted`). */
-export type BoonScope = "squad" | "effective" | "group" | "self";
+/**
+ * Para quem o boon foi gerado; "effective" é a geração efetiva da squad (`generation` do Elite Insights), sem a perda registrada (`wasted`).
+ * "loss" guarda a perda registrada e a rejeição explícita: não é um alcance que a tela alterna (fica fora de BOON_SCOPES), só alimenta o aproveitamento.
+ */
+export type BoonScope = "squad" | "effective" | "group" | "self" | "loss";
 export const BOON_SCOPES: BoonScope[] = ["squad", "effective", "group", "self"];
 
 export type StatGroup = "offense" | "support" | "boons" | "uptime" | "defense";
@@ -149,7 +173,7 @@ export interface StatMeta {
   scope?: BoonScope;
 }
 
-const BASE_META: Record<Exclude<StatKey, ScopedKey | GroupUpKey | EffKey>, StatMeta> = {
+const BASE_META: Record<Exclude<StatKey, ScopedKey | GroupUpKey | EffKey | WasteKey | RejKey>, StatMeta> = {
   damage: { label: "Dano", short: "Dano", group: "offense", higherIsBetter: true, format: "int", hint: "Dano em jogadores inimigos (WvW) ou no alvo (PvE)" },
   powerDamage: { label: "Dano físico", short: "Físico", group: "offense", higherIsBetter: true, format: "int" },
   condiDamage: { label: "Dano de condição", short: "Condi", group: "offense", higherIsBetter: true, format: "int" },
@@ -243,6 +267,23 @@ const effMeta = (): Record<EffKey, StatMeta> =>
     ]),
   ) as Record<EffKey, StatMeta>;
 
+const WASTE_HINT =
+  "Perda registrada (campo `wasted` do Elite Insights): a duração restante de pilhas que foi removida ou substituída (strip inimigo, substituição, boon consumido por design, como a Aegis ao bloquear). Não é excesso de aplicação nem erro do jogador, e o agregado não separa as causas. Só existe para logs enviados depois que o site passou a guardá-la";
+const REJ_HINT =
+  "Rejeição explícita (`overstack` menos `generation` do Elite Insights): aplicações que o simulador rejeitou por excesso de pilhas ou de duração. Em todos os 1.644 pares medidos foi zero, então zero não prova que não houve excesso: o EI só a registra em um dos seus simuladores. Só existe para logs enviados depois que o site passou a guardá-la";
+
+/** Cada boon "Out" (squad) ganha a perda registrada e a rejeição explícita, no alcance "loss". */
+const lossMeta = (): Record<WasteKey | RejKey, StatMeta> =>
+  Object.fromEntries(
+    BOON_BASES.flatMap((b) => {
+      const out = BASE_META[`${b}Out`];
+      return [
+        [`${b}Waste`, { ...withUnit(out, b, WASTE_HINT), label: `${out.label} (perda registrada)`, short: `${out.short} perda`, scope: "loss", higherIsBetter: false }],
+        [`${b}Rej`, { ...withUnit(out, b, REJ_HINT), label: `${out.label} (rejeição explícita)`, short: `${out.short} rej.`, scope: "loss", higherIsBetter: false }],
+      ];
+    }),
+  ) as Record<WasteKey | RejKey, StatMeta>;
+
 const GROUP_UP_HINT =
   "Uptime médio do grupo do jogador (quem está no mesmo grupo do squad, ele incluído), sobre o tempo ativo dele. Mede o resultado do grupo, não só o que o jogador faz: dois suportes no mesmo grupo têm o mesmo valor";
 
@@ -255,7 +296,7 @@ const groupUpMeta = (): Record<GroupUpKey, StatMeta> =>
     }),
   ) as Record<GroupUpKey, StatMeta>;
 
-export const STAT_META: Record<StatKey, StatMeta> = { ...BASE_META, ...outMeta(), ...scopedMeta(), ...effMeta(), ...groupUpMeta() };
+export const STAT_META: Record<StatKey, StatMeta> = { ...BASE_META, ...outMeta(), ...scopedMeta(), ...effMeta(), ...lossMeta(), ...groupUpMeta() };
 
 export const STAT_GROUPS: { id: StatGroup; label: string }[] = [
   { id: "offense", label: "Dano" },
@@ -279,7 +320,8 @@ export const isTagStat = (k: StatKey): k is keyof typeof TAG_COVER => k in TAG_C
  */
 export type GenCover = { genCoverMs: number };
 export type Cover = TagCover & GenCover;
-export const isGenStat = (k: StatKey): boolean => k.endsWith("Eff");
+/** Métrica que vem da geração do log (efetiva, perda registrada e rejeição explícita): só vale onde há cobertura. */
+export const isGenStat = (k: StatKey): boolean => /(Eff|Waste|Rej)$/.test(k);
 
 /** A linha tem o dado da métrica? Podem faltar as da tag (log lido sem replay) e a geração efetiva (log sem ela); sem dado a tela mostra N/D ou traço, e não 0. */
 export const hasStatData = (k: StatKey, r: Partial<Cover>): boolean => (isTagStat(k) ? (r[TAG_COVER[k]] ?? 0) > 0 : isGenStat(k) ? (r.genCoverMs ?? 0) > 0 : true);
@@ -322,47 +364,86 @@ export const statsOfGroup = (g: StatGroup, scope: BoonScope = "squad"): StatKey[
 export const BOON_VIEW_BASES = [...BOON_BASES, "swift", "vigor", "regen"] as const;
 export type BoonViewBase = (typeof BOON_VIEW_BASES)[number];
 
-/** As métricas de um boon lado a lado: volume gerado (squad, grupo, si), a geração efetiva, uptime recebido e uptime no grupo; só as que existem. */
+/** As métricas de um boon lado a lado: volume gerado (squad, grupo, si), a geração efetiva, a perda registrada, a rejeição explícita, uptime recebido e uptime no grupo; só as que existem. */
 export function boonViewKeys(base: BoonViewBase): StatKey[] {
   const all = STAT_KEYS as readonly string[];
-  return [`${base}Out`, `${base}Eff`, `${base}Group`, `${base}Self`, `${base}Up`, `${base}GroupUp`].filter((k): k is StatKey => all.includes(k));
+  return [`${base}Out`, `${base}Eff`, `${base}Waste`, `${base}Rej`, `${base}Group`, `${base}Self`, `${base}Up`, `${base}GroupUp`].filter((k): k is StatKey => all.includes(k));
 }
 
 /** Primeira métrica de um grupo (nos boons, no alcance pedido): para onde o gráfico vai quando o grupo muda. */
 export const metricForGroup = (g: StatGroup, scope: BoonScope = "squad"): StatKey => statsOfGroup(g, scope)[0]!;
 
-/** O aproveitamento do volume de um boon: o valor (0 ou mais; null = N/D), por que é N/D e se a geração passou do volume. */
+/** As medidas derivadas de um boon (do site, não do Elite Insights), a partir da geração, do volume, da rejeição explícita e da perda registrada. */
+export interface BoonMetrics {
+  /** BVU: geração ÷ volume. Pode passar de 1. */
+  volumeUtilization: number | null;
+  /** ABU: geração ÷ (geração + rejeição + perda), o aproveitamento dentro do que o EI contabilizou. */
+  accountedUtilization: number | null;
+  /** perda registrada ÷ (geração + rejeição + perda) */
+  wasteRate: number | null;
+  /** rejeição explícita ÷ (geração + rejeição + perda); zero não prova ausência de excesso */
+  rejectionRate: number | null;
+  /** volume − (geração + rejeição + perda): a divergência entre as duas cadeias de cálculo do EI, para auditoria */
+  residual: number;
+  /** a geração passou do volume (acima da tolerância do arredondamento) */
+  exceeds: boolean;
+}
+
+/** Tolerância do arredondamento (3 casas no log) antes de avisar que a geração passou do volume. */
+const UTILIZATION_TOLERANCE = 1.005;
+const ratio = (a: number, b: number): number | null => (b > 0 ? a / b : null);
+
+export function boonMetrics(v: { generation: number; outgoing: number; rejected: number; wasted: number }): BoonMetrics {
+  const accounted = v.generation + v.rejected + v.wasted;
+  const volumeUtilization = ratio(v.generation, v.outgoing);
+  return {
+    volumeUtilization,
+    accountedUtilization: ratio(v.generation, accounted),
+    wasteRate: ratio(v.wasted, accounted),
+    rejectionRate: ratio(v.rejected, accounted),
+    residual: v.outgoing - accounted,
+    exceeds: volumeUtilization !== null && volumeUtilization > UTILIZATION_TOLERANCE,
+  };
+}
+
+/** Uma medida derivada de um boon numa linha: o valor (null = N/D), por que é N/D e se a geração passou do volume. */
 export interface Utilization {
   value: number | null;
   reason?: "noData" | "partial" | "noVolume";
   exceeds: boolean;
 }
 
-/** Tolerância do arredondamento (3 casas no log) antes de avisar que a geração passou do volume. */
-const UTILIZATION_TOLERANCE = 1.005;
-
 /**
- * Aproveitamento do volume (BVU, métrica derivada do site, não do Elite Insights): a geração efetiva sobre o volume gerado, com os mesmos
- * valores (inclusive o ajuste por tempo jogado, com `adjust`) das colunas vizinhas, para elas dividirem até o número mostrado. A parte que
- * falta é a perda registrada, que não é erro do jogador (ver docs/research). É N/D, e não 0 nem 100%, quando falta a geração efetiva
- * (`noData`), quando só parte do período a tem (`partial`: as lutas antigas puxariam o número) ou quando não há volume (`noVolume`).
- * Não é limitado a 100%: a geração acima do volume (`exceeds`) é divergência do Elite Insights para ser vista, não escondida.
+ * Uma medida derivada de um boon numa linha (ou soma de lutas), com os mesmos valores (inclusive o ajuste por tempo jogado, com `adjust`)
+ * das colunas vizinhas, para elas dividirem até o número mostrado. É N/D, e não 0 nem 100%, quando falta a geração do log (`noData`), quando só
+ * parte do período a tem (`partial`: as lutas antigas puxariam o número) ou quando não há o que dividir (`noVolume`). Não é limitada a 100%.
  */
-export function boonUtilization(r: Stats & { activeMs: number; genCoverMs?: number }, base: BoonBase, adjust?: TimeAdjust): Utilization {
+function boonMeasure(r: Stats & { activeMs: number; genCoverMs?: number }, base: BoonBase, adjust: TimeAdjust | undefined, pick: (m: BoonMetrics) => number | null): Utilization {
   const cover = r.genCoverMs ?? 0;
   if (cover <= 0) return { value: null, reason: "noData", exceeds: false };
   if (cover < r.activeMs * 0.999) return { value: null, reason: "partial", exceeds: false };
-  const out = statValue(`${base}Out`, "perMin", r, adjust);
-  if (out <= 0) return { value: null, reason: "noVolume", exceeds: false };
-  const value = statValue(`${base}Eff`, "perMin", r, adjust) / out;
-  return { value, exceeds: value > UTILIZATION_TOLERANCE };
+  const at = (suffix: string) => statValue(`${base}${suffix}` as StatKey, "perMin", r, adjust);
+  const m = boonMetrics({ generation: at("Eff"), outgoing: at("Out"), rejected: at("Rej"), wasted: at("Waste") });
+  const value = pick(m);
+  return value === null ? { value: null, reason: "noVolume", exceeds: false } : { value, exceeds: pick === volumePick && m.exceeds };
 }
+const volumePick = (m: BoonMetrics) => m.volumeUtilization;
+const accountedPick = (m: BoonMetrics) => m.accountedUtilization;
+const wastePick = (m: BoonMetrics) => m.wasteRate;
+
+type MeasureRow = Stats & { activeMs: number; genCoverMs?: number };
+/** ABU: o aproveitamento principal, dentro do que o Elite Insights contabilizou (geração, rejeição e perda registrada). */
+export const boonAccountedUtilization = (r: MeasureRow, base: BoonBase, adjust?: TimeAdjust): Utilization => boonMeasure(r, base, adjust, accountedPick);
+/** BVU: a geração sobre o volume gerado; complementar, pode passar de 100%. */
+export const boonVolumeUtilization = (r: MeasureRow, base: BoonBase, adjust?: TimeAdjust): Utilization => boonMeasure(r, base, adjust, volumePick);
+/** A parte contabilizada que foi perda registrada (remoção ou substituição das pilhas): não mede erro do jogador. */
+export const boonWasteRate = (r: MeasureRow, base: BoonBase, adjust?: TimeAdjust): Utilization => boonMeasure(r, base, adjust, wastePick);
 
 /** A mesma métrica de boon em outro alcance (stabOut vira stabGroup ou stabSelf); métricas que não são de boon não mudam. */
 export function inScope(k: StatKey, scope: BoonScope): StatKey {
   if (STAT_META[k].group !== "boons") return k;
   const base = BOON_BASES.find((b) => k.startsWith(b));
-  const suffix = { squad: "Out", group: "Group", self: "Self", effective: "Eff" }[scope];
+  const suffix = { squad: "Out", group: "Group", self: "Self", effective: "Eff", loss: "Waste" }[scope];
   return base ? (`${base}${suffix}` as StatKey) : k;
 }
 

@@ -93,7 +93,7 @@ export function RankingPage() {
       cell: (r) => <span className="text-muted">{Math.round((r.supportFights / r.fights) * 100)}%</span>,
     },
     ...statColumnsFor(keys, mode, rows, adjust),
-    ...(effKey ? [utilizationColumn<RankingRow>(effKey.slice(0, -3) as BoonBase, adjust)] : []),
+    ...(effKey ? ((["accounted", "volume", "waste"] as const).map((kind) => utilizationColumn<RankingRow>(effKey.slice(0, -3) as BoonBase, kind, adjust))) : []),
   ];
 
   const copyLink = async () => {

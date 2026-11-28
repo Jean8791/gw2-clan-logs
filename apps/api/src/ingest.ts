@@ -80,6 +80,8 @@ export interface ExtractedFight {
 const boonsOf = (scope: BoonScope): Record<number, keyof Stats> =>
   Object.fromEntries(STAT_KEYS.flatMap((k) => (STAT_META[k].group === "boons" && STAT_META[k].buffId && (STAT_META[k].scope ?? "squad") === scope ? [[STAT_META[k].buffId, k]] : [])));
 export const BOONS = boonsOf("squad");
+/** Diferença de arredondamento (3 casas no log) tolerada entre `overstack` e `generation` antes de tratar como inconsistência. */
+const OVERSTACK_TOLERANCE = 0.002;
 /** A geração efetiva de cada boon (`<boon>Eff`), pelo id do buff. */
 const EFFECTIVE_BOONS = boonsOf("effective");
 const BOON_VOLUMES: [string, Record<number, keyof Stats>][] = [
@@ -233,6 +235,7 @@ export function extractFight(r: J): ExtractedFight {
   const fightHasGeneration = squad.some((p) => arr(p, "squadBuffs").length > 0) && squad.some((p) => arr(p, "squadBuffVolumes").length > 0);
 
   const instances: ExtractedPlayer[] = squad.map((p) => {
+    let inconsistent = false;
     const dpsAll = phase0(p, "dpsAll");
     const statsAll = phase0(p, "statsAll");
     const def = phase0(p, "defenses");
@@ -310,12 +313,21 @@ export function extractFight(r: J): ExtractedFight {
         if (key) s[key] = num(arr(b, "buffVolumeData")[0], "outgoing");
       }
     }
-    // Geração efetiva: o `generation` de squadBuffs. O volume (`outgoing`) é outra conta do Elite Insights e inclui também a perda registrada (`wasted`).
+    // Geração efetiva, perda registrada e rejeição explícita, de squadBuffs: `generation`, `wasted` e `overstack − generation`. O volume (`outgoing`) é
+    // outra conta do Elite Insights. Se algum boon vier com `overstack` menor que `generation` (inconsistente), o jogador fica sem cobertura nesta
+    // luta (N/D) e nenhum dos três é guardado, em vez de mascarar ou somar valor negativo.
     if (fightHasGeneration) {
+      const gen: [keyof Stats, number][] = [];
       for (const b of arr(p, "squadBuffs")) {
-        const key = EFFECTIVE_BOONS[num(b, "id")];
-        if (key) s[key] = num(arr(b, "buffData")[0], "generation");
+        const eff = EFFECTIVE_BOONS[num(b, "id")];
+        if (!eff) continue;
+        const d = arr(b, "buffData")[0];
+        const g = num(d, "generation");
+        const over = num(d, "overstack");
+        if (over < g - OVERSTACK_TOLERANCE) inconsistent = true;
+        gen.push([eff, g], [String(eff).replace(/Eff$/, "Waste") as keyof Stats, num(d, "wasted")], [String(eff).replace(/Eff$/, "Rej") as keyof Stats, Math.max(0, over - g)]);
       }
+      if (!inconsistent) for (const [k, v] of gen) s[k] = v;
     }
     if (!arr(p, "squadBuffVolumes").length) {
       for (const b of arr(p, "squadBuffs")) {
@@ -341,7 +353,7 @@ export function extractFight(r: J): ExtractedFight {
       distToCom: typeof statsAll.distToCom === "number" ? statsAll.distToCom : null,
       distCoverMs: tag.distCoverMs,
       nearCoverMs: tag.nearCoverMs,
-      genCoverMs: fightHasGeneration ? activeMs : 0,
+      genCoverMs: fightHasGeneration && !inconsistent ? activeMs : 0,
       skills: skillDamage(p, targetIdx, skillMap, buffMap),
       supportSkills: supportSkills(p, skillMap, buffMap),
       skillUsage: skillUsage(p, skillMap, buffMap),

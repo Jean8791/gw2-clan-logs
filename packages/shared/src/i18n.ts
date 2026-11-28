@@ -1,5 +1,5 @@
 // Idiomas do site: português (padrão) e inglês. Sem biblioteca: um dicionário por idioma e a função translate.
-import { BOON_BASES, GROUP_UP_BASES, STACKING_BOONS, type BoonBase, type EffKey, type GroupUpKey, type ScopedKey } from "./boons.js";
+import { BOON_BASES, GROUP_UP_BASES, STACKING_BOONS, type BoonBase, type EffKey, type GroupUpKey, type RejKey, type ScopedKey, type WasteKey } from "./boons.js";
 import type { StatKey } from "./index.js";
 import { STAT_META } from "./index.js";
 
@@ -380,13 +380,12 @@ export const DICT: Record<Lang, Dict> = {
     "scope.group": "Grupo",
     "scope.self": "Próprio",
     "scope.effective": "Squad efetiva",
-    "boon.utilization": "Aproveitamento",
-    "boon.noGeneration": "Sem geração efetiva: o log foi enviado antes de o site guardá-la, ou o Elite Insights não a trouxe",
-    "boon.nd.noData": "Sem geração efetiva neste período: os logs foram enviados antes de o site guardá-la, ou o Elite Insights não a trouxe",
-    "boon.nd.partial": "Período misto: só parte dos logs tem a geração efetiva, e a conta ficaria errada. Escolha um período só com logs novos",
-    "boon.nd.noVolume": "Sem volume gerado deste boon neste período",
-    "boon.exceeds": "A geração efetiva passou do volume gerado: é diferença de arredondamento ou do cálculo do Elite Insights, e o número não foi limitado a 100%",
-    "boon.utilizationHint": "Geração efetiva ÷ volume gerado, os dois do Elite Insights. A parte que falta é a perda registrada: pilhas removidas ou substituídas (strip inimigo, substituição, boon consumido por design, como a Aegis ao bloquear). Não mede a qualidade do jogador. Traço = sem dado (logs enviados antes de o site guardar a geração efetiva)",
+    "boon.accounted": "Aproveitamento",
+    "boon.accountedHint": "Geração efetiva ÷ (geração efetiva + rejeição explícita + perda registrada), os três do Elite Insights: o aproveitamento dentro do que o EI contabilizou. A perda registrada inclui pilhas removidas ou substituídas (strip inimigo, substituição, boon consumido por design, como a Aegis ao bloquear). Não mede a qualidade do jogador. Calculado com os mesmos valores das colunas vizinhas",
+    "boon.volumeUtilization": "Aproveitamento do volume",
+    "boon.volumeUtilizationHint": "Geração efetiva ÷ volume gerado (`outgoing`), os dois do Elite Insights. Complementar ao aproveitamento: as duas contas do EI são independentes, então o volume pode ser maior que a soma contabilizada (e a geração, em raros casos, maior que o volume: aparece com aviso). Não mede a qualidade do jogador",
+    "boon.wasteRate": "Taxa de perda",
+    "boon.wasteRateHint": "Perda registrada ÷ (geração efetiva + rejeição explícita + perda registrada). A perda vem da remoção ou substituição das pilhas, não é excesso de aplicação nem erro do jogador",
     "api.tooManyAttempts": "Muitas senhas erradas. Tente de novo mais tarde.",
     "nav.import": "Importar logs",
     "page.import.title": "Importar logs",
@@ -842,13 +841,12 @@ export const DICT: Record<Lang, Dict> = {
     "scope.group": "Group",
     "scope.self": "Self",
     "scope.effective": "Squad effective",
-    "boon.utilization": "Utilization",
-    "boon.noGeneration": "No effective generation: the log was uploaded before the site stored it, or Elite Insights did not provide it",
-    "boon.nd.noData": "No effective generation in this period: the logs were uploaded before the site stored it, or Elite Insights did not provide it",
-    "boon.nd.partial": "Mixed period: only some of the logs have effective generation, and the calculation would be wrong. Pick a period with new logs only",
-    "boon.nd.noVolume": "No generated volume of this boon in this period",
-    "boon.exceeds": "Effective generation went over the generated volume: it is a rounding or Elite Insights calculation difference, and the number was not capped at 100%",
-    "boon.utilizationHint": "Effective generation ÷ generated volume, both from Elite Insights. What is missing is the recorded waste: stacks that were removed or replaced (enemy strips, replacement, boons consumed by design, such as Aegis when it blocks). It does not measure player quality. Dash = no data (logs uploaded before the site stored effective generation)",
+    "boon.accounted": "Utilization",
+    "boon.accountedHint": "Effective generation ÷ (effective generation + explicit rejection + recorded waste), all three from Elite Insights: the utilization within what EI accounted for. Recorded waste includes removed or replaced stacks (enemy strips, replacement, boons consumed by design, such as Aegis when it blocks). It does not measure player quality. Calculated with the same values as the neighbouring columns",
+    "boon.volumeUtilization": "Volume utilization",
+    "boon.volumeUtilizationHint": "Effective generation ÷ generated volume (`outgoing`), both from Elite Insights. Complementary to utilization: the two EI calculations are independent, so the volume can be larger than the accounted sum (and, rarely, the generation larger than the volume: shown with a warning). It does not measure player quality",
+    "boon.wasteRate": "Waste rate",
+    "boon.wasteRateHint": "Recorded waste ÷ (effective generation + explicit rejection + recorded waste). The waste comes from removed or replaced stacks; it is not over-application or player error",
     "api.tooManyAttempts": "Too many wrong passwords. Try again later.",
     "nav.import": "Import logs",
     "page.import.title": "Import logs",
@@ -949,7 +947,7 @@ export const DICT: Record<Lang, Dict> = {
 
 /** Nome das métricas em inglês (o português fica em STAT_META). */
 type StatEn = { label: string; short: string; hint?: string };
-const BASE_EN: Record<Exclude<StatKey, ScopedKey | GroupUpKey | EffKey>, StatEn> = {
+const BASE_EN: Record<Exclude<StatKey, ScopedKey | GroupUpKey | EffKey | WasteKey | RejKey>, StatEn> = {
   damage: { label: "Damage", short: "Damage", hint: "Damage to enemy players (WvW) or to the target (PvE)" },
   powerDamage: { label: "Power damage", short: "Power" },
   condiDamage: { label: "Condition damage", short: "Condi" },
@@ -1031,6 +1029,20 @@ const effEn = (): Record<EffKey, StatEn> =>
     BOON_BASES.map((b) => [`${b}Eff`, { label: `${BASE_EN[`${b}Out`].label} (effective generation)`, short: `${BASE_EN[`${b}Out`].short} eff.`, hint: `${EFF_HINT_EN}. ${unitHintEn(b)}` }]),
   ) as Record<EffKey, StatEn>;
 
+const WASTE_HINT_EN =
+  "Recorded waste (the Elite Insights `wasted` field): the remaining duration of stacks that were removed or replaced (enemy strips, replacement, boons consumed by design, such as Aegis when it blocks). It is not over-application or player error, and the aggregate does not separate the causes. Only logs uploaded after the site started storing it have it";
+const REJ_HINT_EN =
+  "Explicit rejection (Elite Insights `overstack` minus `generation`): applications the simulator rejected for exceeding the stack or duration limit. It was zero in all 1,644 measured pairs, so zero does not prove there was no excess: EI only records it in one of its simulators. Only logs uploaded after the site started storing it have it";
+
+/** Cada boon ganha a perda registrada e a rejeição explícita. */
+const lossEn = (): Record<WasteKey | RejKey, StatEn> =>
+  Object.fromEntries(
+    BOON_BASES.flatMap((b) => [
+      [`${b}Waste`, { label: `${BASE_EN[`${b}Out`].label} (recorded waste)`, short: `${BASE_EN[`${b}Out`].short} waste`, hint: `${WASTE_HINT_EN}. ${unitHintEn(b)}` }],
+      [`${b}Rej`, { label: `${BASE_EN[`${b}Out`].label} (explicit rejection)`, short: `${BASE_EN[`${b}Out`].short} rej.`, hint: `${REJ_HINT_EN}. ${unitHintEn(b)}` }],
+    ]),
+  ) as Record<WasteKey | RejKey, StatEn>;
+
 const GROUP_UP_HINT_EN =
   "Average uptime of the player's group (whoever is in the same squad group, the player included), over the player's active time. It measures the group's result, not only what the player does: two supports in the same group get the same value";
 
@@ -1038,7 +1050,7 @@ const GROUP_UP_HINT_EN =
 const groupUpEn = (): Record<GroupUpKey, StatEn> =>
   Object.fromEntries(GROUP_UP_BASES.map((b) => [`${b}GroupUp`, { label: `${BASE_EN[`${b}Up`].label} in group`, short: `${BASE_EN[`${b}Up`].short} grp.`, hint: GROUP_UP_HINT_EN }])) as Record<GroupUpKey, StatEn>;
 
-export const STAT_EN: Record<StatKey, StatEn> = { ...BASE_EN, ...outEn(), ...scopedEn(), ...effEn(), ...groupUpEn() };
+export const STAT_EN: Record<StatKey, StatEn> = { ...BASE_EN, ...outEn(), ...scopedEn(), ...effEn(), ...lossEn(), ...groupUpEn() };
 
 /** Nome, abreviação e dica de uma métrica no idioma (português = o que está em STAT_META). */
 export function statText(key: StatKey, lang: Lang): { label: string; short: string; hint?: string } {

@@ -1,9 +1,8 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { boonUtilization, emptyStats, hasStatData, statValue, type Stats } from "@gw2logs/shared";
+import { boonVolumeUtilization, emptyStats, hasStatData, statValue, type Stats } from "@gw2logs/shared";
 import { snapshotDays } from "../src/archive.js";
 import { openDb, type DB } from "../src/db.js";
 import { extractFight } from "../src/ingest.js";
@@ -132,11 +131,11 @@ describe("Ranking e arquivo: a geração efetiva é a média só das lutas que a
   });
 });
 
-describe("boonUtilization: aproveitamento do volume, com N/D e sem limitar a 100%", () => {
+describe("boonVolumeUtilization: aproveitamento do volume, com N/D e sem limitar a 100%", () => {
   const linha = (o: Partial<Stats> & { activeMs: number; genCoverMs: number }) => ({ ...emptyStats(), ...o });
 
   it("com cobertura total é a geração efetiva sobre o volume", () => {
-    const u = boonUtilization(linha({ stabOut: 3, stabEff: 2.4, activeMs: 60_000, genCoverMs: 60_000 }), "stab");
+    const u = boonVolumeUtilization(linha({ stabOut: 3, stabEff: 2.4, activeMs: 60_000, genCoverMs: 60_000 }), "stab");
 
     expect(u.value).toBeCloseTo(0.8, 9);
     expect(u.exceeds).toBe(false);
@@ -144,29 +143,29 @@ describe("boonUtilization: aproveitamento do volume, com N/D e sem limitar a 100
   });
 
   it("0% de verdade (tudo perdido, com cobertura) é 0, não N/D", () => {
-    const u = boonUtilization(linha({ stabOut: 3, stabEff: 0, activeMs: 60_000, genCoverMs: 60_000 }), "stab");
+    const u = boonVolumeUtilization(linha({ stabOut: 3, stabEff: 0, activeMs: 60_000, genCoverMs: 60_000 }), "stab");
 
     expect(u.value).toBe(0);
   });
 
   it("sem cobertura é N/D por falta de dado, e com cobertura parcial é N/D por período misto", () => {
-    expect(boonUtilization(linha({ stabOut: 3, stabEff: 0, activeMs: 60_000, genCoverMs: 0 }), "stab")).toMatchObject({ value: null, reason: "noData" });
-    expect(boonUtilization(linha({ stabOut: 3, stabEff: 2.4, activeMs: 120_000, genCoverMs: 60_000 }), "stab")).toMatchObject({ value: null, reason: "partial" });
+    expect(boonVolumeUtilization(linha({ stabOut: 3, stabEff: 0, activeMs: 60_000, genCoverMs: 0 }), "stab")).toMatchObject({ value: null, reason: "noData" });
+    expect(boonVolumeUtilization(linha({ stabOut: 3, stabEff: 2.4, activeMs: 120_000, genCoverMs: 60_000 }), "stab")).toMatchObject({ value: null, reason: "partial" });
   });
 
   it("sem volume é N/D (nem 0% nem 100%)", () => {
-    expect(boonUtilization(linha({ activeMs: 60_000, genCoverMs: 60_000 }), "stab")).toMatchObject({ value: null, reason: "noVolume" });
+    expect(boonVolumeUtilization(linha({ activeMs: 60_000, genCoverMs: 60_000 }), "stab")).toMatchObject({ value: null, reason: "noVolume" });
   });
 
   it("geração maior que o volume não é limitada: o valor passa de 1 e vem sinalizado", () => {
-    const u = boonUtilization(linha({ quickOut: 1, quickEff: 1.2, activeMs: 60_000, genCoverMs: 60_000 }), "quick");
+    const u = boonVolumeUtilization(linha({ quickOut: 1, quickEff: 1.2, activeMs: 60_000, genCoverMs: 60_000 }), "quick");
 
     expect(u.value).toBeCloseTo(1.2, 9);
     expect(u.exceeds).toBe(true);
   });
 
   it("diferença de arredondamento (até 0,5%) não sinaliza", () => {
-    expect(boonUtilization(linha({ quickOut: 1, quickEff: 1.004, activeMs: 60_000, genCoverMs: 60_000 }), "quick").exceeds).toBe(false);
+    expect(boonVolumeUtilization(linha({ quickOut: 1, quickEff: 1.004, activeMs: 60_000, genCoverMs: 60_000 }), "quick").exceeds).toBe(false);
   });
 
   it("com o ajuste por tempo jogado usa os mesmos valores das colunas vizinhas (volume e efetiva ajustados)", () => {
@@ -174,38 +173,9 @@ describe("boonUtilization: aproveitamento do volume, com N/D e sem limitar a 100
     const baseline = { ...emptyStats(), stabOut: 1, stabEff: 0.9, activeMs: 600_000, genCoverMs: 600_000, fights: 10, distCoverMs: 0, nearCoverMs: 0 };
     const adjust = { baseline, refMs: 120_000 };
 
-    const u = boonUtilization(r, "stab", adjust);
+    const u = boonVolumeUtilization(r, "stab", adjust);
 
     expect(u.value).toBeCloseTo(statValue("stabEff", "perMin", r, adjust) / statValue("stabOut", "perMin", r, adjust), 12);
     expect(u.value).not.toBeCloseTo(0.8, 3); // o ajuste muda o número em relação ao bruto
-  });
-});
-
-describe("migração: a cobertura da geração efetiva nasce com o banco", () => {
-  it("banco sem gen_cover_ms ganha a coluna e as lutas que já tinham geração efetiva passam a cobrir o tempo ativo", () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "gw2logs-migcob-"));
-    const file = path.join(dir, "antigo.db");
-    const velho = new Database(file);
-    velho.exec(`
-      CREATE TABLE fights (id TEXT PRIMARY KEY, sha256 TEXT NOT NULL, status TEXT NOT NULL, uploaded_at TEXT NOT NULL, time_start TEXT, map_id INTEGER);
-      CREATE TABLE player_stats (
-        fight_id TEXT NOT NULL REFERENCES fights(id) ON DELETE CASCADE, account TEXT NOT NULL, name TEXT, profession TEXT, guild_id TEXT,
-        grp INTEGER, commander INTEGER NOT NULL DEFAULT 0, role TEXT NOT NULL DEFAULT 'dps', active_ms INTEGER NOT NULL DEFAULT 0, dist_to_com REAL,
-        stab_out REAL NOT NULL DEFAULT 0, stab_eff REAL NOT NULL DEFAULT 0, PRIMARY KEY (fight_id, account));
-      INSERT INTO fights (id, sha256, status, uploaded_at) VALUES ('f1', 'a', 'done', 'x'), ('f2', 'b', 'done', 'x');
-      INSERT INTO player_stats (fight_id, account, active_ms, stab_out, stab_eff) VALUES ('f1', 'Com', 60000, 1, 0.5), ('f1', 'Sem', 60000, 0, 0), ('f2', 'Antiga', 60000, 1, 0);
-    `);
-    velho.close();
-
-    const db = openDb(file);
-
-    expect(db.prepare("SELECT account, gen_cover_ms AS c FROM player_stats ORDER BY account").all()).toEqual([
-      { account: "Antiga", c: 0 }, // luta sem nenhuma geração efetiva: sem dado
-      { account: "Com", c: 60_000 },
-      { account: "Sem", c: 60_000 }, // na mesma luta de quem tem: não gerou nada, e é um zero de verdade
-    ]);
-    expect((db.pragma("table_info(day_stats)") as { name: string }[]).map((c) => c.name)).toContain("gen_cover_ms");
-    db.close();
-    fs.rmSync(dir, { recursive: true, force: true });
   });
 });

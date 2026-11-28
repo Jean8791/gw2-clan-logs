@@ -1,4 +1,4 @@
-import { mainRole, ROLE_MIN_ACTIVE_MS, STAT_KEYS, type Role } from "@gw2logs/shared";
+import { BOON_FORMULA_VERSION, mainRole, ROLE_MIN_ACTIVE_MS, STAT_KEYS, type Role } from "@gw2logs/shared";
 import { STAT_COL, type DB } from "./db.js";
 import type { ExtractedFight, ExtractedPlayer } from "./ingest.js";
 
@@ -73,7 +73,7 @@ export function saveFight(db: DB, id: string, f: ExtractedFight, mapName: string
          time_start=@timeStart, duration_ms=@durationMs, success=@success, recorded_by=@recordedBy, squad_count=@squadCount,
          ally_count=@allyCount, enemy_count=@enemyCount, squad_damage=@squadDamage, squad_kills=@squadKills,
          squad_downs=@squadDowns, squad_deaths=@squadDeaths, enemy_downs=@enemyDowns, enemy_deaths=@enemyDeaths,
-         ei_version=@eiVersion, has_report=@hasReport
+         ei_version=@eiVersion, has_report=@hasReport, boon_formula=@boonFormula
        WHERE id=@id`,
     ).run({
       id,
@@ -96,6 +96,7 @@ export function saveFight(db: DB, id: string, f: ExtractedFight, mapName: string
       enemyDowns: f.enemyDowns,
       enemyDeaths: f.enemyDeaths,
       eiVersion: f.eiVersion,
+      boonFormula: BOON_FORMULA_VERSION,
       hasReport: hasReport ? 1 : 0,
     });
   })();

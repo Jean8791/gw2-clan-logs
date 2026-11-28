@@ -111,7 +111,9 @@ describe("seletores do gráfico: grupo, alcance (só nos boons) e métrica", () 
     const todas = STAT_GROUPS.flatMap((g) => doGrupo(g.id));
 
     expect(new Set(todas).size).toBe(todas.length);
-    expect([...todas].sort()).toEqual([...STAT_KEYS].sort());
+    // a perda registrada e a rejeição explícita (alcance "loss") ficam de fora do seletor: só alimentam o aproveitamento e a visão por boon do Ranking
+    expect([...todas].sort()).toEqual(STAT_KEYS.filter((k) => STAT_META[k].scope !== "loss").sort());
+    expect(statsOfGroup("boons", "loss")).toHaveLength(20);
   });
 
   it("cada alcance dos boons lista os mesmos 10 boons, e o grupo de dano abre em dano", () => {

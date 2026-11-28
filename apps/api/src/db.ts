@@ -200,15 +200,16 @@ function migrate(db: DB) {
   // Os nomes das colunas vêm de STAT_KEYS (código), nunca de entrada do usuário.
   const have = new Set((db.pragma("table_info(player_stats)") as { name: string }[]).map((c) => c.name));
   let addedGroupUptime = false;
+  let addedGenLoss = false;
   for (const k of STAT_KEYS) {
     if (have.has(STAT_COL[k])) continue;
     db.exec(`ALTER TABLE player_stats ADD COLUMN ${STAT_COL[k]} REAL NOT NULL DEFAULT 0`);
     if (k.endsWith("GroupUp")) addedGroupUptime = true;
+    if (k.endsWith("Waste")) addedGenLoss = true;
   }
   for (const col of ["dist_cover_ms", "near_cover_ms", "gen_cover_ms"]) {
     if (!have.has(col)) db.exec(`ALTER TABLE player_stats ADD COLUMN ${col} REAL NOT NULL DEFAULT 0`);
   }
-  const addedGenCover = !have.has("gen_cover_ms");
   // o resumo diário tem as mesmas colunas de métrica: métrica nova entra nas duas tabelas
   const haveDay = new Set((db.pragma("table_info(day_stats)") as { name: string }[]).map((c) => c.name));
   for (const k of STAT_KEYS) {
@@ -221,6 +222,8 @@ function migrate(db: DB) {
     if (!haveFights.has(col)) db.exec(`ALTER TABLE fights ADD COLUMN ${col} INTEGER`);
   }
   if (!haveFights.has("process_ms")) db.exec("ALTER TABLE fights ADD COLUMN process_ms INTEGER");
+  // a versão da fórmula dos boons com que a luta foi lida (BOON_FORMULA_VERSION); NULL nas lutas anteriores à versão 3
+  if (!haveFights.has("boon_formula")) db.exec("ALTER TABLE fights ADD COLUMN boon_formula INTEGER");
   // dono da luta; as lutas anteriores ao login ficam sem dono até o primeiro usuário entrar
   if (!haveFights.has("owner_id")) db.exec("ALTER TABLE fights ADD COLUMN owner_id INTEGER REFERENCES users(id)");
   // última vez que o login conferiu o Discord (listas de usuários e servidores); quem já existe começa a contar da migração
@@ -230,7 +233,7 @@ function migrate(db: DB) {
     db.prepare("UPDATE users SET verified_at = ?").run(new Date().toISOString());
   }
   if (addedGroupUptime) backfillGroupUptime(db);
-  if (addedGenCover) backfillGenCover(db);
+  if (addedGenLoss) dropGenCover(db);
   dropGlobalShaUnique(db);
   db.exec(`
     CREATE INDEX IF NOT EXISTS ix_fights_time ON fights(time_start);
@@ -258,15 +261,13 @@ function addWeekToDayStats(db: DB, statCols: string) {
 }
 
 /**
- * A cobertura da geração efetiva (`gen_cover_ms`) nasce com o banco. As lutas que já tinham geração efetiva (a coluna `<boon>_eff` só foi
- * gravada por quem a leu do log, e algum jogador dela tem valor) passam a cobrir o tempo ativo de todos os jogadores, inclusive os que não
- * geraram nada; as demais ficam com 0 (sem dado). Os dias ainda abertos do resumo diário
- * são refeitos com a cobertura; os congelados ficam como estão.
+ * A cobertura da geração (`gen_cover_ms`) só vale com a perda registrada e a rejeição explícita guardadas junto: quando as colunas delas nascem,
+ * as lutas que já estavam no banco perdem a cobertura (a geração efetiva delas fica, mas o aproveitamento passa a ser N/D, não 100% por falta de
+ * perda). Os dias ainda abertos do resumo diário são refeitos; os congelados ficam como estão.
  */
-function backfillGenCover(db: DB) {
-  const eff = STAT_KEYS.filter((k) => k.endsWith("Eff")).map((k) => `${STAT_COL[k]} > 0`);
+function dropGenCover(db: DB) {
   db.transaction(() => {
-    db.exec(`UPDATE player_stats SET gen_cover_ms = active_ms WHERE fight_id IN (SELECT DISTINCT fight_id FROM player_stats WHERE ${eff.join(" OR ")})`);
+    db.exec("UPDATE player_stats SET gen_cover_ms = 0");
     db.exec("DELETE FROM day_snapshots WHERE frozen = 0");
   })();
 }

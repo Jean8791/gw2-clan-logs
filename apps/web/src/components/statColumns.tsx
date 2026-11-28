@@ -1,4 +1,4 @@
-import { BOON_SCOPES, bestValue, boonUtilization, type BoonBase, hasStatData, isGenStat, isUptimeStat, STAT_GROUPS, STAT_META, statsOfGroup, statText, statValue, type BoonScope, type StatGroup, type StatKey, type Stats, type Cover, type TimeAdjust, type ValueMode } from "@gw2logs/shared";
+import { BOON_SCOPES, bestValue, boonAccountedUtilization, boonVolumeUtilization, boonWasteRate, type BoonBase, hasStatData, isGenStat, isUptimeStat, STAT_GROUPS, STAT_META, statsOfGroup, statText, statValue, type BoonScope, type StatGroup, type StatKey, type Stats, type Cover, type TimeAdjust, type ValueMode } from "@gw2logs/shared";
 import { BuffIcon } from "./MediaIcon";
 import type { Column } from "./DataTable";
 import { Segmented, cx } from "./ui";
@@ -61,18 +61,22 @@ export function statColumnsFor<T extends Stats & { activeMs: number }>(keys: Sta
   });
 }
 
+type UtilizationKind = "accounted" | "volume" | "waste";
+const UTILIZATION = { accounted: ["boon.accounted", "boon.accountedHint", boonAccountedUtilization], volume: ["boon.volumeUtilization", "boon.volumeUtilizationHint", boonVolumeUtilization], waste: ["boon.wasteRate", "boon.wasteRateHint", boonWasteRate] } as const;
+
 /**
- * Aproveitamento do volume do boon: a geração efetiva sobre o volume gerado, calculado com os mesmos valores (ajustados) das colunas vizinhas.
- * N/D (com o motivo na dica) quando falta a geração efetiva, quando só parte do período a tem ou quando não há volume; acima de 100% leva um
- * aviso, porque a geração passou do volume (diferença do Elite Insights ou de arredondamento), em vez de ser limitada.
+ * Medida derivada do boon (aproveitamento contabilizado, do volume ou taxa de perda), calculada com os mesmos valores (ajustados) das colunas
+ * vizinhas. N/D (com o motivo na dica) quando falta a geração do log, quando só parte do período a tem ou quando não há o que dividir; o
+ * aproveitamento do volume acima de 100% leva um aviso, porque a geração passou do volume, em vez de ser limitado.
  */
-export function utilizationColumn<T extends Stats & { activeMs: number }>(base: BoonBase, adjust?: TimeAdjust): Column<T> {
-  const of = (r: T) => boonUtilization(r as T & { genCoverMs?: number }, base, adjust);
+export function utilizationColumn<T extends Stats & { activeMs: number }>(base: BoonBase, kind: UtilizationKind, adjust?: TimeAdjust): Column<T> {
+  const [label, hint, measure] = UTILIZATION[kind];
+  const of = (r: T) => measure(r as T & { genCoverMs?: number }, base, adjust);
   return {
-    id: `${base}Utilization`,
-    label: t("boon.utilization"),
-    header: t("boon.utilization"),
-    title: t("boon.utilizationHint"),
+    id: `${base}${kind}`,
+    label: t(label),
+    header: t(label),
+    title: t(hint),
     align: "right",
     sort: (r: T) => of(r).value,
     cell: (r: T) => {
