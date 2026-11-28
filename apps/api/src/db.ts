@@ -130,6 +130,20 @@ function migrate(db: DB) {
     );
     CREATE INDEX IF NOT EXISTS ix_psupskills_account ON player_support_skills(account);
 
+    -- usos de cada habilidade (rotação) e dano recebido por habilidade, de cada jogador em cada luta (some com a luta, pela retenção).
+    -- kind: cast (amount = usos) | taken (amount = dano recebido); indirect: 1 quando skill_id é de um buff (condição)
+    CREATE TABLE IF NOT EXISTS player_skill_usage (
+      fight_id TEXT NOT NULL REFERENCES fights(id) ON DELETE CASCADE,
+      account  TEXT NOT NULL,
+      skill_id INTEGER NOT NULL,
+      kind     TEXT NOT NULL,
+      amount   REAL NOT NULL,
+      hits     INTEGER NOT NULL,
+      indirect INTEGER NOT NULL,
+      PRIMARY KEY (fight_id, account, skill_id, kind, indirect)
+    );
+    CREATE INDEX IF NOT EXISTS ix_pskillusage_account ON player_skill_usage(account);
+
     -- resumo de cada dia de batalha, guardado antes de a retenção apagar as lutas (ver archive.ts). Uma linha por jogador, classe, função e guilda.
     -- As métricas são somas, para a soma de vários dias dar o mesmo valor do Ranking; o boon em volume guarda Σ(valor × active_ms).
     -- profession e guild_id são '' quando não há (uma chave composta não trata dois NULL como iguais).

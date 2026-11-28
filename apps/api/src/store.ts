@@ -15,6 +15,7 @@ export function saveFight(db: DB, id: string, f: ExtractedFight, mapName: string
   const insertSupportSkill = db.prepare(
     "INSERT INTO player_support_skills (fight_id, account, skill_id, kind, amount, downed_amount, hits, indirect) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
   );
+  const insertUsage = db.prepare("INSERT INTO player_skill_usage (fight_id, account, skill_id, kind, amount, hits, indirect) VALUES (?, ?, ?, ?, ?, ?, ?)");
   const upsertSkillName = db.prepare(
     `INSERT INTO skills (id, name) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET name = ${trusted ? "COALESCE(excluded.name, name)" : "COALESCE(NULLIF(name, ''), excluded.name)"}`,
   );
@@ -43,6 +44,7 @@ export function saveFight(db: DB, id: string, f: ExtractedFight, mapName: string
     db.prepare("DELETE FROM player_stats WHERE fight_id = ?").run(id);
     db.prepare("DELETE FROM player_skills WHERE fight_id = ?").run(id);
     db.prepare("DELETE FROM player_support_skills WHERE fight_id = ?").run(id);
+    db.prepare("DELETE FROM player_skill_usage WHERE fight_id = ?").run(id);
     for (const p of f.players) {
       if (p.guildId) insertGuild.run(p.guildId);
       insertPlayer.run(
@@ -56,6 +58,10 @@ export function saveFight(db: DB, id: string, f: ExtractedFight, mapName: string
       for (const sk of p.supportSkills) {
         upsertSkillName.run(sk.id, sk.name?.slice(0, 100) ?? null);
         insertSupportSkill.run(id, p.account, sk.id, sk.kind, sk.amount, sk.downedAmount, sk.hits, sk.indirect ? 1 : 0);
+      }
+      for (const u of p.skillUsage) {
+        upsertSkillName.run(u.id, u.name?.slice(0, 100) ?? null);
+        insertUsage.run(id, p.account, u.id, u.kind, u.amount, u.hits, u.indirect ? 1 : 0);
       }
     }
     for (const p of f.players) {

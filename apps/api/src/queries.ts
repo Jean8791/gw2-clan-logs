@@ -20,9 +20,11 @@ import {
   type PlayerOptions,
   type PlayerProfile,
   type PlayerSkill,
+  type PlayerSkillUsage,
   type PlayerSupportSkill,
   type ProfessionCount,
   type SupportKind,
+  type UsageKind,
   type RankingRow,
 } from "@gw2logs/shared";
 import { snake, STAT_COL, type DB } from "./db.js";
@@ -403,6 +405,43 @@ export function fightPlayerSupportSkills(db: DB, fightId: string, account: strin
     .all({ fightId, account, kind }) as (Omit<PlayerSupportSkill, "pct" | "avgHit" | "indirect"> & { indirect: number })[];
   const total = rows.reduce((a, r) => a + r.amount, 0);
   return rows.map((r) => ({ ...r, indirect: !!r.indirect, pct: total ? (r.amount / total) * 100 : 0, avgHit: r.hits ? r.amount / r.hits : 0 }));
+}
+
+type UsageRow = Omit<PlayerSkillUsage, "pct" | "avgHit" | "indirect"> & { indirect: number };
+const withUsagePct = (rows: UsageRow[], kind: UsageKind): PlayerSkillUsage[] => {
+  const total = rows.reduce((a, r) => a + r.amount, 0);
+  return rows.map((r) => ({ ...r, indirect: !!r.indirect, pct: total ? (r.amount / total) * 100 : 0, avgHit: kind === "taken" && r.hits ? r.amount / r.hits : 0 }));
+};
+
+/** Usos de habilidade (ou dano recebido por habilidade) de um jogador em uma luta, da que mais usou (ou mais machucou) para a que menos. */
+export function fightPlayerUsage(db: DB, fightId: string, account: string, kind: UsageKind): PlayerSkillUsage[] {
+  const rows = db
+    .prepare(
+      `SELECT sk.skill_id AS skillId, s.name AS name, sk.indirect AS indirect, sk.amount AS amount, sk.hits AS hits
+       FROM player_skill_usage sk LEFT JOIN skills s ON s.id = sk.skill_id
+       WHERE sk.fight_id = @fightId AND sk.account = @account AND sk.kind = @kind
+       ORDER BY amount DESC, sk.skill_id, sk.indirect`,
+    )
+    .all({ fightId, account, kind }) as UsageRow[];
+  return withUsagePct(rows, kind);
+}
+
+/** Usos de habilidade (ou dano recebido por habilidade) do jogador nas lutas filtradas. */
+export function playerUsage(db: DB, account: string, fl: Filters, kind: UsageKind): PlayerSkillUsage[] {
+  const { where, params } = combined(fl);
+  const rows = db
+    .prepare(
+      `SELECT sk.skill_id AS skillId, s.name AS name, sk.indirect AS indirect, SUM(sk.amount) AS amount, SUM(sk.hits) AS hits
+       FROM player_skill_usage sk
+       JOIN player_stats ps ON ps.fight_id = sk.fight_id AND ps.account = sk.account
+       JOIN fights f ON f.id = sk.fight_id
+       LEFT JOIN skills s ON s.id = sk.skill_id
+       WHERE sk.account = @account AND sk.kind = @kind AND ${where}
+       GROUP BY sk.skill_id, sk.indirect
+       ORDER BY amount DESC, sk.skill_id`,
+    )
+    .all({ ...params, account, kind }) as UsageRow[];
+  return withUsagePct(rows, kind);
 }
 
 /** Dias de batalha com lutas, do mais recente ao mais antigo. Ignora o filtro de dia, senão só sobraria o escolhido. */

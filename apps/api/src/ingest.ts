@@ -24,6 +24,16 @@ export interface ExtractedSupportSkill {
   indirect: boolean;
 }
 
+/** Usos de uma habilidade (rotação) ou dano recebido dela. `indirect`: o id é de um buff (condição). */
+export interface ExtractedSkillUsage {
+  id: number;
+  name: string | null;
+  kind: "cast" | "taken";
+  amount: number;
+  hits: number;
+  indirect: boolean;
+}
+
 export interface ExtractedPlayer extends Stats {
   account: string;
   name: string | null;
@@ -39,6 +49,7 @@ export interface ExtractedPlayer extends Stats {
   nearCoverMs: number;
   skills: ExtractedSkill[];
   supportSkills: ExtractedSupportSkill[];
+  skillUsage: ExtractedSkillUsage[];
 }
 
 export interface ExtractedFight {
@@ -317,6 +328,7 @@ export function extractFight(r: J): ExtractedFight {
       nearCoverMs: tag.nearCoverMs,
       skills: skillDamage(p, targetIdx, skillMap, buffMap),
       supportSkills: supportSkills(p, skillMap, buffMap),
+      skillUsage: skillUsage(p, skillMap, buffMap),
     };
   });
 
@@ -357,7 +369,7 @@ function mergeSameAccount(players: ExtractedPlayer[]): ExtractedPlayer[] {
   return [...byAccount.values()].map((group) => {
     if (group.length === 1) return group[0]!;
     const main = group.reduce((a, b) => (b.activeMs > a.activeMs ? b : a));
-    const merged: ExtractedPlayer = { ...main, activeMs: 0, commander: group.some((p) => p.commander), skills: [], supportSkills: [] };
+    const merged: ExtractedPlayer = { ...main, activeMs: 0, commander: group.some((p) => p.commander), skills: [], supportSkills: [], skillUsage: [] };
     for (const k of STAT_KEYS) merged[k] = group.reduce((a, p) => a + p[k], 0);
     merged.activeMs = group.reduce((a, p) => a + p.activeMs, 0);
     merged.distCoverMs = group.reduce((a, p) => a + p.distCoverMs, 0);
@@ -383,6 +395,16 @@ function mergeSameAccount(players: ExtractedPlayer[]): ExtractedPlayer[] {
       support.set(key, cur);
     }
     merged.supportSkills = [...support.values()];
+    const usage = new Map<string, ExtractedSkillUsage>();
+    for (const u of group.flatMap((p) => p.skillUsage)) {
+      const key = `${u.kind}:${u.indirect}:${u.id}`;
+      const cur = usage.get(key) ?? { ...u, amount: 0, hits: 0 };
+      cur.amount += u.amount;
+      cur.hits += u.hits;
+      cur.name ??= u.name;
+      usage.set(key, cur);
+    }
+    merged.skillUsage = [...usage.values()];
     return merged;
   });
 }
@@ -454,6 +476,30 @@ function supportSkills(p: J, skillMap: J, buffMap: J): ExtractedSupportSkill[] {
     return { id, name: nameOf(id, indirect), kind: "barrier", amount: num(d, "totalBarrier"), downedAmount: 0, hits: num(d, "hits"), indirect };
   });
   return [...heals, ...barriers].filter((s) => s.amount > 0 || s.downedAmount > 0);
+}
+
+/**
+ * Usos de cada habilidade (`rotation`: cada uso é uma entrada de `skills`, inclusive as que não causam dano, como utilitárias, esquivas e troca
+ * de arma) e dano recebido por habilidade (`totalDamageTaken`, fase 0). No dano recebido a habilidade indireta (condição) tem id de buff, então
+ * o nome vem do `buffMap`. Habilidade sem nenhum uso, ou que não causou dano, não vira linha.
+ */
+function skillUsage(p: J, skillMap: J, buffMap: J): ExtractedSkillUsage[] {
+  const nameOf = (id: number, indirect: boolean) => {
+    const [first, second] = indirect ? [buffMap[`b${id}`], skillMap[`s${id}`]] : [skillMap[`s${id}`], buffMap[`b${id}`]];
+    return str(first, "name") ?? str(second, "name");
+  };
+  const casts = arr(p, "rotation").map((r): ExtractedSkillUsage => {
+    const id = num(r, "id");
+    const uses = arr(r, "skills").length;
+    return { id, name: nameOf(id, false), kind: "cast", amount: uses, hits: uses, indirect: false };
+  });
+  const firstPhase = arr(p, "totalDamageTaken")[0] as unknown;
+  const taken = (Array.isArray(firstPhase) ? (firstPhase as J[]) : []).map((d): ExtractedSkillUsage => {
+    const id = num(d, "id");
+    const indirect = d.indirectDamage === true;
+    return { id, name: nameOf(id, indirect), kind: "taken", amount: num(d, "totalDamage"), hits: num(d, "hits"), indirect };
+  });
+  return [...casts, ...taken].filter((u) => u.amount > 0);
 }
 
 /**

@@ -412,6 +412,29 @@ export interface PlayerSkill {
 
 /** O que um jogador curou ou protegeu: cura ou barreira. */
 export type SupportKind = "heal" | "barrier";
+
+/** Usos de cada habilidade (rotação) ou dano recebido por habilidade. */
+export type UsageKind = "cast" | "taken";
+export const USAGE_KINDS: UsageKind[] = ["cast", "taken"];
+
+/** Os tipos da tabela de habilidades: dano, cura, barreira, usos e dano recebido. */
+export type SkillKind = "damage" | SupportKind | UsageKind;
+export const SKILL_KINDS: SkillKind[] = ["damage", "heal", "barrier", "cast", "taken"];
+
+/** Uma habilidade usada (`amount` = usos) ou que causou dano ao jogador (`amount` = dano recebido). */
+export interface PlayerSkillUsage {
+  skillId: number;
+  name: string | null;
+  /** o id é de um buff (condição que causou dano) */
+  indirect: boolean;
+  amount: number;
+  /** nos usos, igual a `amount`; no dano recebido, os acertos */
+  hits: number;
+  /** % do total (de usos ou de dano recebido) em habilidades (0 a 100) */
+  pct: number;
+  /** dano médio por acerto (zero nos usos) */
+  avgHit: number;
+}
 export const SUPPORT_KINDS: SupportKind[] = ["heal", "barrier"];
 
 /** Cura ou barreira de um jogador por habilidade, somada nas lutas filtradas. `indirect`: o id é de um buff (cura que vem de um efeito). */

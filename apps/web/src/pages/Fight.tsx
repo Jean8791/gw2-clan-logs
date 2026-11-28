@@ -2,9 +2,9 @@ import { ArrowLeft, ExternalLink } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { emptyStats, isUptimeStat, type PlayerSkill, type PlayerSupportSkill, type SupportKind, professionColor, ROUTES, STAT_KEYS, STAT_META, statsOfGroup, statText, topByStat, type BoonScope, type PlayerFight, type StatGroup, type StatKey, type Stats } from "@gw2logs/shared";
+import { emptyStats, isUptimeStat, type PlayerSkill, type PlayerSkillUsage, type PlayerSupportSkill, type SkillKind, SKILL_KINDS, professionColor, ROUTES, STAT_KEYS, STAT_META, statsOfGroup, statText, topByStat, type BoonScope, type PlayerFight, type StatGroup, type StatKey, type Stats } from "@gw2logs/shared";
 import { DataTable, type Column } from "../components/DataTable";
-import { DamageSkillsTable, SupportSkillsTable } from "../components/SkillTables";
+import { SkillsBody } from "../components/SkillTables";
 import { defaultSort, GroupTabs, pickerView, ModeToggle, statColumns, type ValueMode } from "../components/statColumns";
 import { GuildTag, NoAllianceNote, PlayerLink, Profession } from "../components/badges";
 import { AXIS, GRID, TOOLTIP } from "../components/charts";
@@ -31,11 +31,11 @@ interface GuildRow extends Stats {
 
 /** Dano, cura ou barreira por habilidade de um jogador desta luta; começa em quem mais causou dano (ou em você, se estiver na luta). */
 function FightSkills({ fightId, players, me }: { fightId: string; players: PlayerFight[]; me: string | null | undefined }) {
-  const [kind, setKind] = useState<"damage" | SupportKind>("damage");
+  const [kind, setKind] = useState<SkillKind>("damage");
   const [picked, setPicked] = useState("");
   const sorted = useMemo(() => [...players].sort((a, b) => b.damage - a.damage), [players]);
   const account = picked || (sorted.find((p) => p.account === me) ?? sorted[0])?.account || "";
-  const skills = useFightPlayerSkills<PlayerSkill | PlayerSupportSkill>(fightId, account, kind);
+  const skills = useFightPlayerSkills<PlayerSkill | PlayerSupportSkill | PlayerSkillUsage>(fightId, account, kind);
   return (
     <Card
       className="mt-6"
@@ -49,19 +49,11 @@ function FightSkills({ fightId, players, me }: { fightId: string; players: Playe
               </option>
             ))}
           </Select>
-          <Segmented size="sm" value={kind} onChange={setKind} options={(["damage", "heal", "barrier"] as const).map((k) => ({ value: k, label: t(`skills.kind.${k}`) }))} />
+          <Segmented size="sm" value={kind} onChange={setKind} options={SKILL_KINDS.map((k) => ({ value: k, label: t(`skills.kind.${k}`) }))} />
         </div>
       }
     >
-      {skills.isLoading && <Loading />}
-      {skills.error && <ErrorBox error={skills.error} />}
-      {skills.data && skills.data.length === 0 && <p className="px-5 py-6 text-sm text-faint">{t(kind === "damage" ? "fight.skills.noDamage" : "fight.skills.noSupport")}</p>}
-      {skills.data && skills.data.length > 0 && (
-        <>
-          {kind === "damage" ? <DamageSkillsTable rows={skills.data as PlayerSkill[]} /> : <SupportSkillsTable rows={skills.data as PlayerSupportSkill[]} kind={kind} />}
-          <p className="border-t border-line px-5 py-2.5 text-xs text-faint">{t(`fight.skills.note.${kind}`)}</p>
-        </>
-      )}
+      <SkillsBody kind={kind} data={skills.data} isLoading={skills.isLoading} error={skills.error} scope="fight" />
     </Card>
   );
 }

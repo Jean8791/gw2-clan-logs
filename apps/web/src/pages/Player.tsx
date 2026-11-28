@@ -27,7 +27,8 @@ import {
   type Aggregate,
   type BoonScope,
   type PlayerHistoryRow,
-  type SupportKind,
+  type SkillKind,
+  SKILL_KINDS,
   type StatGroup,
   type StatKey,
 } from "@gw2logs/shared";
@@ -37,9 +38,9 @@ import { GuildTag, Profession } from "../components/badges";
 import { AXIS, GRID, TOOLTIP } from "../components/charts";
 import { PlayerPicker } from "../components/PlayerPicker";
 import { pickerView, statColumns } from "../components/statColumns";
-import { DamageSkillsTable, SupportSkillsTable } from "../components/SkillTables";
+import { SkillsBody } from "../components/SkillTables";
 import { Badge, Button, Card, Delta, Empty, ErrorBox, Kpi, Loading, PageHeader, Segmented, Select, cx } from "../components/ui";
-import { usePlayer, usePlayerOptions, usePlayerSkills, usePlayerSupportSkills, useRanking } from "../lib/api";
+import { usePlayer, usePlayerOptions, usePlayerSkillUsage, usePlayerSkills, usePlayerSupportSkills, useRanking } from "../lib/api";
 import { setMe, useFilters, useMe } from "../lib/hooks";
 import { getLang, t as tr } from "../lib/i18n"; // "t" já é o total do jogador nesta página
 import { ScopeToggle } from "../components/statColumns";
@@ -49,10 +50,15 @@ export function PlayerPage() {
   const { account = "" } = useParams();
   const [filters, setFilters] = useFilters({ mode: "wvw" });
   const { data, error, isLoading } = usePlayer(account, filters);
-  const skills = usePlayerSkills(account, filters).data ?? [];
   // a tabela de habilidades mostra dano, cura ou barreira; cura e barreira só buscam quando escolhidas
-  const [skillKind, setSkillKind] = useState<"damage" | SupportKind>("damage");
-  const support = usePlayerSupportSkills(account, filters, skillKind === "damage" ? "heal" : skillKind, skillKind !== "damage");
+  const [skillKind, setSkillKind] = useState<SkillKind>("damage");
+  const isSupport = skillKind === "heal" || skillKind === "barrier";
+  const isUsage = skillKind === "cast" || skillKind === "taken";
+  const skillsQuery = usePlayerSkills(account, filters);
+  const skills = skillsQuery.data ?? [];
+  const support = usePlayerSupportSkills(account, filters, isSupport ? skillKind : "heal", isSupport);
+  const usage = usePlayerSkillUsage(account, filters, isUsage ? skillKind : "cast", isUsage);
+  const shown = isSupport ? support : isUsage ? usage : skillsQuery;
   // a média de comparação segue os mesmos filtros da página (período, função, classe, tamanho, mapa); sem filtro de função, é a do squad todo
   const ranking = useRanking(filters).data;
   const avg = ranking?.baseline;
@@ -310,27 +316,11 @@ export function PlayerPage() {
                   size="sm"
                   value={skillKind}
                   onChange={setSkillKind}
-                  options={(["damage", "heal", "barrier"] as const).map((k) => ({ value: k, label: tr(`skills.kind.${k}`) }))}
+                  options={SKILL_KINDS.map((k) => ({ value: k, label: tr(`skills.kind.${k}`) }))}
                 />
               }
             >
-              {skillKind === "damage" && (
-                <>
-                  <DamageSkillsTable rows={skills} />
-                  <p className="border-t border-line px-5 py-2.5 text-xs text-faint">
-                    {tr("player.skillsNote")}
-                  </p>
-                </>
-              )}
-              {skillKind !== "damage" && support.isLoading && <Loading />}
-              {skillKind !== "damage" && support.error && <ErrorBox error={support.error} />}
-              {skillKind !== "damage" && support.data && support.data.length === 0 && <p className="px-5 py-6 text-sm text-faint">{tr("skills.noSupport")}</p>}
-              {skillKind !== "damage" && support.data && support.data.length > 0 && (
-                <>
-                  <SupportSkillsTable rows={support.data} kind={skillKind} />
-                  <p className="border-t border-line px-5 py-2.5 text-xs text-faint">{tr(`skills.note.${skillKind}`)}</p>
-                </>
-              )}
+              <SkillsBody kind={skillKind} data={shown.data} isLoading={shown.isLoading} error={shown.error} scope="filters" />
             </Card>
           )}
         </>

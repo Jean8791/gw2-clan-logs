@@ -1,7 +1,8 @@
-import type { PlayerSkill, PlayerSupportSkill, SupportKind } from "@gw2logs/shared";
+import type { PlayerSkill, PlayerSkillUsage, PlayerSupportSkill, SkillKind, SupportKind, UsageKind } from "@gw2logs/shared";
 import { compact, int } from "../lib/format";
 import { t } from "../lib/i18n";
 import { DataTable, type Column } from "./DataTable";
+import { ErrorBox, Loading } from "./ui";
 import { BuffIcon, SkillIcon } from "./MediaIcon";
 
 /** Quanto da cura (ou do dano) a habilidade representa: barra e %. */
@@ -64,4 +65,51 @@ function supportColumns(kind: SupportKind): Column<PlayerSupportSkill>[] {
 /** Cura ou barreira por habilidade, da que mais curou (ou protegeu) para a que menos (as 25 primeiras). */
 export function SupportSkillsTable({ rows, kind }: { rows: PlayerSupportSkill[]; kind: SupportKind }) {
   return <DataTable key={kind} rows={rows.slice(0, 25)} columns={supportColumns(kind)} rowKey={(k) => `${k.indirect ? "b" : "s"}${k.skillId}`} dense />;
+}
+
+/** Usos de cada habilidade ou dano recebido por habilidade; a condição (indireta) leva o ícone do buff. */
+function usageColumns(kind: UsageKind): Column<PlayerSkillUsage>[] {
+  const taken = kind === "taken";
+  return [
+    {
+      id: "skill",
+      header: t("skills.col.skill"),
+      sort: (k) => k.name ?? "",
+      cell: (k) => (
+        <span className="inline-flex items-center gap-2">
+          {k.indirect ? <BuffIcon id={k.skillId} size={20} /> : <SkillIcon id={k.skillId} />}
+          {k.name ?? `#${k.skillId}`}
+        </span>
+      ),
+    },
+    { id: "amount", header: t(taken ? "skills.col.taken" : "skills.col.uses"), align: "right", sort: (k) => k.amount, cell: (k) => (taken ? compact(k.amount) : int(k.amount)) },
+    { id: "pct", header: t(taken ? "skills.col.pctTaken" : "skills.col.pctUses"), align: "right", sort: (k) => k.pct, cell: (k) => <PctBar pct={k.pct} /> },
+    ...(taken
+      ? [
+          { id: "hits", header: t("skills.col.hits"), align: "right" as const, sort: (k: PlayerSkillUsage) => k.hits, cell: (k: PlayerSkillUsage) => int(k.hits) },
+          { id: "avg", header: t("skills.col.avgTaken"), align: "right" as const, sort: (k: PlayerSkillUsage) => k.avgHit, cell: (k: PlayerSkillUsage) => compact(k.avgHit) },
+        ]
+      : []),
+  ];
+}
+
+/**
+ * A tabela de habilidades do tipo escolhido, com carregando, erro, vazio e nota. `scope` diz de onde vêm os dados: das lutas filtradas
+ * (perfil) ou de uma luta só (página da luta), que muda os textos.
+ */
+export function SkillsBody({ kind, data, isLoading, error, scope }: { kind: SkillKind; data: unknown[] | undefined; isLoading: boolean; error: unknown; scope: "filters" | "fight" }) {
+  if (isLoading) return <Loading />;
+  if (error) return <ErrorBox error={error} />;
+  if (!data) return null;
+  const emptyKey = kind === "damage" ? "noDamage" : kind === "heal" || kind === "barrier" ? "noSupport" : "noUsage";
+  if (data.length === 0) return <p className="px-5 py-6 text-sm text-faint">{t(scope === "fight" ? `fight.skills.${emptyKey}` : `skills.${emptyKey}`)}</p>;
+  const noteKey = scope === "fight" ? `fight.skills.note.${kind}` : kind === "damage" ? "player.skillsNote" : `skills.note.${kind}`;
+  return (
+    <>
+      {kind === "damage" && <DamageSkillsTable rows={data as PlayerSkill[]} />}
+      {(kind === "heal" || kind === "barrier") && <SupportSkillsTable rows={data as PlayerSupportSkill[]} kind={kind} />}
+      {(kind === "cast" || kind === "taken") && <DataTable key={kind} rows={(data as PlayerSkillUsage[]).slice(0, 25)} columns={usageColumns(kind)} rowKey={(k) => `${k.indirect ? "b" : "s"}${k.skillId}`} dense />}
+      <p className="border-t border-line px-5 py-2.5 text-xs text-faint">{t(noteKey)}</p>
+    </>
+  );
 }

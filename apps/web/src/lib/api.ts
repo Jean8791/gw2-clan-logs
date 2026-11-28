@@ -13,9 +13,12 @@ import {
   type PlayerOptions,
   type PlayerProfile,
   type PlayerSkill,
+  type PlayerSkillUsage,
   type PlayerSupportSkill,
+  type SkillKind,
   type RankingRow,
   type SupportKind,
+  type UsageKind,
   type UploadResult,
 } from "@gw2logs/shared";
 
@@ -117,11 +120,19 @@ export const usePlayerSkills = (account: string, f: Filters) =>
   useQuery({ queryKey: ["player-skills", account, f], queryFn: () => get<PlayerSkill[]>(withFilters(`/api/players/${encodeURIComponent(account)}/skills`, f)) });
 
 /** Habilidades de um jogador em uma luta: dano, cura ou barreira (a cura e a barreira só de quem grava com o Healing Stats). */
-export const useFightPlayerSkills = <T extends PlayerSkill | PlayerSupportSkill>(fightId: string, account: string, kind: "damage" | SupportKind) =>
+export const useFightPlayerSkills = <T extends PlayerSkill | PlayerSupportSkill | PlayerSkillUsage>(fightId: string, account: string, kind: SkillKind) =>
   useQuery({
     queryKey: ["fight-player-skills", fightId, account, kind],
     enabled: !!account,
     queryFn: () => get<T[]>(`/api/fights/${encodeURIComponent(fightId)}/players/${encodeURIComponent(account)}/skills?kind=${kind}`),
+  });
+
+/** Usos de cada habilidade (cast) ou dano recebido por habilidade (taken) do jogador. */
+export const usePlayerSkillUsage = (account: string, f: Filters, kind: UsageKind, enabled = true) =>
+  useQuery({
+    queryKey: ["player-skill-usage", account, f, kind],
+    enabled,
+    queryFn: () => get<PlayerSkillUsage[]>(withFilters(`/api/players/${encodeURIComponent(account)}/skill-usage`, f, { kind })),
   });
 
 /** Cura ou barreira do jogador por habilidade (só de quem grava com o Healing Stats). */
