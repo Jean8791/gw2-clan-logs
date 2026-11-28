@@ -113,6 +113,14 @@ describe("limite de requisições por IP", () => {
     expect(retorno).toEqual([302, 302, 429]); // a conta do retorno é separada da do login
     expect((await ler("/api/config")).statusCode).toBe(200); // o resto da API segue livre
   });
+
+  it("gerar a chave do script também tem o limite mais baixo, na conta própria", async () => {
+    await iniciar({ DISCORD_CLIENT_ID: "cid", DISCORD_CLIENT_SECRET: "csecret", ALLOW_ANY_DISCORD: "true", RATE_LIMIT_AUTH_PER_MIN: "2" });
+    const gerar = async () => (await app.server.inject({ method: "POST", url: "/api/auth/token", remoteAddress: "10.0.0.1" })).statusCode;
+
+    expect([await gerar(), await gerar(), await gerar()]).toEqual([401, 401, 429]); // sem sessão dá 401; o terceiro pedido já passa do limite
+    expect(await rajada(2, "/api/auth/login")).toEqual([302, 302]); // o login tem a conta dele
+  });
 });
 
 describe("configuração do limite", () => {
