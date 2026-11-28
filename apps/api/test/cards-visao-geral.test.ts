@@ -13,7 +13,7 @@ const contas = (l: { row: { account: string } }[]) => l.map((x) => x.row.account
 describe("cards da Visão geral: o que cada card oferece", () => {
   it("o padrão tem um card por grupo do Ranking e a métrica de cada um pertence ao grupo", () => {
     expect(Object.keys(DEFAULT_CARDS)).toEqual(STAT_GROUPS.map((g) => g.id));
-    for (const g of STAT_GROUPS) expect(cardOptions(g.id, "squad")).toContain(DEFAULT_CARDS[g.id]);
+    for (const g of STAT_GROUPS) expect(cardOptions(g.id)).toContain(DEFAULT_CARDS[g.id]);
     expect(DEFAULT_CARDS).toEqual({ offense: "damage", support: "healing", boons: "stabOut", uptime: "stabUp", defense: "dodges" });
   });
 
@@ -23,22 +23,23 @@ describe("cards da Visão geral: o que cada card oferece", () => {
     expect(cardOptions("defense")).not.toContain(HEALING_BARRIER);
   });
 
-  it("nos boons, o seletor lista só o alcance pedido", () => {
-    expect(cardOptions("boons", "squad")).toContain("stabOut");
-    expect(cardOptions("boons", "squad")).not.toContain("stabGroup");
-    expect(cardOptions("boons", "group")).toContain("stabGroup");
-    expect(cardOptions("boons", "self")).toContain("stabSelf");
+  it("nos boons, o seletor lista só as métricas da squad inteira", () => {
+    expect(cardOptions("boons")).toContain("stabOut");
+    expect(cardOptions("boons")).not.toContain("stabGroup");
+    expect(cardOptions("boons")).not.toContain("stabSelf");
   });
 });
 
 describe("cards da Visão geral: escolha guardada no link", () => {
   it("lê grupo:métrica separados por vírgula", () => {
-    expect(parseCards("support:strips,boons:stabGroup")).toEqual({ support: "strips", boons: "stabGroup" });
+    expect(parseCards("support:strips,boons:stabOut")).toEqual({ support: "strips", boons: "stabOut" });
     expect(parseCards("support:healingBarrier")).toEqual({ support: "healingBarrier" });
   });
 
   it.each([
     ["métrica de outro grupo", "offense:strips"],
+    ["boon só do grupo", "boons:stabGroup"],
+    ["boon só de si", "boons:stabSelf"],
     ["métrica que não existe", "offense:xxx"],
     ["grupo que não existe", "foo:damage"],
     ["Cura + barreira fora do Suporte", "offense:healingBarrier"],
@@ -71,9 +72,9 @@ describe("cards da Visão geral: escolha guardada no link", () => {
     expect(serializeCards(DEFAULT_CARDS)).toBe("");
   });
 
-  it("toda métrica oferecida em qualquer alcance sobrevive à ida e volta", () => {
+  it("toda métrica que o seletor oferece sobrevive à ida e volta", () => {
     for (const g of STAT_GROUPS) {
-      for (const m of [...STAT_KEYS.filter((k) => STAT_META[k].group === g.id), ...cardOptions(g.id)]) {
+      for (const m of cardOptions(g.id)) {
         expect(parseCards(`${g.id}:${m}`)).toEqual({ [g.id]: m });
       }
     }

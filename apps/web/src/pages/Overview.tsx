@@ -2,14 +2,13 @@ import { ArrowRight, X } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
-  ARCHIVE_MONTHS, cardHigherIsBetter, cardOptions, HEALING_BARRIER, inScope, isCardRate, isMonth, overviewDefaults, perSecond, ROUTES, STAT_GROUPS, STAT_META, statText, topByCard,
-  type BoonScope, type CardMetric, type Cards, type Filters, type RankingRow, type StatGroup, type StatKey, type TimeAdjust,
+  ARCHIVE_MONTHS, cardHigherIsBetter, cardOptions, HEALING_BARRIER, isCardRate, isMonth, overviewDefaults, perSecond, ROUTES, STAT_GROUPS, statText, topByCard,
+  type CardMetric, type Cards, type Filters, type RankingRow, type StatGroup, type StatKey, type TimeAdjust,
 } from "@gw2logs/shared";
 import { DataTable, type Column } from "../components/DataTable";
 import { FilterBar } from "../components/FilterBar";
 import { FightStatus, fightKills, KillDeath, SquadVsEnemy, Won } from "../components/FightBits";
 import { GuildTag, PlayerLink, Profession, ProfessionDot } from "../components/badges";
-import { ScopeToggle } from "../components/statColumns";
 import { Card, Empty, ErrorBox, Kpi, Loading, PageHeader, Select, cx } from "../components/ui";
 import { useArchiveMonths, useArchiveRanking, useDays, useOverview, useRanking } from "../lib/api";
 import { useCards, useFilters } from "../lib/hooks";
@@ -23,7 +22,6 @@ const metricName = (m: CardMetric) => (m === HEALING_BARRIER ? t("overview.card.
 /** Cura + barreira mostra os números como a cura. */
 const formatKey = (m: CardMetric): StatKey => (m === HEALING_BARRIER ? "healing" : m);
 const totalOf = (row: RankingRow, m: CardMetric) => (m === HEALING_BARRIER ? row.healing + row.barrier : row[m]);
-const scopeOf = (m: CardMetric): BoonScope => (m === HEALING_BARRIER ? "squad" : (STAT_META[m].scope ?? "squad"));
 
 /** Um card por grupo de métricas: o top 5 da métrica escolhida no seletor do cabeçalho; o detalhe (top 10) fica no rodapé. */
 function Leaderboard({ group, metric, rows, adjust, open, onMetric, onDetail }: { group: StatGroup; metric: CardMetric; rows: RankingRow[]; adjust?: TimeAdjust; open: boolean; onMetric: (m: CardMetric) => void; onDetail: () => void }) {
@@ -41,7 +39,7 @@ function Leaderboard({ group, metric, rows, adjust, open, onMetric, onDetail }: 
       title={<span className="whitespace-nowrap">{groupName}</span>}
       action={
         <Select className="w-40" aria-label={t("overview.card.metric", { group: groupName })} value={metric} onChange={(e) => onMetric(e.target.value as CardMetric)}>
-          {cardOptions(group, scopeOf(metric)).map((m) => (
+          {cardOptions(group).map((m) => (
             <option key={m} value={m}>
               {metricName(m)}
             </option>
@@ -49,11 +47,6 @@ function Leaderboard({ group, metric, rows, adjust, open, onMetric, onDetail }: 
         </Select>
       }
     >
-      {group === "boons" && (
-        <div className="px-3 pt-3">
-          <ScopeToggle value={scopeOf(metric)} onChange={(s) => onMetric(inScope(metric as StatKey, s))} />
-        </div>
-      )}
       {top.length === 0 ? (
         <p className="px-5 py-6 text-sm text-faint">{t("overview.noData")}</p>
       ) : (

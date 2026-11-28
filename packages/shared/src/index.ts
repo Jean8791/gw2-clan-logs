@@ -678,13 +678,13 @@ export type Cards = Record<StatGroup, CardMetric>;
 export const DEFAULT_CARDS: Cards = { offense: "damage", support: "healing", boons: "stabOut", uptime: "stabUp", defense: "dodges" };
 
 /** As métricas que o seletor de um card oferece: as do grupo (nos boons, as do alcance pedido) e, no Suporte, Cura + barreira no fim. */
-export function cardOptions(group: StatGroup, scope: BoonScope = "squad"): CardMetric[] {
-  const keys: CardMetric[] = statsOfGroup(group, scope);
+export function cardOptions(group: StatGroup): CardMetric[] {
+  const keys: CardMetric[] = statsOfGroup(group);
   return group === "support" ? [...keys, HEALING_BARRIER] : keys;
 }
 
 const isCardMetric = (group: StatGroup, metric: string): metric is CardMetric =>
-  metric === HEALING_BARRIER ? group === "support" : (STAT_KEYS as readonly string[]).includes(metric) && STAT_META[metric as StatKey].group === group;
+  metric === HEALING_BARRIER ? group === "support" : (STAT_KEYS as readonly string[]).includes(metric) && STAT_META[metric as StatKey].group === group && (group !== "boons" || cardOptions(group).includes(metric as StatKey));
 
 /** Lê o `cards` do link (`grupo:métrica,grupo:métrica`): o que for inválido, de outro grupo ou repetido de forma estranha é descartado. */
 export function parseCards(raw: string | null | undefined): Partial<Cards> {
