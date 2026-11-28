@@ -71,7 +71,7 @@ export async function buildApp(cfg: Config, opts: { logger?: FastifyServerOption
 
   // Limite de pedidos por IP (o IP do X-Forwarded-For só vale com TRUST_PROXY). Só a API conta: o site (HTML, JS e CSS), os ícones e o alerta de
   // fora do ar ficam de fora, para uma página que faz dezenas de pedidos, ou vários usuários atrás do mesmo IP, não esbarrem no limite.
-  // O login e o retorno do Discord têm um limite próprio e mais baixo (ver auth-routes.ts).
+  // O login, o retorno do Discord e a geração da chave do script têm um limite próprio e mais baixo (ver auth-routes.ts).
   if (cfg.rateLimit.perMin > 0 || cfg.rateLimit.authPerMin > 0) {
     await server.register(rateLimit, {
       global: cfg.rateLimit.perMin > 0,
