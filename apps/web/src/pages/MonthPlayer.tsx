@@ -5,8 +5,9 @@ import { isMonth, parseFilters, ROUTES, statsOfGroup, type BoonScope, type StatG
 import { DataTable, type Column } from "../components/DataTable";
 import { GuildTag, Profession } from "../components/badges";
 import { defaultSort, GroupTabs, ModeToggle, statColumnsFor, type ValueMode } from "../components/statColumns";
+import { PeriodPicker } from "../components/PeriodPicker";
 import { Card, Empty, ErrorBox, Kpi, Loading, PageHeader } from "../components/ui";
-import { useArchivePlayer } from "../lib/api";
+import { useArchiveMonths, useArchivePlayer, useArchiveWeeks } from "../lib/api";
 import { accountShort, dateTime, duration, int, monthLabel, weekLabel } from "../lib/format";
 import { t } from "../lib/i18n";
 
@@ -16,7 +17,7 @@ import { t } from "../lib/i18n";
  */
 export function MonthPlayerPage() {
   const { account = "" } = useParams();
-  const [params] = useSearchParams();
+  const [params, setParams] = useSearchParams();
   const filters = parseFilters(Object.fromEntries(params));
   const asked = params.get("month") ?? "";
   const month = isMonth(asked) ? asked : undefined;
@@ -24,6 +25,22 @@ export function MonthPlayerPage() {
   const [scope, setScope] = useState<BoonScope>("squad");
   const [mode, setMode] = useState<ValueMode>("perMin");
   const { data, error, isLoading } = useArchivePlayer(account, month, filters);
+  const months = useArchiveMonths(true).data ?? [];
+  const weeks = useArchiveWeeks(true).data ?? [];
+  // trocar de mês ou de semana mantém o jogador e os filtros de guilda e função
+  const setPeriod = (p: { month?: string; week?: string }) =>
+    setParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete("month");
+        next.delete("week");
+        if (p.month) next.set("month", p.month);
+        if (p.week) next.set("week", p.week);
+        return next;
+      },
+      { replace: true },
+    );
+  const picker = <PeriodPicker months={months} weeks={weeks} month={month} week={filters.week} onChange={setPeriod} />;
 
   const period = filters.week ? weekLabel(filters.week) : month ? monthLabel(month) : "";
   const back = `${ROUTES.months}?${params.toString()}`;
@@ -32,6 +49,7 @@ export function MonthPlayerPage() {
     return (
       <>
         <BackLink to={back} />
+        {picker}
         {error && (error as { status?: number }).status !== 404 ? <ErrorBox error={error} /> : <Empty title={t("monthPlayer.notFound")}>{period}</Empty>}
       </>
     );
@@ -47,6 +65,7 @@ export function MonthPlayerPage() {
     <>
       <BackLink to={back} />
       <PageHeader title={row.name ?? accountShort(account)} subtitle={`${period} · ${account}`} />
+      {picker}
       <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-6">
         <Kpi label={t("monthPlayer.period")} value={<span className="text-base">{period}</span>} accent />
         <Kpi label={t("table.fights")} value={int(row.fights)} />
