@@ -8,7 +8,7 @@ import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest, 
 import multipart from "@fastify/multipart";
 import rateLimit from "@fastify/rate-limit";
 import fastifyStatic from "@fastify/static";
-import { isMonth, MAX_JSON_MB, MAX_UPLOAD_MB, parseFilters, referenceTimeMs, type Filters, type UploadResult } from "@gw2logs/shared";
+import { isMonth, MAX_JSON_MB, MAX_UPLOAD_MB, parseFilters, referenceTimeMs, SUPPORT_KINDS, type Filters, type SupportKind, type UploadResult } from "@gw2logs/shared";
 import { isAdmin, type User } from "./auth.js";
 import { apiUser, registerAuthRoutes, sessionUser } from "./auth-routes.js";
 import { paths, type Config } from "./config.js";
@@ -329,6 +329,13 @@ export async function buildApp(cfg: Config, opts: { logger?: FastifyServerOption
   });
 
   server.get<{ Params: { account: string } }>("/api/players/:account/skills", async (req) => q.playerSkills(db, req.params.account, filtersOf(req)));
+
+  // cura ou barreira por habilidade (só de quem grava com o addon Healing Stats); sem kind, a cura
+  server.get<{ Params: { account: string } }>("/api/players/:account/support-skills", async (req, reply) => {
+    const kind = String((req.query as Record<string, unknown>).kind ?? "") || "heal";
+    if (!(SUPPORT_KINDS as string[]).includes(kind)) return reply.code(400).send({ error: "Use kind=heal or kind=barrier.", code: "badKind" });
+    return q.playerSupportSkills(db, req.params.account, filtersOf(req), kind as SupportKind);
+  });
 
   server.get("/api/compare", async (req, reply) => {
     const qs = req.query as Record<string, string>;

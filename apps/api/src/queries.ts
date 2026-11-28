@@ -20,7 +20,9 @@ import {
   type PlayerOptions,
   type PlayerProfile,
   type PlayerSkill,
+  type PlayerSupportSkill,
   type ProfessionCount,
+  type SupportKind,
   type RankingRow,
 } from "@gw2logs/shared";
 import { snake, STAT_COL, type DB } from "./db.js";
@@ -354,6 +356,25 @@ export function playerSkills(db: DB, account: string, fl: Filters): PlayerSkill[
     .all({ ...params, account }) as Omit<PlayerSkill, "pct" | "avgHit">[];
   const total = rows.reduce((a, r) => a + r.damage, 0);
   return rows.map((r) => ({ ...r, pct: total ? (r.damage / total) * 100 : 0, avgHit: r.connectedHits ? r.damage / r.connectedHits : 0 }));
+}
+
+/** Cura ou barreira do jogador por habilidade nas lutas filtradas, da que mais curou (ou protegeu) para a que menos. */
+export function playerSupportSkills(db: DB, account: string, fl: Filters, kind: SupportKind): PlayerSupportSkill[] {
+  const { where, params } = combined(fl);
+  const rows = db
+    .prepare(
+      `SELECT sk.skill_id AS skillId, s.name AS name, sk.indirect AS indirect, SUM(sk.amount) AS amount, SUM(sk.downed_amount) AS downedAmount, SUM(sk.hits) AS hits
+       FROM player_support_skills sk
+       JOIN player_stats ps ON ps.fight_id = sk.fight_id AND ps.account = sk.account
+       JOIN fights f ON f.id = sk.fight_id
+       LEFT JOIN skills s ON s.id = sk.skill_id
+       WHERE sk.account = @account AND sk.kind = @kind AND ${where}
+       GROUP BY sk.skill_id, sk.indirect
+       ORDER BY amount DESC, sk.skill_id`,
+    )
+    .all({ ...params, account, kind }) as (Omit<PlayerSupportSkill, "pct" | "avgHit" | "indirect"> & { indirect: number })[];
+  const total = rows.reduce((a, r) => a + r.amount, 0);
+  return rows.map((r) => ({ ...r, indirect: !!r.indirect, pct: total ? (r.amount / total) * 100 : 0, avgHit: r.hits ? r.amount / r.hits : 0 }));
 }
 
 /** Dias de batalha com lutas, do mais recente ao mais antigo. Ignora o filtro de dia, senão só sobraria o escolhido. */

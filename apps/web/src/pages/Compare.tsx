@@ -6,6 +6,7 @@ import { bestValue, hasStatData, ROUTES, STAT_META, statRate, statsOfGroup, stat
 import { FilterBar } from "../components/FilterBar";
 import { GroupTabs } from "../components/statColumns";
 import { PlayerPicker } from "../components/PlayerPicker";
+import { SkillsCompare } from "../components/SkillsCompare";
 import { ProfessionDot } from "../components/badges";
 import { SERIES, TOOLTIP } from "../components/charts";
 import { Card, Empty, ErrorBox, Loading, PageHeader, cx } from "../components/ui";
@@ -170,6 +171,7 @@ export function ComparePage() {
               <p className="border-t border-line px-4 py-2.5 text-xs text-faint">{t("compare.note")}</p>
             </Card>
           </div>
+          <SkillsCompare players={players} filters={filters} />
         </>
       )}
     </>

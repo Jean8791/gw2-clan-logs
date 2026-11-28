@@ -12,8 +12,8 @@ Histórico de **WvW de Guild Wars 2** para clãs e alianças. Os logs do ArcDPS 
 | **Dias** | Cada dia de batalha, das 06:00 às 06:00 (Brasília): uma noite que passa da meia-noite continua no mesmo dia |
 | **Lutas** e **Luta** | Lista das lutas e o detalhe de cada uma: squad × inimigos, gráfico de dano e tabelas de Dano, Suporte, Boons, Uptime e Defesa, por jogador, por guilda e por grupo |
 | **Ranking** | Todos os jogadores, com filtros por período, dia, guilda, só a aliança, função, classe, tamanho do squad, duração e mapa. Mostra total, por minuto ou por segundo, ordena por qualquer coluna e deixa escolher as colunas. Os filtros ficam no link, então dá para mandar no Discord. Quem jogou de mais de uma classe aparece com todas, com as lutas de cada uma |
-| **Perfil** | O histórico do jogador, a evolução luta a luta, habilidades e a comparação com a média de quem joga na mesma função |
-| **Comparar** | Até 4 jogadores lado a lado, com radar e tabela |
+| **Perfil** | O histórico do jogador, a evolução luta a luta, as habilidades (dano, **cura e barreira**: o total de cada uma e o % do total do jogador) e a comparação com a média de quem joga na mesma função |
+| **Comparar** | Até 4 jogadores lado a lado, com radar, tabela e as habilidades de cada um (cura, barreira ou dano) para ver o que muda entre um curandeiro e outro da mesma classe |
 | **Guildas** | A guilda de cada jogador vem do log; nome e tag vêm da API oficial do GW2. Quem administra o site (`ADMIN_DISCORD_IDS`) marca com ★ as da aliança; os demais veem a estrela |
 | **Importar logs** | Só para quem está logado: arraste os logs (ou um `.zip`), acompanhe o processamento e gere o token do script de envio. O envio continua se você trocar de tela |
 
