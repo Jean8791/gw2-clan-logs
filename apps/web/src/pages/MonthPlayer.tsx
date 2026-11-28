@@ -82,7 +82,7 @@ export function MonthPlayerPage() {
       </div>
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <GroupTabs value={group} onChange={setGroup} scope={scope} onScopeChange={setScope} />
-        <ModeToggle value={mode} onChange={setMode} />
+        {group !== "boons" && group !== "uptime" && <ModeToggle value={mode} onChange={setMode} />}
       </div>
       <Card title={t("monthPlayer.summary")}>
         <DataTable
