@@ -91,7 +91,7 @@ export function MonthsPage() {
           </div>
           {rk.error && <ErrorBox error={rk.error} />}
           {rk.isLoading && <Loading />}
-          {rk.data && <CardsGrid rows={rk.data.rows} adjust={adjust} cards={cards} setCard={setCard} />}
+          {rk.data && <CardsGrid initialDetail="offense" rows={rk.data.rows} adjust={adjust} cards={cards} setCard={setCard} />}
           <p className="mt-4 text-xs text-faint">{t("archive.note", { n: ARCHIVE_MONTHS })}</p>
           {week && <p className="mt-1 text-xs text-faint">{t("archive.weekNote")}</p>}
         </>
