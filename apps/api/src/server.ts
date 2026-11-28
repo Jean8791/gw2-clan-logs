@@ -291,6 +291,14 @@ export async function buildApp(cfg: Config, opts: { logger?: FastifyServerOption
     return d ?? reply.code(404).send({ error: "Fight not found.", code: "fightNotFound" });
   });
 
+  // habilidades de um jogador na luta: dano (padrão), cura ou barreira (só de quem grava com o addon Healing Stats)
+  server.get<{ Params: { id: string; account: string } }>("/api/fights/:id/players/:account/skills", async (req, reply) => {
+    const kind = String((req.query as Record<string, unknown>).kind ?? "") || "damage";
+    if (kind !== "damage" && !(SUPPORT_KINDS as string[]).includes(kind)) return reply.code(400).send({ error: "Use kind=damage, heal or barrier.", code: "badKind" });
+    if (!db.prepare("SELECT 1 FROM fights WHERE id = ?").get(req.params.id)) return reply.code(404).send({ error: "Fight not found.", code: "fightNotFound" });
+    return kind === "damage" ? q.fightPlayerSkills(db, req.params.id, req.params.account) : q.fightPlayerSupportSkills(db, req.params.id, req.params.account, kind as SupportKind);
+  });
+
   // relatório HTML completo do Elite Insights (rotação, linha do tempo, replay)
   server.get<{ Params: { id: string } }>("/api/fights/:id/report", async (req, reply) => {
     const id = req.params.id;

@@ -377,6 +377,34 @@ export function playerSupportSkills(db: DB, account: string, fl: Filters, kind: 
   return rows.map((r) => ({ ...r, indirect: !!r.indirect, pct: total ? (r.amount / total) * 100 : 0, avgHit: r.hits ? r.amount / r.hits : 0 }));
 }
 
+/** Dano de um jogador por habilidade em uma luta, da que mais causa dano para a que menos. */
+export function fightPlayerSkills(db: DB, fightId: string, account: string): PlayerSkill[] {
+  const rows = db
+    .prepare(
+      `SELECT sk.skill_id AS skillId, s.name AS name, sk.damage AS damage, sk.hits AS hits, sk.connected_hits AS connectedHits
+       FROM player_skills sk LEFT JOIN skills s ON s.id = sk.skill_id
+       WHERE sk.fight_id = @fightId AND sk.account = @account
+       ORDER BY damage DESC, sk.skill_id`,
+    )
+    .all({ fightId, account }) as Omit<PlayerSkill, "pct" | "avgHit">[];
+  const total = rows.reduce((a, r) => a + r.damage, 0);
+  return rows.map((r) => ({ ...r, pct: total ? (r.damage / total) * 100 : 0, avgHit: r.connectedHits ? r.damage / r.connectedHits : 0 }));
+}
+
+/** Cura ou barreira de um jogador por habilidade em uma luta, da que mais curou (ou protegeu) para a que menos. */
+export function fightPlayerSupportSkills(db: DB, fightId: string, account: string, kind: SupportKind): PlayerSupportSkill[] {
+  const rows = db
+    .prepare(
+      `SELECT sk.skill_id AS skillId, s.name AS name, sk.indirect AS indirect, sk.amount AS amount, sk.downed_amount AS downedAmount, sk.hits AS hits
+       FROM player_support_skills sk LEFT JOIN skills s ON s.id = sk.skill_id
+       WHERE sk.fight_id = @fightId AND sk.account = @account AND sk.kind = @kind
+       ORDER BY amount DESC, sk.skill_id, sk.indirect`,
+    )
+    .all({ fightId, account, kind }) as (Omit<PlayerSupportSkill, "pct" | "avgHit" | "indirect"> & { indirect: number })[];
+  const total = rows.reduce((a, r) => a + r.amount, 0);
+  return rows.map((r) => ({ ...r, indirect: !!r.indirect, pct: total ? (r.amount / total) * 100 : 0, avgHit: r.hits ? r.amount / r.hits : 0 }));
+}
+
 /** Dias de batalha com lutas, do mais recente ao mais antigo. Ignora o filtro de dia, senão só sobraria o escolhido. */
 export function battleDays(db: DB, fl: Filters): DaySummary[] {
   const all: Filters = { ...fl, day: undefined };

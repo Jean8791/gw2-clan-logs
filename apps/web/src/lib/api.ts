@@ -116,6 +116,14 @@ export const usePlayerOptions = (account: string, f: Filters) =>
 export const usePlayerSkills = (account: string, f: Filters) =>
   useQuery({ queryKey: ["player-skills", account, f], queryFn: () => get<PlayerSkill[]>(withFilters(`/api/players/${encodeURIComponent(account)}/skills`, f)) });
 
+/** Habilidades de um jogador em uma luta: dano, cura ou barreira (a cura e a barreira só de quem grava com o Healing Stats). */
+export const useFightPlayerSkills = <T extends PlayerSkill | PlayerSupportSkill>(fightId: string, account: string, kind: "damage" | SupportKind) =>
+  useQuery({
+    queryKey: ["fight-player-skills", fightId, account, kind],
+    enabled: !!account,
+    queryFn: () => get<T[]>(`/api/fights/${encodeURIComponent(fightId)}/players/${encodeURIComponent(account)}/skills?kind=${kind}`),
+  });
+
 /** Cura ou barreira do jogador por habilidade (só de quem grava com o Healing Stats). */
 export const usePlayerSupportSkills = (account: string, f: Filters, kind: SupportKind, enabled = true) =>
   useQuery({

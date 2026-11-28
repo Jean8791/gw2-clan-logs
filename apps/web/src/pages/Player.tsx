@@ -27,8 +27,6 @@ import {
   type Aggregate,
   type BoonScope,
   type PlayerHistoryRow,
-  type PlayerSkill,
-  type PlayerSupportSkill,
   type SupportKind,
   type StatGroup,
   type StatKey,
@@ -39,7 +37,7 @@ import { GuildTag, Profession } from "../components/badges";
 import { AXIS, GRID, TOOLTIP } from "../components/charts";
 import { PlayerPicker } from "../components/PlayerPicker";
 import { pickerView, statColumns } from "../components/statColumns";
-import { BuffIcon, SkillIcon } from "../components/MediaIcon";
+import { DamageSkillsTable, SupportSkillsTable } from "../components/SkillTables";
 import { Badge, Button, Card, Delta, Empty, ErrorBox, Kpi, Loading, PageHeader, Segmented, Select, cx } from "../components/ui";
 import { usePlayer, usePlayerOptions, usePlayerSkills, usePlayerSupportSkills, useRanking } from "../lib/api";
 import { setMe, useFilters, useMe } from "../lib/hooks";
@@ -101,70 +99,6 @@ export function PlayerPage() {
   if (!data) return null;
   const t = data.totals;
   const isMe = me === account;
-
-  const skillCols: Column<PlayerSkill>[] = [
-    {
-      id: "skill",
-      header: tr("skills.col.skill"),
-      sort: (k) => k.name ?? "",
-      cell: (k) => (
-        <span className="inline-flex items-center gap-2">
-          <SkillIcon id={k.skillId} />
-          {k.name ?? `#${k.skillId}`}
-        </span>
-      ),
-    },
-    { id: "damage", header: tr("skills.col.damage"), align: "right", sort: (k) => k.damage, cell: (k) => compact(k.damage) },
-    {
-      id: "pct",
-      header: tr("skills.col.pct"),
-      align: "right",
-      sort: (k) => k.pct,
-      cell: (k) => (
-        <span className="inline-flex items-center justify-end gap-2">
-          <span className="h-1.5 w-16 rounded-full bg-surface-3">
-            <span className="block h-1.5 rounded-full bg-gold/70" style={{ width: `${Math.min(100, k.pct)}%` }} />
-          </span>
-          <span className="w-12 text-right">{k.pct.toFixed(1).replace(".", ",")}%</span>
-        </span>
-      ),
-    },
-    { id: "hits", header: tr("skills.col.hits"), align: "right", sort: (k) => k.connectedHits, cell: (k) => int(k.connectedHits), title: tr("skills.col.hitsTitle") },
-    { id: "avg", header: tr("skills.col.avg"), align: "right", sort: (k) => k.avgHit, cell: (k) => compact(k.avgHit) },
-  ];
-
-  // cura e barreira: a habilidade indireta (efeito, como Regeneração) tem id de buff, então leva o ícone do buff
-  const supportCols: Column<PlayerSupportSkill>[] = [
-    {
-      id: "skill",
-      header: tr("skills.col.skill"),
-      sort: (k) => k.name ?? "",
-      cell: (k) => (
-        <span className="inline-flex items-center gap-2">
-          {k.indirect ? <BuffIcon id={k.skillId} size={20} /> : <SkillIcon id={k.skillId} />}
-          {k.name ?? `#${k.skillId}`}
-        </span>
-      ),
-    },
-    { id: "amount", header: tr(skillKind === "barrier" ? "skills.col.shielded" : "skills.col.healed"), align: "right", sort: (k) => k.amount, cell: (k) => compact(k.amount) },
-    {
-      id: "pct",
-      header: tr(skillKind === "barrier" ? "skills.col.pctBarrier" : "skills.col.pctHeal"),
-      align: "right",
-      sort: (k) => k.pct,
-      cell: (k) => (
-        <span className="inline-flex items-center justify-end gap-2">
-          <span className="h-1.5 w-16 rounded-full bg-surface-3">
-            <span className="block h-1.5 rounded-full bg-gold/70" style={{ width: `${Math.min(100, k.pct)}%` }} />
-          </span>
-          <span className="w-12 text-right">{k.pct.toFixed(1).replace(".", ",")}%</span>
-        </span>
-      ),
-    },
-    ...(skillKind === "heal" ? [{ id: "downed", header: tr("skills.col.downed"), title: tr("skills.col.downedTitle"), align: "right" as const, sort: (k: PlayerSupportSkill) => k.downedAmount, cell: (k: PlayerSupportSkill) => compact(k.downedAmount) }] : []),
-    { id: "hits", header: tr("skills.col.applications"), title: tr("skills.col.applicationsTitle"), align: "right", sort: (k) => k.hits, cell: (k) => int(k.hits) },
-    { id: "avg", header: tr("skills.col.avgSupport"), align: "right", sort: (k) => k.avgHit, cell: (k) => compact(k.avgHit) },
-  ];
 
   // Linha "Total": cada coluna mostra o mesmo valor do Ranking. Soma das lutas filtradas; em boons e uptime, a média ponderada pelo tempo
   // ajustada pelo tempo jogado (a conta vai na dica).
@@ -382,7 +316,7 @@ export function PlayerPage() {
             >
               {skillKind === "damage" && (
                 <>
-                  <DataTable rows={skills.slice(0, 25)} columns={skillCols} rowKey={(k) => String(k.skillId)} dense />
+                  <DamageSkillsTable rows={skills} />
                   <p className="border-t border-line px-5 py-2.5 text-xs text-faint">
                     {tr("player.skillsNote")}
                   </p>
@@ -393,7 +327,7 @@ export function PlayerPage() {
               {skillKind !== "damage" && support.data && support.data.length === 0 && <p className="px-5 py-6 text-sm text-faint">{tr("skills.noSupport")}</p>}
               {skillKind !== "damage" && support.data && support.data.length > 0 && (
                 <>
-                  <DataTable key={skillKind} rows={support.data.slice(0, 25)} columns={supportCols} rowKey={(k) => `${k.indirect ? "b" : "s"}${k.skillId}`} dense />
+                  <SupportSkillsTable rows={support.data} kind={skillKind} />
                   <p className="border-t border-line px-5 py-2.5 text-xs text-faint">{tr(`skills.note.${skillKind}`)}</p>
                 </>
               )}

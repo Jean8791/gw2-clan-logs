@@ -2,14 +2,15 @@ import { ArrowLeft, ExternalLink } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { emptyStats, isUptimeStat, professionColor, ROUTES, STAT_KEYS, STAT_META, statsOfGroup, statText, topByStat, type BoonScope, type PlayerFight, type StatGroup, type StatKey, type Stats } from "@gw2logs/shared";
+import { emptyStats, isUptimeStat, type PlayerSkill, type PlayerSupportSkill, type SupportKind, professionColor, ROUTES, STAT_KEYS, STAT_META, statsOfGroup, statText, topByStat, type BoonScope, type PlayerFight, type StatGroup, type StatKey, type Stats } from "@gw2logs/shared";
 import { DataTable, type Column } from "../components/DataTable";
+import { DamageSkillsTable, SupportSkillsTable } from "../components/SkillTables";
 import { defaultSort, GroupTabs, pickerView, ModeToggle, statColumns, type ValueMode } from "../components/statColumns";
 import { GuildTag, NoAllianceNote, PlayerLink, Profession } from "../components/badges";
 import { AXIS, GRID, TOOLTIP } from "../components/charts";
 import { fightKills, KillDeath } from "../components/FightBits";
 import { Badge, Button, Card, Empty, ErrorBox, Kpi, Loading, PageHeader, Segmented, Select } from "../components/ui";
-import { useFight } from "../lib/api";
+import { useFight, useFightPlayerSkills } from "../lib/api";
 import { useMe } from "../lib/hooks";
 import { accountShort, axis, compact, dateTime, duration, int, stat } from "../lib/format";
 import { getLang, t } from "../lib/i18n";
@@ -26,6 +27,43 @@ interface GuildRow extends Stats {
   guildId: string | null;
   players: number;
   activeMs: number;
+}
+
+/** Dano, cura ou barreira por habilidade de um jogador desta luta; começa em quem mais causou dano (ou em você, se estiver na luta). */
+function FightSkills({ fightId, players, me }: { fightId: string; players: PlayerFight[]; me: string | null | undefined }) {
+  const [kind, setKind] = useState<"damage" | SupportKind>("damage");
+  const [picked, setPicked] = useState("");
+  const sorted = useMemo(() => [...players].sort((a, b) => b.damage - a.damage), [players]);
+  const account = picked || (sorted.find((p) => p.account === me) ?? sorted[0])?.account || "";
+  const skills = useFightPlayerSkills<PlayerSkill | PlayerSupportSkill>(fightId, account, kind);
+  return (
+    <Card
+      className="mt-6"
+      title={t("fight.skills.title")}
+      action={
+        <div className="flex flex-wrap items-center gap-2">
+          <Select className="w-56" value={account} onChange={(e) => setPicked(e.target.value)} aria-label={t("fight.skills.player")}>
+            {sorted.map((p) => (
+              <option key={p.account} value={p.account}>
+                {p.name ?? accountShort(p.account)}
+              </option>
+            ))}
+          </Select>
+          <Segmented size="sm" value={kind} onChange={setKind} options={(["damage", "heal", "barrier"] as const).map((k) => ({ value: k, label: t(`skills.kind.${k}`) }))} />
+        </div>
+      }
+    >
+      {skills.isLoading && <Loading />}
+      {skills.error && <ErrorBox error={skills.error} />}
+      {skills.data && skills.data.length === 0 && <p className="px-5 py-6 text-sm text-faint">{t(kind === "damage" ? "fight.skills.noDamage" : "fight.skills.noSupport")}</p>}
+      {skills.data && skills.data.length > 0 && (
+        <>
+          {kind === "damage" ? <DamageSkillsTable rows={skills.data as PlayerSkill[]} /> : <SupportSkillsTable rows={skills.data as PlayerSupportSkill[]} kind={kind} />}
+          <p className="border-t border-line px-5 py-2.5 text-xs text-faint">{t(`fight.skills.note.${kind}`)}</p>
+        </>
+      )}
+    </Card>
+  );
 }
 
 export function FightPage() {
@@ -238,6 +276,8 @@ export function FightPage() {
           </p>
         )}
       </Card>
+
+      <FightSkills fightId={id} players={data.players} me={me} />
     </>
   );
 }
