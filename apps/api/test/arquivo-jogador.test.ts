@@ -2,13 +2,13 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { Aggregate, RankingRow } from "@gw2logs/shared";
+import type { RankingRow } from "@gw2logs/shared";
 import { snapshotDays } from "../src/archive.js";
 import { loadConfig } from "../src/config.js";
 import * as q from "../src/queries.js";
 import { buildApp, type App } from "../src/server.js";
 
-// O perfil do mês: o desempenho de um jogador num mês (ou numa semana) arquivados, somado do resumo diário. Vale depois de as lutas serem apagadas.
+// O perfil do mês: o desempenho de um jogador num mês (ou numa semana) arquivados, somado do resumo diário, e o instante da última luta dele. Vale depois de as lutas serem apagadas.
 
 let app: App;
 let dir: string;
@@ -55,14 +55,10 @@ describe("archivePlayer: o jogador no mês arquivado", () => {
     expect(p.row.professions.map((c) => c.profession).sort()).toEqual(["Firebrand", "Guardian"]);
   });
 
-  it("o dia a dia traz uma linha por dia de batalha em que ele jogou, do mais antigo ao mais novo, e soma o mês", () => {
-    const p = q.archivePlayer(app.db, "2026-11", "Ana.1", {})!;
-
-    expect(p.days.map((d: Aggregate & { day: string }) => [d.day, d.fights, d.damage, d.activeMs])).toEqual([
-      ["2026-11-03", 1, 1000, 60_000],
-      ["2026-11-04", 1, 3000, 180_000],
-    ]);
-    expect(p.days.reduce((a: number, d: Aggregate) => a + d.damage, 0)).toBe(p.row.damage);
+  it("traz o instante da última luta dele no período (a mais recente, mesmo em outro dia)", () => {
+    expect(q.archivePlayer(app.db, "2026-11", "Ana.1", {})!.lastSeen).toBe("2026-11-04T20:00:00.000Z");
+    expect(q.archivePlayer(app.db, "2026-11", "Beto.2", {})!.lastSeen).toBe("2026-11-03T20:00:00.000Z");
+    expect(q.archivePlayer(app.db, "2026-12", "Ana.1", {})!.lastSeen).toBe("2026-12-01T20:00:00.000Z");
   });
 
   it("quem não jogou no período não tem perfil", () => {
@@ -93,14 +89,14 @@ describe("GET /api/archive/players/:account", () => {
   });
   const get = (url: string) => app.server.inject({ method: "GET", url });
 
-  it("devolve a linha, a média do clã, o tempo de referência e o dia a dia", async () => {
+  it("devolve a linha, a média do clã, o tempo de referência e a última luta", async () => {
     const res = await get("/api/archive/players/Ana.1?month=2026-11");
 
     expect(res.statusCode).toBe(200);
     const body = res.json();
     expect(body.row.damage).toBe(1000);
     expect(body.baseline.damage).toBe(1000);
-    expect(body.days).toHaveLength(1);
+    expect(body.lastSeen).toBe("2026-11-03T20:00:00.000Z");
     expect(typeof body.referenceMs).toBe("number");
   });
 

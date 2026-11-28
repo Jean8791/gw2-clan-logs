@@ -359,19 +359,15 @@ export function archiveRanking(db: DB, month: string, fl: Filters): { rows: Rank
 
 /**
  * O desempenho de um jogador no mês (ou na semana, com `fl.week`) arquivado, somado do resumo diário: a linha dele, a média do clã no mesmo
- * período e o dia a dia. Sem o jogador no período, null. Não depende das lutas, que a retenção já pode ter apagado.
+ * período e o instante da última luta dele. Sem o jogador no período, null. Não depende das lutas, que a retenção já pode ter apagado.
  */
 export function archivePlayer(db: DB, month: string, account: string, fl: Filters): ArchivePlayerProfile | null {
   const { rows, baseline } = archiveRanking(db, month, fl);
   const row = rows.find((r) => r.account === account);
   if (!row) return null;
   const { where, params } = archiveConditions(month, fl);
-  const days = (
-    db
-      .prepare(`SELECT ds.day AS day, ${ARCHIVE_AGG} FROM day_stats ds WHERE ${where} AND ds.account = @account GROUP BY ds.day ORDER BY ds.day`)
-      .all({ ...params, account }) as any[]
-  ).map((d) => ({ ...toAggregate(d), day: d.day as string }));
-  return { row, baseline, referenceMs: referenceTimeMs(rows.map((r) => r.activeMs)), days };
+  const last = db.prepare(`SELECT MAX(ds.last_seen) AS lastSeen FROM day_stats ds WHERE ${where} AND ds.account = @account`).get({ ...params, account }) as { lastSeen: string | null };
+  return { row, baseline, referenceMs: referenceTimeMs(rows.map((r) => r.activeMs)), lastSeen: last.lastSeen };
 }
 
 /** Soma de todas as linhas de jogador com os filtros (base para "média do squad" por minuto). */
