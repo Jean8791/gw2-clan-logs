@@ -125,7 +125,7 @@ export type Stats = Record<StatKey, number>;
 /** Para quem o boon é gerado: o squad todo (padrão, as métricas "Out"), só o grupo ou só o próprio jogador. */
 /** Para quem o boon foi gerado; "useful" é o volume da squad sem o que passou do limite de pilhas (overstack). */
 export type BoonScope = "squad" | "group" | "self" | "useful";
-export const BOON_SCOPES: BoonScope[] = ["squad", "group", "self", "useful"];
+export const BOON_SCOPES: BoonScope[] = ["squad", "useful", "group", "self"];
 
 export type StatGroup = "offense" | "support" | "boons" | "uptime" | "defense";
 
