@@ -1,3 +1,4 @@
+import { snapshotDays } from "./archive.js";
 import { assertLoginRestricted, loadConfig, paths } from "./config.js";
 import { giveDeadlineToApiTokens, purgeExpiredSessions, revokeAccessOutsideList } from "./auth.js";
 import { eiAvailable } from "./elite-insights.js";
@@ -25,6 +26,18 @@ if (cfg.discord.userIds.length > 0) {
 // tokens de API de antes da validade existir (sem prazo) ganham API_TOKEN_DAYS a partir de agora
 const legacyTokens = giveDeadlineToApiTokens(db, cfg.apiTokenDays);
 if (legacyTokens > 0) server.log.info(`${legacyTokens} token(s) de API sem prazo passaram a valer ${cfg.apiTokenDays} dias.`);
+
+// o resumo de cada dia fica guardado mesmo depois de as lutas serem apagadas; roda também sem retenção, que é quando o dia fica aberto
+const archive = () => {
+  try {
+    const { rebuilt, frozen } = snapshotDays(db, new Date(), cfg.retentionDays);
+    if (rebuilt.length || frozen.length) server.log.info(`Resumo diário: ${rebuilt.length} dia(s) refeito(s), ${frozen.length} congelado(s).`);
+  } catch (err) {
+    server.log.error(err, "Falha ao guardar o resumo diário.");
+  }
+};
+archive();
+setInterval(archive, 60 * 60 * 1000).unref();
 
 if (cfg.retentionDays > 0) {
   const purge = () =>

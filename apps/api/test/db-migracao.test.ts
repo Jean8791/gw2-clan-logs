@@ -67,3 +67,37 @@ describe("migração do sha256 único por dono", () => {
     db.close();
   });
 });
+
+describe("resumo diário (day_stats)", () => {
+  const colunas = (db: ReturnType<typeof openDb>, tabela: string) => (db.pragma(`table_info(${tabela})`) as { name: string }[]).map((c) => c.name);
+
+  it("banco antigo, sem o resumo, sobe com as duas tabelas e sem perder as lutas", () => {
+    const file = path.join(dir, "antigo-resumo.db");
+    bancoAntigo(file);
+
+    const db = openDb(file);
+
+    expect(colunas(db, "day_stats")).toEqual(expect.arrayContaining(["day", "account", "profession", "role", "guild_id", "fights", "active_ms", "damage", "stab_out"]));
+    expect(colunas(db, "day_snapshots")).toEqual(["day", "built_at", "signature", "frozen"]);
+    expect(db.prepare("SELECT id FROM fights").all()).toEqual([{ id: "f1" }]);
+    db.close();
+  });
+
+  it("resumo de uma versão anterior, com menos métricas, ganha as colunas que faltam e mantém as linhas", () => {
+    const file = path.join(dir, "resumo-velho.db");
+    const velho = new Database(file);
+    velho.exec(`
+      CREATE TABLE day_stats (day TEXT NOT NULL, mode TEXT NOT NULL, account TEXT NOT NULL, profession TEXT NOT NULL, role TEXT NOT NULL, guild_id TEXT NOT NULL,
+        name TEXT, last_seen TEXT, fights INTEGER NOT NULL DEFAULT 0, active_ms INTEGER NOT NULL DEFAULT 0, dist_cover_ms REAL NOT NULL DEFAULT 0,
+        near_cover_ms REAL NOT NULL DEFAULT 0, damage REAL NOT NULL DEFAULT 0, PRIMARY KEY (day, mode, account, profession, role, guild_id));
+      INSERT INTO day_stats (day, mode, account, profession, role, guild_id, damage) VALUES ('2026-11-01', 'wvw', 'Ana.1111', 'Guardian', 'dps', '', 42);
+    `);
+    velho.close();
+
+    const db = openDb(file);
+
+    expect(colunas(db, "day_stats")).toContain("healing");
+    expect(db.prepare("SELECT account, damage, healing FROM day_stats").all()).toEqual([{ account: "Ana.1111", damage: 42, healing: 0 }]);
+    db.close();
+  });
+});

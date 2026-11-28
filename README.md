@@ -31,6 +31,7 @@ ArcDPS (.zevtc) ──site (Importar logs) ou scripts/enviar-logs.sh──▶ AP
 - Depois de processar uma luta, o servidor guarda só o que foi para o banco (cerca de 0,2 MB por luta): o log enviado e o JSON do Elite Insights são apagados. Se o processamento falhar, o log enviado fica para diagnóstico. Por isso uma métrica nova só vale para as lutas enviadas depois dela; as antigas precisam ser enviadas de novo.
 - **O site não é um arquivo de logs:** ele só personaliza a visualização, e quem usa precisa guardar os originais em outro lugar. A tela de importação e a de entrada avisam isso, com o prazo em `RETENTION_DAYS`.
 - As lutas antigas são apagadas depois de `RETENTION_DAYS` dias, contados pela data da luta (no Docker Compose o padrão é 30; fora dele, 0 = guardar para sempre).
+- **Resumo diário, guardado além da retenção:** antes de apagar as lutas, o servidor guarda um resumo por dia de batalha (a soma de cada métrica por conta, classe, função e guilda, sem o log nem os dados de cada luta) em `day_stats`, por **12 meses**. É a base do ranking mensal e ainda não aparece em nenhuma tela. O dia é refeito enquanto ainda muda e **congelado** quando a retenção o alcança (um log antigo reenviado depois não o altera). Ele guarda o nome da conta do jogo de quem jogou e não é apagado pelo "Apagar minha conta" do site, que não sabe qual conta do jogo é de quem. Para refazer um dia à mão (por exemplo, depois do `npm run reingest`, que não troca o id da luta), apague a linha dele em `day_snapshots`.
 
 | Parte | Tecnologia |
 |---|---|

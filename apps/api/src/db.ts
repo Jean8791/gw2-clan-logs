@@ -115,6 +115,33 @@ function migrate(db: DB) {
     );
     CREATE INDEX IF NOT EXISTS ix_pskills_account ON player_skills(account);
 
+    -- resumo de cada dia de batalha, guardado antes de a retenção apagar as lutas (ver archive.ts). Uma linha por jogador, classe, função e guilda.
+    -- As métricas são somas, para a soma de vários dias dar o mesmo valor do Ranking; o boon em volume guarda Σ(valor × active_ms).
+    -- profession e guild_id são '' quando não há (uma chave composta não trata dois NULL como iguais).
+    CREATE TABLE IF NOT EXISTS day_stats (
+      day           TEXT NOT NULL,
+      mode          TEXT NOT NULL,
+      account       TEXT NOT NULL,
+      profession    TEXT NOT NULL,
+      role          TEXT NOT NULL,
+      guild_id      TEXT NOT NULL,
+      name          TEXT,
+      last_seen     TEXT,
+      fights        INTEGER NOT NULL DEFAULT 0,
+      active_ms     INTEGER NOT NULL DEFAULT 0,
+      dist_cover_ms REAL NOT NULL DEFAULT 0,
+      near_cover_ms REAL NOT NULL DEFAULT 0,
+      ${statCols},
+      PRIMARY KEY (day, mode, account, profession, role, guild_id)
+    );
+    -- signature: quais lutas o dia tinha quando foi resumido (muda quando entra, sai ou troca uma luta); frozen: a retenção já o alcançou
+    CREATE TABLE IF NOT EXISTS day_snapshots (
+      day       TEXT PRIMARY KEY,
+      built_at  TEXT NOT NULL,
+      signature TEXT NOT NULL,
+      frozen    INTEGER NOT NULL DEFAULT 0
+    );
+
     -- ícones baixados uma vez (chave ex.: "buff:1122"); não são apagados com as lutas antigas
     CREATE TABLE IF NOT EXISTS media (
       key          TEXT PRIMARY KEY,
@@ -134,6 +161,11 @@ function migrate(db: DB) {
   }
   for (const col of ["dist_cover_ms", "near_cover_ms"]) {
     if (!have.has(col)) db.exec(`ALTER TABLE player_stats ADD COLUMN ${col} REAL NOT NULL DEFAULT 0`);
+  }
+  // o resumo diário tem as mesmas colunas de métrica: métrica nova entra nas duas tabelas
+  const haveDay = new Set((db.pragma("table_info(day_stats)") as { name: string }[]).map((c) => c.name));
+  for (const k of STAT_KEYS) {
+    if (!haveDay.has(STAT_COL[k])) db.exec(`ALTER TABLE day_stats ADD COLUMN ${STAT_COL[k]} REAL NOT NULL DEFAULT 0`);
   }
   const haveFights = new Set((db.pragma("table_info(fights)") as { name: string }[]).map((c) => c.name));
   for (const col of ["enemy_downs", "enemy_deaths"]) {
